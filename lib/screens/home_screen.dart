@@ -1,0 +1,278 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../models/article.dart';
+import '../services/news_service.dart';
+import '../widgets/article_card.dart';
+import '../widgets/filter_bar.dart';
+import '../theme/app_theme.dart';
+import 'bookmarks_screen.dart';
+import 'profile_screen.dart';
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+  List<Article> _articles = [];
+  List<Article> _filtered = [];
+  bool _loading = true;
+  String? _error;
+  int _bottomIndex = 0;
+  SortFilter _sortFilter = SortFilter.latest;
+  String _searchQuery = '';
+  AppMode _mode = AppMode.dark;
+  late AnimationController _modeAnim;
+  late Animation<double> _fadeAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _modeAnim = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
+    _fadeAnim = CurvedAnimation(parent: _modeAnim, curve: Curves.easeInOut);
+    _loadNews();
+  }
+
+  @override
+  void dispose() { _modeAnim.dispose(); super.dispose(); }
+
+  void _cycleMode() {
+    HapticFeedback.mediumImpact();
+    setState(() {
+      if (_mode == AppMode.light) _mode = AppMode.dark;
+      else if (_mode == AppMode.dark) _mode = AppMode.kindle;
+      else _mode = AppMode.light;
+    });
+    _modeAnim.forward(from: 0);
+  }
+
+  Future<void> _loadNews() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final articles = await NewsService.fetchAINews();
+      setState(() { _articles = articles; _loading = false; _applyFilter(_sortFilter); });
+    } catch (e) {
+      setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  void _applyFilter(SortFilter filter) {
+    setState(() {
+      _sortFilter = filter;
+      List<Article> sorted = List.from(_articles);
+      if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery.toLowerCase();
+        sorted = sorted.where((a) =>
+          a.title.toLowerCase().contains(q) ||
+          (a.description ?? '').toLowerCase().contains(q)).toList();
+      }
+      switch (filter) {
+        case SortFilter.latest:
+          sorted.sort((a, b) {
+            if (a.publishedAt == null) return 1;
+            if (b.publishedAt == null) return -1;
+            return DateTime.parse(b.publishedAt!).compareTo(DateTime.parse(a.publishedAt!));
+          });
+          break;
+        case SortFilter.popular:
+          sorted.sort((a, b) => (b.description?.length ?? 0).compareTo(a.description?.length ?? 0));
+          break;
+        case SortFilter.relevant:
+          sorted.sort((a, b) => _relevanceScore(b).compareTo(_relevanceScore(a)));
+          break;
+        case SortFilter.quick:
+          sorted = sorted.where((a) => a.readingTime <= 3).toList();
+          sorted.sort((a, b) => a.readingTime.compareTo(b.readingTime));
+          break;
+      }
+      _filtered = sorted;
+    });
+  }
+
+  void _onSearch(String query) {
+    setState(() => _searchQuery = query);
+    _applyFilter(_sortFilter);
+  }
+
+  int _relevanceScore(Article a) {
+    final keywords = ['ai', 'artificial intelligence', 'llm', 'gpt', 'claude', 'openai', 'anthropic', 'gemini', 'machine learning', 'deep learning'];
+    final text = '${a.title} ${a.description ?? ''}'.toLowerCase();
+    return keywords.where((k) => text.contains(k)).length;
+  }
+
+  void _onNavTap(int i) {
+    if (i == 1) {
+      Navigator.push(context, MaterialPageRoute(
+          builder: (_) => BookmarksScreen(theme: AppTheme(_mode))));
+      return;
+    }
+    if (i == 2) {
+      Navigator.push(context, MaterialPageRoute(
+          builder: (_) => ProfileScreen(theme: AppTheme(_mode))));
+      return;
+    }
+    setState(() => _bottomIndex = i);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppTheme(_mode);
+    SystemChrome.setSystemUIOverlayStyle(t.systemUi);
+
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.9, end: 1.0).animate(_fadeAnim),
+      child: Scaffold(
+        backgroundColor: t.background,
+        body: SafeArea(
+          child: _loading
+            ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                CircularProgressIndicator(color: t.primary, strokeWidth: 1.5),
+                const SizedBox(height: 16),
+                Text('Loading stories...', style: GoogleFonts.inter(color: t.muted, fontSize: 13)),
+              ]))
+            : _error != null
+              ? Center(child: Padding(padding: const EdgeInsets.all(40),
+                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Text('Something went wrong', style: GoogleFonts.sourceSerif4(
+                        fontSize: 20, fontWeight: FontWeight.w700, color: t.primary)),
+                    const SizedBox(height: 10),
+                    Text(_error!, style: GoogleFonts.inter(color: t.muted, fontSize: 13),
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 28),
+                    GestureDetector(onTap: _loadNews,
+                      child: Text('Try again', style: GoogleFonts.inter(
+                          color: t.accent, fontSize: 14, fontWeight: FontWeight.w500))),
+                  ])))
+              : RefreshIndicator(
+                  color: t.primary,
+                  backgroundColor: t.surface,
+                  onRefresh: _loadNews,
+                  child: CustomScrollView(
+                    slivers: [
+
+                      // ── Title (scrolls away) ─────────
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                          child: Row(children: [
+                            GestureDetector(
+                              onTap: _cycleMode,
+                              child: Text(
+                                'AIWire',
+                                style: GoogleFonts.sourceSerif4(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w700,
+                                  color: t.primary,
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            FilterIcon(selected: _sortFilter, onChanged: _applyFilter,
+                                onSearch: _onSearch, theme: t),
+                          ]),
+                        ),
+                      ),
+
+                      // ── Sticky section label ─────────
+                      SliverPersistentHeader(
+                        pinned: true,
+                        delegate: _StickyLabelDelegate(
+                          child: Container(
+                            color: t.background,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                                  child: Row(children: [
+                                    Text(
+                                      _searchQuery.isNotEmpty
+                                          ? 'Results for "$_searchQuery"'
+                                          : '${_sortFilter.label} Stories',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: t.muted,
+                                        letterSpacing: 0.3,
+                                      ),
+                                    ),
+                                    if (_searchQuery.isNotEmpty) ...[
+                                      const Spacer(),
+                                      GestureDetector(
+                                        onTap: () { setState(() => _searchQuery = ''); _applyFilter(_sortFilter); },
+                                        child: Text('Clear', style: GoogleFonts.inter(
+                                            fontSize: 13, color: t.muted,
+                                            decoration: TextDecoration.underline,
+                                            decorationColor: t.muted)),
+                                      ),
+                                    ],
+                                  ]),
+                                ),
+                                Divider(height: 1, color: t.divider),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // ── Articles ─────────────────────
+                      _filtered.isEmpty
+                        ? SliverFillRemaining(
+                            child: Center(child: Text('No stories found',
+                                style: GoogleFonts.inter(color: t.muted, fontSize: 13))))
+                        : SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, i) => ArticleCard(article: _filtered[i], theme: t),
+                              childCount: _filtered.length,
+                            ),
+                          ),
+
+                      const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                    ],
+                  ),
+                ),
+        ),
+
+        // ── Bottom nav ──────────────────────
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: t.divider, width: 0.5)),
+            color: t.background,
+          ),
+          child: BottomNavigationBar(
+            currentIndex: _bottomIndex,
+            onTap: _onNavTap,
+            backgroundColor: Colors.transparent, elevation: 0,
+            selectedItemColor: t.primary,
+            unselectedItemColor: t.muted,
+            showSelectedLabels: false, showUnselectedLabels: false,
+            type: BottomNavigationBarType.fixed,
+            items: const [
+              BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home_rounded), label: 'Home'),
+              BottomNavigationBarItem(icon: Icon(Icons.bookmark_border_rounded), activeIcon: Icon(Icons.bookmark_rounded), label: 'Bookmarks'),
+              BottomNavigationBarItem(icon: Icon(Icons.person_outline_rounded), activeIcon: Icon(Icons.person_rounded), label: 'Profile'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Sticky header delegate ───────────────────────────────────────────────────
+class _StickyLabelDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+  const _StickyLabelDelegate({required this.child});
+
+  @override double get minExtent => 40;
+  @override double get maxExtent => 40;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => child;
+
+  @override
+  bool shouldRebuild(_StickyLabelDelegate old) => old.child != child;
+}
+

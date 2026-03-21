@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter pub:*)",
+      "Bash(flutter analyze:*)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:www.figma.com)",
+      "WebFetch(domain:medium.design)",
+      "Bash(git -C /Users/apple/development/aiwire status)",
+      "Bash(gh auth:*)",
+      "Bash(find /Users/apple/development/aiwire/test -type f -name *.dart)",
+      "Bash(git init:*)"
+    ]
+  }
+}
