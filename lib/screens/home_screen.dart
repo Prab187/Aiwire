@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import '../models/article.dart';
 import '../services/news_service.dart';
 import '../widgets/article_card.dart';
 import '../widgets/filter_bar.dart';
+import '../widgets/shimmer_loading.dart';
 import '../theme/app_theme.dart';
 import 'bookmarks_screen.dart';
+import 'discover_screen.dart';
 import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -105,10 +108,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void _onNavTap(int i) {
     if (i == 1) {
       Navigator.push(context, MaterialPageRoute(
-          builder: (_) => BookmarksScreen(theme: AppTheme(_mode))));
+          builder: (_) => DiscoverScreen(theme: AppTheme(_mode))));
       return;
     }
     if (i == 2) {
+      Navigator.push(context, MaterialPageRoute(
+          builder: (_) => BookmarksScreen(theme: AppTheme(_mode))));
+      return;
+    }
+    if (i == 3) {
       Navigator.push(context, MaterialPageRoute(
           builder: (_) => ProfileScreen(theme: AppTheme(_mode))));
       return;
@@ -127,11 +135,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         backgroundColor: t.background,
         body: SafeArea(
           child: _loading
-            ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                CircularProgressIndicator(color: t.primary, strokeWidth: 1.5),
-                const SizedBox(height: 16),
-                Text('Loading stories...', style: GoogleFonts.inter(color: t.muted, fontSize: 13)),
-              ]))
+            ? ArticleShimmer(theme: t)
             : _error != null
               ? Center(child: Padding(padding: const EdgeInsets.all(40),
                   child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -220,11 +224,30 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       // ── Articles ─────────────────────
                       _filtered.isEmpty
                         ? SliverFillRemaining(
-                            child: Center(child: Text('No stories found',
-                                style: GoogleFonts.inter(color: t.muted, fontSize: 13))))
+                            child: Center(child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.search_off_rounded, size: 48, color: t.muted.withValues(alpha: 0.5)),
+                                const SizedBox(height: 16),
+                                Text('No stories found', style: GoogleFonts.sourceSerif4(
+                                  fontSize: 18, fontWeight: FontWeight.w600, color: t.primary)),
+                                const SizedBox(height: 6),
+                                Text('Try a different search or filter', style: GoogleFonts.inter(
+                                  fontSize: 13, color: t.muted)),
+                              ],
+                            )))
                         : SliverList(
                             delegate: SliverChildBuilderDelegate(
-                              (context, i) => ArticleCard(article: _filtered[i], theme: t),
+                              (context, i) => AnimationConfiguration.staggeredList(
+                                position: i,
+                                duration: const Duration(milliseconds: 375),
+                                child: SlideAnimation(
+                                  verticalOffset: 30,
+                                  child: FadeInAnimation(
+                                    child: ArticleCard(article: _filtered[i], theme: t),
+                                  ),
+                                ),
+                              ),
                               childCount: _filtered.length,
                             ),
                           ),
@@ -251,6 +274,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             type: BottomNavigationBarType.fixed,
             items: const [
               BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home_rounded), label: 'Home'),
+              BottomNavigationBarItem(icon: Icon(Icons.explore_outlined), activeIcon: Icon(Icons.explore_rounded), label: 'Discover'),
               BottomNavigationBarItem(icon: Icon(Icons.bookmark_border_rounded), activeIcon: Icon(Icons.bookmark_rounded), label: 'Bookmarks'),
               BottomNavigationBarItem(icon: Icon(Icons.person_outline_rounded), activeIcon: Icon(Icons.person_rounded), label: 'Profile'),
             ],

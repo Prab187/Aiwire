@@ -59,7 +59,11 @@ class AppTheme {
     return const Color(0xFFE6E6E6);
   }
 
-  Color get accent => const Color(0xFF1A8917);
+  Color get accent {
+    if (isDark) return const Color(0xFF6EBF6E);
+    if (isKindle) return const Color(0xFF5A8A5A);
+    return const Color(0xFF3D7A3D);
+  }
 
   SystemUiOverlayStyle get systemUi =>
       isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark;

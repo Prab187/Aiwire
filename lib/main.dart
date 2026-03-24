@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'screens/splash_screen.dart';
 import 'services/subscription_service.dart';
 
@@ -7,6 +8,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
   await SubscriptionService.initialize();
+  GoogleFonts.config.allowRuntimeFetching = false;
   runApp(const AIWireApp());
 }
 

@@ -52,12 +52,12 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
           ? Center(child: CircularProgressIndicator(color: t.primary, strokeWidth: 1))
           : _bookmarks.isEmpty
             ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Icon(Icons.bookmark_border, color: t.muted, size: 48),
-                const SizedBox(height: 16),
-                Text('No saved stories yet', style: GoogleFonts.sourceSerif4(
-                    fontSize: 20, fontWeight: FontWeight.w700, color: t.primary)),
+                Icon(Icons.bookmark_outline_rounded, color: t.muted.withValues(alpha: 0.4), size: 56),
+                const SizedBox(height: 20),
+                Text('No saved stories', style: GoogleFonts.sourceSerif4(
+                    fontSize: 20, fontWeight: FontWeight.w600, color: t.primary)),
                 const SizedBox(height: 8),
-                Text('Tap the bookmark icon on any article',
+                Text('Bookmark articles to read later',
                     style: GoogleFonts.inter(color: t.muted, fontSize: 13)),
               ]))
             : ListView.builder(

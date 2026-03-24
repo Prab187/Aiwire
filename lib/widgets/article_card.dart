@@ -16,11 +16,13 @@ class ArticleCard extends StatefulWidget {
   State<ArticleCard> createState() => _ArticleCardState();
 }
 
-class _ArticleCardState extends State<ArticleCard> with SingleTickerProviderStateMixin {
+class _ArticleCardState extends State<ArticleCard> with TickerProviderStateMixin {
   bool _liked = false;
   int _likeCount = 0;
   late AnimationController _heartAnim;
   late Animation<double> _heartScale;
+  late AnimationController _tapAnim;
+  late Animation<double> _tapScale;
 
   @override
   void initState() {
@@ -28,11 +30,14 @@ class _ArticleCardState extends State<ArticleCard> with SingleTickerProviderStat
     _heartAnim = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
     _heartScale = Tween<double>(begin: 1.0, end: 1.4).animate(
       CurvedAnimation(parent: _heartAnim, curve: Curves.elasticOut));
+    _tapAnim = AnimationController(vsync: this, duration: const Duration(milliseconds: 100));
+    _tapScale = Tween<double>(begin: 1.0, end: 0.97).animate(
+      CurvedAnimation(parent: _tapAnim, curve: Curves.easeInOut));
     _loadLikes();
   }
 
   @override
-  void dispose() { _heartAnim.dispose(); super.dispose(); }
+  void dispose() { _heartAnim.dispose(); _tapAnim.dispose(); super.dispose(); }
 
   Future<void> _loadLikes() async {
     final liked = await LikesService.isLiked(widget.article.url);
@@ -49,11 +54,9 @@ class _ArticleCardState extends State<ArticleCard> with SingleTickerProviderStat
     if (mounted) setState(() { _liked = nowLiked; _likeCount = count; });
   }
 
-  List<String> get _tags {
-    final text = '${widget.article.title} ${widget.article.description ?? ''}'.toLowerCase();
-    final all = ['AI', 'LLM', 'GPT', 'Claude', 'OpenAI', 'Anthropic', 'Gemini', 'ML', 'Research', 'Tech'];
-    return all.where((t) => text.contains(t.toLowerCase())).take(3).toList();
-  }
+  void _onTapDown(TapDownDetails _) => _tapAnim.forward();
+  void _onTapUp(TapUpDetails _) => _tapAnim.reverse();
+  void _onTapCancel() => _tapAnim.reverse();
 
   @override
   Widget build(BuildContext context) {
@@ -62,103 +65,122 @@ class _ArticleCardState extends State<ArticleCard> with SingleTickerProviderStat
         ? timeago.format(DateTime.parse(widget.article.publishedAt!))
         : '';
 
-    return GestureDetector(
-      onTap: () => Navigator.push(context,
-        PageRouteBuilder(
-          pageBuilder: (_, anim, __) => ArticleScreen(article: widget.article, theme: t),
-          transitionsBuilder: (_, anim, __, child) => SlideTransition(
-            position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
-                .animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
-            child: child),
-          transitionDuration: const Duration(milliseconds: 320),
-        )),
-      child: Container(
-        color: t.background,
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-
-          // Author row
-          Row(children: [
-            Container(
-              width: 20, height: 20,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: t.primary),
-              child: Center(child: Text(
-                (widget.article.source ?? 'A')[0].toUpperCase(),
-                style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: t.background),
-              )),
-            ),
-            const SizedBox(width: 7),
-            Text(widget.article.source ?? 'AIWire',
-                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: t.primary)),
-          ]),
-          const SizedBox(height: 8),
-
-          // Title + thumbnail
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(
-                widget.article.title,
-                style: GoogleFonts.sourceSerif4(
-                  fontSize: 20, fontWeight: FontWeight.w700, color: t.primary, height: 1.3),
-                maxLines: 2, overflow: TextOverflow.ellipsis,
+    return ScaleTransition(
+      scale: _tapScale,
+      child: GestureDetector(
+        onTapDown: _onTapDown,
+        onTapUp: _onTapUp,
+        onTapCancel: _onTapCancel,
+        onTap: () {
+          _tapAnim.reverse();
+          Navigator.push(context,
+            PageRouteBuilder(
+              pageBuilder: (_, anim, __) => ArticleScreen(article: widget.article, theme: t),
+              transitionsBuilder: (_, anim, __, child) => FadeTransition(
+                opacity: anim,
+                child: SlideTransition(
+                  position: Tween<Offset>(begin: const Offset(0.03, 0), end: Offset.zero)
+                      .animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+                  child: child),
               ),
-              if (widget.article.description != null) ...[
-                const SizedBox(height: 6),
-                Text(widget.article.description!,
-                  style: GoogleFonts.inter(
-                    fontSize: 14, fontWeight: FontWeight.w400, color: t.secondary, height: 1.5),
-                  maxLines: 2, overflow: TextOverflow.ellipsis),
-              ],
-            ])),
+              transitionDuration: const Duration(milliseconds: 300),
+            ));
+        },
+        child: Container(
+          color: t.background,
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-            // Thumbnail
-            if (widget.article.urlToImage != null) ...[
-              const SizedBox(width: 14),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(3),
-                child: CachedNetworkImage(
-                  imageUrl: widget.article.urlToImage!,
-                  width: 80, height: 80, fit: BoxFit.cover,
-                  placeholder: (c, u) => Container(width: 80, height: 80, color: t.surface),
-                  errorWidget: (c, u, e) => Container(width: 80, height: 80, color: t.surface),
+            // Author row
+            Row(children: [
+              Container(
+                width: 20, height: 20,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: t.primary),
+                child: Center(child: Text(
+                  (widget.article.source ?? 'A')[0].toUpperCase(),
+                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: t.background),
+                )),
+              ),
+              const SizedBox(width: 7),
+              Text(widget.article.source ?? 'AIWire',
+                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: t.primary)),
+            ]),
+            const SizedBox(height: 8),
+
+            // Title + thumbnail
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(
+                  widget.article.title,
+                  style: GoogleFonts.sourceSerif4(
+                    fontSize: 20, fontWeight: FontWeight.w700, color: t.primary, height: 1.3),
+                  maxLines: 2, overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
-          ]),
-          const SizedBox(height: 14),
+                if (widget.article.description != null) ...[
+                  const SizedBox(height: 6),
+                  Text(widget.article.description!,
+                    style: GoogleFonts.inter(
+                      fontSize: 14, fontWeight: FontWeight.w400, color: t.secondary, height: 1.5),
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                ],
+              ])),
 
-          // Meta row
-          Row(children: [
-            Text(publishedAt, style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
-            const SizedBox(width: 4),
-            Text('·', style: TextStyle(color: t.muted, fontSize: 12)),
-            const SizedBox(width: 4),
-            Text('${widget.article.readingTime} min read',
-                style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
-            const Spacer(),
-            GestureDetector(
-              onTap: _toggleLike,
-              child: Row(children: [
-                ScaleTransition(
-                  scale: _heartScale,
-                  child: Icon(
-                    _liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                    size: 17,
-                    color: _liked ? Colors.redAccent : t.muted,
+              // Thumbnail with Hero
+              if (widget.article.urlToImage != null) ...[
+                const SizedBox(width: 14),
+                Hero(
+                  tag: 'img_${widget.article.url}',
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: CachedNetworkImage(
+                      imageUrl: widget.article.urlToImage!,
+                      width: 80, height: 80, fit: BoxFit.cover,
+                      fadeInDuration: const Duration(milliseconds: 200),
+                      placeholder: (c, u) => Container(width: 80, height: 80, color: t.surface),
+                      errorWidget: (c, u, e) => Container(
+                        width: 80, height: 80, color: t.surface,
+                        child: Icon(Icons.image_outlined, color: t.muted, size: 20),
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 4),
-                Text('$_likeCount', style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
-              ]),
-            ),
-            const SizedBox(width: 14),
-            Icon(Icons.bookmark_border_rounded, size: 17, color: t.muted),
-            const SizedBox(width: 10),
-            Icon(Icons.more_horiz_rounded, size: 17, color: t.muted),
+              ],
+            ]),
+            const SizedBox(height: 14),
+
+            // Meta row
+            Row(children: [
+              Text(publishedAt, style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
+              const SizedBox(width: 4),
+              Text('·', style: TextStyle(color: t.muted, fontSize: 12)),
+              const SizedBox(width: 4),
+              Text('${widget.article.readingTime} min read',
+                  style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
+              const Spacer(),
+              GestureDetector(
+                onTap: _toggleLike,
+                child: Row(children: [
+                  ScaleTransition(
+                    scale: _heartScale,
+                    child: Icon(
+                      _liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                      size: 17,
+                      color: _liked ? Colors.redAccent : t.muted,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text('$_likeCount', style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
+                ]),
+              ),
+              const SizedBox(width: 14),
+              Icon(Icons.bookmark_border_rounded, size: 17, color: t.muted),
+              const SizedBox(width: 10),
+              Icon(Icons.more_horiz_rounded, size: 17, color: t.muted),
+            ]),
+            const SizedBox(height: 16),
+            Divider(height: 1, color: t.divider),
           ]),
-          const SizedBox(height: 16),
-          Divider(height: 1, color: t.divider),
-        ]),
+        ),
       ),
     );
   }
