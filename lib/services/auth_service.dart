@@ -8,7 +8,10 @@ class AuthService {
   static const _keyUserEmail = 'auth_user_email';
   static const _keyProvider = 'auth_provider'; // 'apple', 'google', 'guest'
 
-  static final _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
+  static final _googleSignIn = GoogleSignIn(
+    clientId: '392694757606-th4472jah3e03mq6dnalkuu5aumo8vmg.apps.googleusercontent.com',
+    scopes: ['email', 'profile'],
+  );
 
   static Future<bool> isGuest() async {
     final prefs = await SharedPreferences.getInstance();
