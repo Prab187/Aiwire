@@ -105,10 +105,29 @@ class _PaywallScreenState extends State<PaywallScreen> {
                   _feature(t, 'Early access',
                       'Be first to get new AIWire features'),
                   const Spacer(),
-                  Text('$price / month · Cancel anytime',
+                  // Trial badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: t.accent.withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.star_rounded, size: 14, color: t.accent),
+                      const SizedBox(width: 6),
+                      Text('7-day free trial — then $price/month',
+                          style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: t.accent,
+                              letterSpacing: -0.1)),
+                    ]),
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Cancel anytime before the trial ends and you won\'t be charged.',
                       style: GoogleFonts.inter(
-                          fontSize: 12, color: t.muted, letterSpacing: -0.1)),
-                  const SizedBox(height: 10),
+                          fontSize: 11, color: t.muted, height: 1.4, letterSpacing: -0.1)),
+                  const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -126,10 +145,16 @@ class _PaywallScreenState extends State<PaywallScreen> {
                               width: 18, height: 18,
                               child: CircularProgressIndicator(
                                   color: t.background, strokeWidth: 2))
-                          : Text('Subscribe — $price/month',
-                              style: GoogleFonts.inter(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600)),
+                          : Column(mainAxisSize: MainAxisSize.min, children: [
+                              Text('Start Free 7-Day Trial',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 15, fontWeight: FontWeight.w600)),
+                              Text('then $price/month',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w400,
+                                      color: t.background.withOpacity(0.7))),
+                            ]),
                     ),
                   ),
                   const SizedBox(height: 16),
