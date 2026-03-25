@@ -35,7 +35,8 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
     return Scaffold(
       backgroundColor: t.background,
       body: SafeArea(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(
+        Container(
+          color: t.background,
           padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
           child: Row(children: [
             GestureDetector(

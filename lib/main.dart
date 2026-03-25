@@ -30,7 +30,8 @@ class AIWireApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.black, brightness: Brightness.dark),
+            seedColor: Colors.black, brightness: Brightness.dark)
+            .copyWith(surfaceTint: Colors.transparent),
         useMaterial3: true,
       ),
       home: const SplashScreen(),
