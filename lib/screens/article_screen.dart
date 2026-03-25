@@ -35,6 +35,7 @@ class _ArticleScreenState extends State<ArticleScreen> {
   @override
   void initState() {
     super.initState();
+    SystemChrome.setSystemUIOverlayStyle(widget.theme.systemUi);
     _loadSummary();
     _checkBookmark();
     _loadLikes();
@@ -239,7 +240,6 @@ class _ArticleScreenState extends State<ArticleScreen> {
   @override
   Widget build(BuildContext context) {
     final t = widget.theme;
-    SystemChrome.setSystemUIOverlayStyle(t.systemUi);
     String publishedAt = '';
     if (widget.article.publishedAt != null) {
       try {
@@ -278,9 +278,9 @@ class _ArticleScreenState extends State<ArticleScreen> {
               pinned: true,
               backgroundColor: t.background, elevation: 0,
               systemOverlayStyle: t.systemUi,
-              leading: GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Icon(Icons.arrow_back, color: t.primary)),
+              leading: IconButton(
+                icon: Icon(Icons.arrow_back, color: t.primary),
+                onPressed: () => Navigator.pop(context)),
               actions: [
                 IconButton(icon: Icon(Icons.share_outlined, color: t.primary), onPressed: _share),
                 IconButton(
