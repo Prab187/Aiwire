@@ -61,9 +61,21 @@ class _ArticleCardState extends State<ArticleCard> with TickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     final t = widget.theme;
-    final publishedAt = widget.article.publishedAt != null
-        ? timeago.format(DateTime.parse(widget.article.publishedAt!))
-        : '';
+    String publishedAt = '';
+    if (widget.article.publishedAt != null) {
+      try {
+        final published = DateTime.parse(widget.article.publishedAt!);
+        final hours = DateTime.now().difference(published).inHours;
+        if (hours < 1) {
+          final mins = DateTime.now().difference(published).inMinutes;
+          publishedAt = '${mins}m ago';
+        } else if (hours < 24) {
+          publishedAt = '${hours}h ago';
+        } else {
+          publishedAt = timeago.format(published);
+        }
+      } catch (_) {}
+    }
 
     return ScaleTransition(
       scale: _tapScale,
@@ -151,11 +163,6 @@ class _ArticleCardState extends State<ArticleCard> with TickerProviderStateMixin
             // Meta row
             Row(children: [
               Text(publishedAt, style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
-              const SizedBox(width: 4),
-              Text('·', style: TextStyle(color: t.muted, fontSize: 12)),
-              const SizedBox(width: 4),
-              Text('${widget.article.readingTime} min read',
-                  style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
               const Spacer(),
               GestureDetector(
                 onTap: _toggleLike,

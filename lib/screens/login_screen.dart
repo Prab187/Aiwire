@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import 'home_screen.dart';
+import 'privacy_policy_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -127,13 +130,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: Colors.white, strokeWidth: 1.5)),
                 )
               else ...[
-                // Apple Sign In
-                _SignInButton(
-                  onTap: _signInWithApple,
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF0D0D0D),
-                  icon: const Icon(Icons.apple, size: 20, color: Color(0xFF0D0D0D)),
-                  label: 'Continue with Apple',
+                // Apple Sign In — official Apple-approved button
+                SignInWithAppleButton(
+                  onPressed: _signInWithApple,
+                  style: SignInWithAppleButtonStyle.white,
+                  height: 48,
+                  borderRadius: BorderRadius.circular(3),
                 ),
                 const SizedBox(height: 12),
 
@@ -166,16 +168,59 @@ class _LoginScreenState extends State<LoginScreen> {
               ],
 
               const SizedBox(height: 24),
-              Text(
-                'By continuing, you agree to our Terms of Service and Privacy Policy.',
-                style: GoogleFonts.inter(
-                  fontSize: 11, color: const Color(0xFF3A3A3A), height: 1.5),
-                textAlign: TextAlign.center,
-              ),
+              _LegalText(),
               const SizedBox(height: 16),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _LegalText extends StatelessWidget {
+  Future<void> _openTerms() async {
+    final uri = Uri.parse('https://aiwire.app/terms');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  void _openPrivacyPolicy(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final baseStyle = GoogleFonts.inter(
+      fontSize: 11, color: const Color(0xFF3A3A3A), height: 1.5);
+    final linkStyle = GoogleFonts.inter(
+      fontSize: 11,
+      color: const Color(0xFF555555),
+      height: 1.5,
+      decoration: TextDecoration.underline,
+      decorationColor: const Color(0xFF555555),
+    );
+
+    return Center(
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        children: [
+          Text('By continuing, you agree to our ', style: baseStyle),
+          GestureDetector(
+            onTap: _openTerms,
+            child: Text('Terms of Service', style: linkStyle),
+          ),
+          Text(' and ', style: baseStyle),
+          GestureDetector(
+            onTap: () => _openPrivacyPolicy(context),
+            child: Text('Privacy Policy', style: linkStyle),
+          ),
+          Text('.', style: baseStyle),
+        ],
       ),
     );
   }

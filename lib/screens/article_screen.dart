@@ -29,7 +29,7 @@ class _ArticleScreenState extends State<ArticleScreen> {
   bool _bookmarked = false;
   bool _liked = false;
   int _likeCount = 0;
-  double _readProgress = 0;
+  final ValueNotifier<double> _readProgress = ValueNotifier(0);
   final ScrollController _scrollCtrl = ScrollController();
 
   @override
@@ -43,13 +43,17 @@ class _ArticleScreenState extends State<ArticleScreen> {
   }
 
   @override
-  void dispose() { _scrollCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _scrollCtrl.removeListener(_onScroll);
+    _scrollCtrl.dispose();
+    _readProgress.dispose();
+    super.dispose();
+  }
 
   void _onScroll() {
+    if (!_scrollCtrl.hasClients) return;
     if (_scrollCtrl.position.maxScrollExtent == 0) return;
-    setState(() {
-      _readProgress = (_scrollCtrl.offset / _scrollCtrl.position.maxScrollExtent).clamp(0.0, 1.0);
-    });
+    _readProgress.value = (_scrollCtrl.offset / _scrollCtrl.position.maxScrollExtent).clamp(0.0, 1.0);
   }
 
   Future<void> _checkBookmark() async {
@@ -222,7 +226,7 @@ class _ArticleScreenState extends State<ArticleScreen> {
               color: t.primary,
               borderRadius: BorderRadius.circular(4),
             ),
-            child: Text('Upgrade — \$2.99/month',
+            child: Text('Upgrade — \$2.49/month',
                 style: GoogleFonts.inter(
                     fontSize: 13, fontWeight: FontWeight.w600,
                     color: t.background)),
@@ -236,20 +240,36 @@ class _ArticleScreenState extends State<ArticleScreen> {
   Widget build(BuildContext context) {
     final t = widget.theme;
     SystemChrome.setSystemUIOverlayStyle(t.systemUi);
-    final publishedAt = widget.article.publishedAt != null
-        ? timeago.format(DateTime.parse(widget.article.publishedAt!))
-        : '';
+    String publishedAt = '';
+    if (widget.article.publishedAt != null) {
+      try {
+        final published = DateTime.parse(widget.article.publishedAt!);
+        final hours = DateTime.now().difference(published).inHours;
+        if (hours < 1) {
+          final mins = DateTime.now().difference(published).inMinutes;
+          publishedAt = '${mins}m ago';
+        } else if (hours < 24) {
+          publishedAt = '${hours}h ago';
+        } else {
+          publishedAt = timeago.format(published);
+        }
+      } catch (_) {}
+    }
 
     return Scaffold(
       backgroundColor: t.background,
       body: Stack(children: [
 
         Positioned(top: 0, left: 0, right: 0,
-          child: Container(height: 3, color: t.divider,
-            child: FractionallySizedBox(
-              widthFactor: _readProgress,
-              alignment: Alignment.centerLeft,
-              child: Container(color: t.accent)))),
+          child: ValueListenableBuilder<double>(
+            valueListenable: _readProgress,
+            builder: (_, progress, __) => Container(
+              height: 3, color: t.divider,
+              child: FractionallySizedBox(
+                widthFactor: progress,
+                alignment: Alignment.centerLeft,
+                child: Container(color: t.accent))),
+          )),
 
         CustomScrollView(
           controller: _scrollCtrl,
@@ -298,11 +318,6 @@ class _ArticleScreenState extends State<ArticleScreen> {
 
                   Row(children: [
                     Text(publishedAt, style: GoogleFonts.inter(fontSize: 13, color: t.muted)),
-                    const SizedBox(width: 6),
-                    Text('·', style: TextStyle(color: t.muted)),
-                    const SizedBox(width: 6),
-                    Text('${widget.article.readingTime} min read',
-                        style: GoogleFonts.inter(fontSize: 13, color: t.muted)),
                   ]),
                   const SizedBox(height: 20),
                   Divider(color: t.divider),

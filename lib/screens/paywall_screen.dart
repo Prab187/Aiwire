@@ -15,11 +15,12 @@ class PaywallScreen extends StatefulWidget {
 class _PaywallScreenState extends State<PaywallScreen> {
   bool _loading = false;
   bool _restoring = false;
+  bool _yearlySelected = true;
 
   Future<void> _subscribe() async {
     setState(() => _loading = true);
     try {
-      await SubscriptionService.purchase();
+      await SubscriptionService.purchase(yearly: _yearlySelected);
       if (mounted) {
         widget.onSubscribed?.call();
         Navigator.pop(context);
@@ -47,7 +48,14 @@ class _PaywallScreenState extends State<PaywallScreen> {
   @override
   Widget build(BuildContext context) {
     final t = widget.theme;
-    final price = SubscriptionService.product?.price ?? '\$2.99';
+    final monthlyPrice = SubscriptionService.product?.price ?? '\$2.49';
+    final yearlyPrice = SubscriptionService.productYearly?.price ?? '\$24.99';
+    final price = _yearlySelected ? yearlyPrice : monthlyPrice;
+    final period = _yearlySelected ? 'year' : 'month';
+    final trialDays = SubscriptionService.introductoryOfferDays(yearly: _yearlySelected);
+    final ctaText = trialDays != null
+        ? 'Start your $trialDays-day free trial'
+        : 'Start Free Trial';
 
     return Scaffold(
       backgroundColor: t.background,
@@ -105,26 +113,26 @@ class _PaywallScreenState extends State<PaywallScreen> {
                   _feature(t, 'Early access',
                       'Be first to get new AIWire features'),
                   const Spacer(),
-                  // Trial badge
+                  // Plan toggle
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: t.accent.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(6),
+                      color: t.accent.withOpacity(0.07),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.star_rounded, size: 14, color: t.accent),
-                      const SizedBox(width: 6),
-                      Text('7-day free trial — then $price/month',
-                          style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: t.accent,
-                              letterSpacing: -0.1)),
+                    padding: const EdgeInsets.all(4),
+                    child: Row(children: [
+                      _planOption(t, 'Monthly', '$monthlyPrice/mo', !_yearlySelected, () {
+                        setState(() => _yearlySelected = false);
+                      }),
+                      _planOption(t, 'Yearly', '$yearlyPrice/yr · Save 17%', _yearlySelected, () {
+                        setState(() => _yearlySelected = true);
+                      }),
                     ]),
                   ),
-                  const SizedBox(height: 8),
-                  Text('Cancel anytime before the trial ends and you won\'t be charged.',
+                  const SizedBox(height: 10),
+                  Text(trialDays != null
+                          ? '$trialDays-day free trial — cancel anytime before and you won\'t be charged.'
+                          : 'Cancel anytime.',
                       style: GoogleFonts.inter(
                           fontSize: 11, color: t.muted, height: 1.4, letterSpacing: -0.1)),
                   const SizedBox(height: 12),
@@ -146,10 +154,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
                               child: CircularProgressIndicator(
                                   color: t.background, strokeWidth: 2))
                           : Column(mainAxisSize: MainAxisSize.min, children: [
-                              Text('Start Free 7-Day Trial',
+                              Text(ctaText,
                                   style: GoogleFonts.inter(
                                       fontSize: 15, fontWeight: FontWeight.w600)),
-                              Text('then $price/month',
+                              Text('then $price/$period',
                                   style: GoogleFonts.inter(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w400,
@@ -186,6 +194,34 @@ class _PaywallScreenState extends State<PaywallScreen> {
             ),
           ),
         ]),
+      ),
+    );
+  }
+
+  Widget _planOption(AppTheme t, String label, String sub, bool selected, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? t.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(7),
+          ),
+          child: Column(children: [
+            Text(label,
+                style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? t.background : t.primary)),
+            const SizedBox(height: 2),
+            Text(sub,
+                style: GoogleFonts.inter(
+                    fontSize: 11,
+                    color: selected ? t.background.withOpacity(0.7) : t.muted)),
+          ]),
+        ),
       ),
     );
   }
