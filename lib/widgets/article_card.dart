@@ -7,6 +7,9 @@ import '../models/article.dart';
 import '../screens/article_screen.dart';
 import '../theme/app_theme.dart';
 import '../services/likes_service.dart';
+import '../services/bookmark_service.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ArticleCard extends StatefulWidget {
   final Article article;
@@ -19,6 +22,7 @@ class ArticleCard extends StatefulWidget {
 class _ArticleCardState extends State<ArticleCard> with TickerProviderStateMixin {
   bool _liked = false;
   int _likeCount = 0;
+  bool _bookmarked = false;
   late AnimationController _heartAnim;
   late Animation<double> _heartScale;
   late AnimationController _tapAnim;
@@ -34,6 +38,7 @@ class _ArticleCardState extends State<ArticleCard> with TickerProviderStateMixin
     _tapScale = Tween<double>(begin: 1.0, end: 0.97).animate(
       CurvedAnimation(parent: _tapAnim, curve: Curves.easeInOut));
     _loadLikes();
+    _loadBookmark();
   }
 
   @override
@@ -43,6 +48,60 @@ class _ArticleCardState extends State<ArticleCard> with TickerProviderStateMixin
     final liked = await LikesService.isLiked(widget.article.url);
     final count = await LikesService.getCount(widget.article.url);
     if (mounted) setState(() { _liked = liked; _likeCount = count; });
+  }
+
+  Future<void> _loadBookmark() async {
+    final saved = await BookmarkService.isBookmarked(widget.article.url);
+    if (mounted) setState(() => _bookmarked = saved);
+  }
+
+  Future<void> _toggleBookmark() async {
+    HapticFeedback.lightImpact();
+    if (_bookmarked) {
+      await BookmarkService.remove(widget.article);
+    } else {
+      await BookmarkService.save(widget.article);
+    }
+    if (mounted) setState(() => _bookmarked = !_bookmarked);
+  }
+
+  void _showMore(BuildContext context) {
+    final t = widget.theme;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: t.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 8),
+          Container(width: 36, height: 4,
+            decoration: BoxDecoration(color: t.muted.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 16),
+          _sheetTile(context, t, Icons.share_outlined, 'Share', () {
+            Navigator.pop(context);
+            SharePlus.instance.share(ShareParams(
+              text: '${widget.article.title}\n\n${widget.article.url}'));
+          }),
+          _sheetTile(context, t, Icons.open_in_browser_rounded, 'Open in browser', () async {
+            Navigator.pop(context);
+            final uri = Uri.parse(widget.article.url);
+            if (await canLaunchUrl(uri)) launchUrl(uri, mode: LaunchMode.externalApplication);
+          }),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+  }
+
+  Widget _sheetTile(BuildContext context, AppTheme t, IconData icon, String label, VoidCallback onTap) {
+    return ListTile(
+      leading: Icon(icon, color: t.primary, size: 20),
+      title: Text(label, style: GoogleFonts.inter(fontSize: 14, color: t.primary)),
+      onTap: onTap,
+    );
   }
 
   Future<void> _toggleLike() async {
@@ -180,9 +239,19 @@ class _ArticleCardState extends State<ArticleCard> with TickerProviderStateMixin
                 ]),
               ),
               const SizedBox(width: 14),
-              Icon(Icons.bookmark_border_rounded, size: 17, color: t.muted),
+              GestureDetector(
+                onTap: _toggleBookmark,
+                child: Icon(
+                  _bookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                  size: 17,
+                  color: _bookmarked ? widget.theme.accent : t.muted,
+                ),
+              ),
               const SizedBox(width: 10),
-              Icon(Icons.more_horiz_rounded, size: 17, color: t.muted),
+              GestureDetector(
+                onTap: () => _showMore(context),
+                child: Icon(Icons.more_horiz_rounded, size: 17, color: t.muted),
+              ),
             ]),
             const SizedBox(height: 16),
             Divider(height: 1, color: t.divider),
