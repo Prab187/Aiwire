@@ -24,6 +24,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    SystemChrome.setSystemUIOverlayStyle(widget.theme.systemUi);
     _loadUser();
   }
 
@@ -76,14 +77,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    SystemChrome.setSystemUIOverlayStyle(t.systemUi);
     return Scaffold(
       backgroundColor: t.background,
       body: SafeArea(
         child: Column(children: [
           Container(
             color: t.background,
-            padding: const EdgeInsets.fromLTRB(6, 12, 20, 12),
+            padding: const EdgeInsets.fromLTRB(4, 12, 20, 12),
             child: Row(children: [
               IconButton(
                 icon: Icon(Icons.arrow_back, color: t.primary, size: 20),

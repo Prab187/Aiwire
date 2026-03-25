@@ -35,7 +35,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     super.initState();
     _modeAnim = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
     _fadeAnim = CurvedAnimation(parent: _modeAnim, curve: Curves.easeInOut);
+    SystemChrome.setSystemUIOverlayStyle(AppTheme(_mode).systemUi);
     _loadNews();
+  }
+
+  void _updateSystemUi() {
+    SystemChrome.setSystemUIOverlayStyle(AppTheme(_mode).systemUi);
   }
 
   @override
@@ -48,6 +53,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       else if (_mode == AppMode.dark) _mode = AppMode.kindle;
       else _mode = AppMode.light;
     });
+    _updateSystemUi();
     _modeAnim.forward(from: 0);
   }
 
@@ -127,7 +133,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     final t = AppTheme(_mode);
-    SystemChrome.setSystemUIOverlayStyle(t.systemUi);
 
     return FadeTransition(
       opacity: Tween<double>(begin: 0.9, end: 1.0).animate(_fadeAnim),

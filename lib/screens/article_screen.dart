@@ -211,7 +211,7 @@ class _ArticleScreenState extends State<ArticleScreen> {
                   color: t.muted, letterSpacing: 0.3)),
         ]),
         const SizedBox(height: 12),
-        Text("You've used your 3 free summaries today.",
+        Text("You've used your ${SubscriptionService.freeLimit} free summaries today.",
             style: GoogleFonts.inter(
                 fontSize: 14, fontWeight: FontWeight.w500,
                 color: t.primary, height: 1.5)),
@@ -299,11 +299,11 @@ class _ArticleScreenState extends State<ArticleScreen> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
                   Row(children: [
-                    Container(width: 28, height: 28,
+                    Container(width: 24, height: 24,
                       decoration: BoxDecoration(shape: BoxShape.circle, color: t.primary),
                       child: Center(child: Text(
                         (widget.article.source ?? 'A')[0].toUpperCase(),
-                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: t.background)))),
+                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: t.background)))),
                     const SizedBox(width: 10),
                     Text(widget.article.source ?? 'AIWire',
                         style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: t.primary)),

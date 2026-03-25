@@ -165,11 +165,11 @@ class _ArticleCardState extends State<ArticleCard> with TickerProviderStateMixin
             // Author row
             Row(children: [
               Container(
-                width: 20, height: 20,
+                width: 24, height: 24,
                 decoration: BoxDecoration(shape: BoxShape.circle, color: t.primary),
                 child: Center(child: Text(
                   (widget.article.source ?? 'A')[0].toUpperCase(),
-                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: t.background),
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: t.background),
                 )),
               ),
               const SizedBox(width: 7),
