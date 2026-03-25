@@ -20,13 +20,13 @@ class AppTheme {
   Color get surface {
     if (isDark) return const Color(0xFF1A1A1A);
     if (isKindle) return const Color(0xFFEDE4C8);
-    return const Color(0xFFF2F2EF);
+    return const Color(0xFFF7F7F5);
   }
 
   Color get edgeDark {
     if (isDark) return const Color(0xFF121212);
     if (isKindle) return const Color(0xFFE8DFC4);
-    return const Color(0xFFF2F2EF);
+    return const Color(0xFFF7F7F5);
   }
 
   Color get primary {
