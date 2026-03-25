@@ -72,7 +72,7 @@ class AIService {
           description: article.description,
           content: article.content,
           url: url,
-        ).catchError((_) {});
+        ).catchError((_) => '');
       }
     }
   }

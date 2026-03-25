@@ -88,9 +88,11 @@ class NewsService {
 
       for (final item in entries) {
         final title = _getText(item, ['title']);
-        final url = _getText(item, ['link', 'guid']) ?? '';
-        final description = _stripHtml(_getText(item, ['description', 'summary', 'content:encoded']) ?? '');
-        final publishedAt = _parseDate(_getText(item, ['pubDate', 'published', 'updated']));
+        final url = _getUrl(item) ?? '';
+        final description = _stripHtml(
+          _getText(item, ['encoded', 'content', 'description', 'summary']) ?? '');
+        final publishedAt = _parseDate(
+          _getText(item, ['pubDate', 'published', 'updated']));
         final imageUrl = _extractImage(item, response.body);
 
         if (title == null || title.isEmpty || url.isEmpty) continue;
@@ -144,9 +146,12 @@ class NewsService {
   static String? _getText(XmlElement item, List<String> tags) {
     for (final tag in tags) {
       try {
-        final el = item.findElements(tag).firstOrNull;
+        // Search by local name to handle namespaces like content:encoded
+        final el = item.childElements
+            .where((e) => e.name.local == tag || e.name.qualified == tag)
+            .firstOrNull;
         if (el != null) {
-          // <link> in Atom feeds uses href attribute
+          // Atom <link href="..."/>
           final href = el.getAttribute('href');
           if (href != null && href.isNotEmpty) return href;
           final text = el.innerText.trim();
@@ -154,6 +159,24 @@ class NewsService {
         }
       } catch (_) {}
     }
+    return null;
+  }
+
+  static String? _getUrl(XmlElement item) {
+    // Try <link> element — RSS 2.0 has text, Atom has href attribute
+    for (final el in item.childElements) {
+      if (el.name.local == 'link') {
+        final href = el.getAttribute('href');
+        if (href != null && href.isNotEmpty) return href;
+        final text = el.innerText.trim();
+        if (text.isNotEmpty && text.startsWith('http')) return text;
+      }
+    }
+    // Fallback to <guid>
+    final guid = item.childElements
+        .where((e) => e.name.local == 'guid')
+        .firstOrNull?.innerText.trim();
+    if (guid != null && guid.startsWith('http')) return guid;
     return null;
   }
 
@@ -288,13 +311,7 @@ class NewsService {
       scores[article] = score;
     }
 
-    // Must have an AI keyword in the title to pass
-    articles = articles.where((a) {
-      final titleLower = a.title.toLowerCase();
-      final hasAiInTitle = _relevantKeywords.any((k) => titleLower.contains(k.toLowerCase()));
-      return hasAiInTitle && (scores[a] ?? 0) >= 3;
-    }).toList();
-
+    // Sources are already AI-focused — just sort by score, show all
     articles.sort((a, b) => (scores[b] ?? 0).compareTo(scores[a] ?? 0));
     return articles.take(50).toList();
   }

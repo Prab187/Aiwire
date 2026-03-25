@@ -18,14 +18,21 @@ class SubscriptionService {
   static ProductDetails? _productYearly;
 
   static Future<void> initialize() async {
-    final available = await _iap.isAvailable();
-    if (!available) return;
-    final response = await _iap.queryProductDetails({productId, productIdYearly});
-    for (final p in response.productDetails) {
-      if (p.id == productId) _product = p;
-      if (p.id == productIdYearly) _productYearly = p;
+    try {
+      final available = await _iap.isAvailable()
+          .timeout(const Duration(seconds: 5), onTimeout: () => false);
+      if (!available) return;
+      final response = await _iap.queryProductDetails({productId, productIdYearly})
+          .timeout(const Duration(seconds: 5), onTimeout: () => ProductDetailsResponse(
+            productDetails: [], notFoundIDs: [productId, productIdYearly], error: null));
+      for (final p in response.productDetails) {
+        if (p.id == productId) _product = p;
+        if (p.id == productIdYearly) _productYearly = p;
+      }
+      _sub = _iap.purchaseStream.listen(_onPurchase);
+    } catch (_) {
+      // IAP unavailable — app still works in free mode
     }
-    _sub = _iap.purchaseStream.listen(_onPurchase);
   }
 
   static void dispose() => _sub?.cancel();
@@ -89,7 +96,9 @@ class SubscriptionService {
   /// Validates the subscription on startup. Restores purchases and clears the
   /// premium flag if no active subscription is found within the timeout.
   static Future<void> validateSubscription() async {
-    final available = await _iap.isAvailable();
+    try {
+    final available = await _iap.isAvailable()
+        .timeout(const Duration(seconds: 5), onTimeout: () => false);
     if (!available) return;
 
     bool foundActive = false;
@@ -111,6 +120,9 @@ class SubscriptionService {
     if (!foundActive) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_keyIsPremium, false);
+    }
+    } catch (_) {
+      // Validation failed silently — app continues in free mode
     }
   }
 

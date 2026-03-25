@@ -22,9 +22,8 @@ class SummaryCache {
     _inFlight[url] = future;
     future.then((_) {
       _inFlight.remove(url);
-    }).catchError((dynamic _) {
+    }, onError: (_) {
       _inFlight.remove(url);
-      return '';
     });
   }
 }

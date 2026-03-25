@@ -14,7 +14,7 @@ Future<void> main() async {
   } catch (_) {
     // .env not present in production builds — that's expected
   }
-  await SubscriptionService.initialize();
+  unawaited(SubscriptionService.initialize());
   unawaited(SubscriptionService.validateSubscription());
   GoogleFonts.config.allowRuntimeFetching = true;
   runApp(const AIWireApp());

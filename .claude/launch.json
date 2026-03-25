@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Flutter Web (Chrome)",
+      "runtimeExecutable": "flutter",
+      "runtimeArgs": ["run", "-d", "chrome", "--web-port", "8080"],
+      "port": 8080
+    },
+    {
+      "name": "Flutter iOS Device",
+      "runtimeExecutable": "flutter",
+      "runtimeArgs": ["run", "-d", "iphone"],
+      "port": 0
+    },
+    {
+      "name": "Flutter iOS Simulator",
+      "runtimeExecutable": "flutter",
+      "runtimeArgs": ["run", "-d", "iphone simulator"],
+      "port": 0
+    }
+  ]
+}

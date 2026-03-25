@@ -9,7 +9,16 @@
       "Bash(git -C /Users/apple/development/aiwire status)",
       "Bash(gh auth:*)",
       "Bash(find /Users/apple/development/aiwire/test -type f -name *.dart)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(git remote:*)",
+      "Bash(git push:*)",
+      "Bash(gh repo:*)",
+      "Bash(open /Users/apple/development/aiwire/ios/Runner.xcworkspace)",
+      "Bash(flutter run:*)",
+      "Bash(killall Xcode)",
+      "Bash(git check-ignore:*)",
+      "Bash(find /Users/apple/development/aiwire/ios/Flutter/ephemeral -type f -name *.json -o -name *.pbxproj)",
+      "Bash(chmod +x /Users/apple/development/aiwire/ios/ci_scripts/ci_post_clone.sh)"
     ]
   }
 }
