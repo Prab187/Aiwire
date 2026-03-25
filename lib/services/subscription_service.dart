@@ -8,7 +8,7 @@ class SubscriptionService {
   static const String _keyIsPremium = 'is_premium';
   static const String _keyDailyCount = 'daily_summary_count';
   static const String _keyLastDate = 'last_summary_date';
-  static const int freeLimit = 3;
+  static const int freeLimit = 30;
   // Trial days configured in App Store Connect. Change to 0 to disable trial.
   static const int _kTrialDays = 7;
 
