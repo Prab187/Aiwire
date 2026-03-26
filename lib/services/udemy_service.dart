@@ -1,14 +1,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/udemy_course.dart';
 
 class UdemyService {
   static const String _baseUrl = 'https://www.udemy.com/api-2.0/courses/';
 
   static String _basicAuth() {
-    final clientId = dotenv.env['UDEMY_CLIENT_ID'] ?? '';
-    final clientSecret = dotenv.env['UDEMY_CLIENT_SECRET'] ?? '';
+    const clientId = String.fromEnvironment('UDEMY_CLIENT_ID');
+    const clientSecret = String.fromEnvironment('UDEMY_CLIENT_SECRET');
     final credentials = base64Encode(utf8.encode('$clientId:$clientSecret'));
     return 'Basic $credentials';
   }

@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/job.dart';
 
 class JobService {
@@ -41,9 +40,9 @@ class JobService {
 
   // ── Secondary: Adzuna API (free tier — 250 req/day) ──────────────────────
   static Future<List<Job>> _fetchAdzunaJobs({String? query, String country = 'us'}) async {
-    final appId = dotenv.env['ADZUNA_APP_ID'];
-    final appKey = dotenv.env['ADZUNA_APP_KEY'];
-    if (appId == null || appKey == null || appId.isEmpty || appKey.isEmpty) return [];
+    const appId = String.fromEnvironment('ADZUNA_APP_ID');
+    const appKey = String.fromEnvironment('ADZUNA_APP_KEY');
+    if (appId.isEmpty || appKey.isEmpty) return [];
 
     final search = query ?? 'artificial intelligence machine learning';
     final url = Uri.parse(

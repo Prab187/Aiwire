@@ -30,3 +30,4 @@ ios/Flutter/Flutter.podspec
 # Miscellaneous
 *.log
 .env
+.env.json

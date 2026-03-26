@@ -1,13 +1,12 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/event.dart';
 
 class EventsService {
   // ── PredictHQ API (free tier — 1,000 events/day) ─────────────────────────
   static Future<List<AIEvent>> _fetchPredictHQEvents() async {
-    final token = dotenv.env['PREDICTHQ_ACCESS_TOKEN'];
-    if (token == null || token.isEmpty) return [];
+    const token = String.fromEnvironment('PREDICTHQ_ACCESS_TOKEN');
+    if (token.isEmpty) return [];
 
     final now = DateTime.now();
     final startDate = now.toIso8601String().split('T').first;
@@ -70,8 +69,8 @@ class EventsService {
 
   // ── Eventbrite API (free OAuth token) ────────────────────────────────────
   static Future<List<AIEvent>> _fetchEventbriteEvents() async {
-    final token = dotenv.env['EVENTBRITE_TOKEN'];
-    if (token == null || token.isEmpty) return [];
+    const token = String.fromEnvironment('EVENTBRITE_TOKEN');
+    if (token.isEmpty) return [];
 
     final url = Uri.parse(
       'https://www.eventbriteapi.com/v3/events/search/'

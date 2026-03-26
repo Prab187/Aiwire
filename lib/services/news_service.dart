@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/article.dart';
 
 class NewsService {
@@ -116,8 +115,8 @@ class NewsService {
   }
 
   static Future<List<Article>> _fetchNewsApi() async {
-    final apiKey = dotenv.env['NEWS_API_KEY'];
-    if (apiKey == null || apiKey.isEmpty) return [];
+    const apiKey = String.fromEnvironment('NEWS_API_KEY');
+    if (apiKey.isEmpty) return [];
 
     final url = Uri.parse(
       'https://newsapi.org/v2/everything?q=artificial+intelligence+AI+LLM&sortBy=publishedAt&language=en&pageSize=50&apiKey=$apiKey'

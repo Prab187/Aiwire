@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'summary_cache.dart';
 
 class AIService {
@@ -33,7 +32,8 @@ class AIService {
     String? content,
     String? url,
   }) async {
-    final apiKey = dotenv.env['ANTHROPIC_API_KEY'];
+    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    if (apiKey.isEmpty) throw Exception('ANTHROPIC_API_KEY not configured');
     final context = description ?? content ?? '';
     final prompt = 'Write a 4-5 sentence summary of this AI news article. Weave in the key insight naturally — no bullet points, no headers, just flowing editorial prose.\n\nTitle: $title\n\n$context';
 
@@ -41,11 +41,11 @@ class AIService {
       Uri.parse('https://api.anthropic.com/v1/messages'),
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey!,
+        'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
       },
       body: json.encode({
-        'model': 'claude-3-5-haiku-20241022',
+        'model': 'claude-haiku-4-5',
         'max_tokens': 300,
         'messages': [{'role': 'user', 'content': prompt}],
       }),

@@ -1,19 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'screens/splash_screen.dart';
 import 'services/subscription_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // In production, secrets should be injected via environment variables or a
-  // backend proxy — not bundled as assets. The .env file is optional here.
-  try {
-    await dotenv.load(fileName: ".env");
-  } catch (_) {
-    // .env not present in production builds — that's expected
-  }
   unawaited(SubscriptionService.initialize());
   unawaited(SubscriptionService.validateSubscription());
   GoogleFonts.config.allowRuntimeFetching = true;
