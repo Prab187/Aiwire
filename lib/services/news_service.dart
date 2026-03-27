@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 import '../models/article.dart';
@@ -48,11 +49,15 @@ class NewsService {
   static Future<List<Article>> fetchAINews() async {
     List<Article> allArticles = [];
 
-    // Fetch from all RSS feeds in parallel
-    final futures = _rssFeeds.map((feed) => _fetchRssFeed(feed['url']!, feed['source']!));
-    final results = await Future.wait(futures, eagerError: false);
-    for (final articles in results) {
-      allArticles.addAll(articles);
+    // Fetch in batches of 5 to avoid memory spikes from 19 concurrent connections
+    const batchSize = 5;
+    for (int i = 0; i < _rssFeeds.length; i += batchSize) {
+      final batch = _rssFeeds.skip(i).take(batchSize);
+      final futures = batch.map((feed) => _fetchRssFeed(feed['url']!, feed['source']!));
+      final results = await Future.wait(futures, eagerError: false);
+      for (final articles in results) {
+        allArticles.addAll(articles);
+      }
     }
 
     // Fallback to NewsAPI if RSS yields nothing
@@ -79,12 +84,33 @@ class NewsService {
 
       if (response.statusCode != 200) return [];
 
-      final document = XmlDocument.parse(response.body);
+      // Parse XML off the main thread to avoid blocking the UI
+      final maps = await compute(_parseRssBody, {'body': response.body, 'source': sourceName});
+      return maps.map((m) => Article(
+        title: m['title'] as String,
+        description: m['description'] as String?,
+        urlToImage: m['urlToImage'] as String?,
+        url: m['url'] as String,
+        publishedAt: m['publishedAt'] as String?,
+        source: m['source'] as String?,
+        content: m['content'] as String?,
+      )).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // Top-level-style static method so it can run in a compute() isolate.
+  // Must only use primitive types in args and return value.
+  static List<Map<String, dynamic>> _parseRssBody(Map<String, String> args) {
+    final body = args['body']!;
+    final sourceName = args['source']!;
+    try {
+      final document = XmlDocument.parse(body);
       final items = document.findAllElements('item');
       final entries = items.isEmpty ? document.findAllElements('entry') : items;
 
-      List<Article> articles = [];
-
+      final List<Map<String, dynamic>> results = [];
       for (final item in entries) {
         final title = _getText(item, ['title']);
         final url = _getUrl(item) ?? '';
@@ -92,23 +118,22 @@ class NewsService {
           _getText(item, ['encoded', 'content', 'description', 'summary']) ?? '');
         final publishedAt = _parseDate(
           _getText(item, ['pubDate', 'published', 'updated']));
-        final imageUrl = _extractImage(item, response.body);
+        final imageUrl = _extractImage(item, body);
 
         if (title == null || title.isEmpty || url.isEmpty) continue;
         if (!_isEnglish(title)) continue;
 
-        articles.add(Article(
-          title: title,
-          description: description.isNotEmpty ? description : null,
-          urlToImage: imageUrl,
-          url: url,
-          publishedAt: publishedAt,
-          source: sourceName,
-          content: description,
-        ));
+        results.add({
+          'title': title,
+          'description': description.isNotEmpty ? description : null,
+          'urlToImage': imageUrl,
+          'url': url,
+          'publishedAt': publishedAt,
+          'source': sourceName,
+          'content': description.isNotEmpty ? description : null,
+        });
       }
-
-      return articles;
+      return results;
     } catch (_) {
       return [];
     }
@@ -312,6 +337,6 @@ class NewsService {
 
     // Sources are already AI-focused — just sort by score, show all
     articles.sort((a, b) => (scores[b] ?? 0).compareTo(scores[a] ?? 0));
-    return articles.take(50).toList();
+    return articles.take(30).toList();
   }
 }

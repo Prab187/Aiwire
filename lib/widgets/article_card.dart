@@ -206,6 +206,7 @@ class _ArticleCardState extends State<ArticleCard> with TickerProviderStateMixin
                     child: CachedNetworkImage(
                       imageUrl: widget.article.urlToImage!,
                       width: 80, height: 80, fit: BoxFit.cover,
+                      memCacheWidth: 160, memCacheHeight: 160,
                       fadeInDuration: const Duration(milliseconds: 200),
                       placeholder: (c, u) => Container(width: 80, height: 80, color: t.surface),
                       errorWidget: (c, u, e) => Container(
