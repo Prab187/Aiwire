@@ -31,3 +31,4 @@ ios/Flutter/Flutter.podspec
 *.log
 .env
 .env.json
+.claude/
