@@ -18,7 +18,10 @@
       "Bash(killall Xcode)",
       "Bash(git check-ignore:*)",
       "Bash(find /Users/apple/development/aiwire/ios/Flutter/ephemeral -type f -name *.json -o -name *.pbxproj)",
-      "Bash(chmod +x /Users/apple/development/aiwire/ios/ci_scripts/ci_post_clone.sh)"
+      "Bash(chmod +x /Users/apple/development/aiwire/ios/ci_scripts/ci_post_clone.sh)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

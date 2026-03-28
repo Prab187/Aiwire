@@ -114,7 +114,7 @@ class SubscriptionService {
 
     await _iap.restorePurchases();
     // Allow the purchase stream to deliver all restored purchases.
-    await Future.delayed(const Duration(seconds: 3));
+    await Future.delayed(const Duration(milliseconds: 1500));
     await validateSub.cancel();
 
     if (!foundActive) {

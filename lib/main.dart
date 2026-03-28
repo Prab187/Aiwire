@@ -12,8 +12,18 @@ Future<void> main() async {
   runApp(const AIWireApp());
 }
 
-class AIWireApp extends StatelessWidget {
+class AIWireApp extends StatefulWidget {
   const AIWireApp({super.key});
+  @override
+  State<AIWireApp> createState() => _AIWireAppState();
+}
+
+class _AIWireAppState extends State<AIWireApp> {
+  @override
+  void dispose() {
+    SubscriptionService.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
