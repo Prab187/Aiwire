@@ -38,6 +38,261 @@ class JobService {
     return jobs;
   }
 
+  // ── The Muse API (free, no key — tech & data science jobs) ─────────────
+  static Future<List<Job>> _fetchTheMuseJobs({String? query}) async {
+    // The Muse has a "Data Science" category — no auth required
+    final url = Uri.parse(
+      'https://www.themuse.com/api/public/jobs'
+      '?category=Data+Science&category=Software+Engineer&page=0',
+    );
+
+    try {
+      final response = await http.get(url,
+        headers: {'User-Agent': 'AIWire/1.0'},
+      ).timeout(const Duration(seconds: 10));
+      if (response.statusCode != 200) return [];
+
+      final data = json.decode(response.body);
+      final results = data['results'] as List? ?? [];
+
+      final aiFilter = RegExp(
+        r'(machine.?learn|data.?scien|deep.?learn|nlp|llm|computer.?vision|'
+        r'ai |ml |artificial.?intelligence|mlops|neural)',
+        caseSensitive: false,
+      );
+      final searchLower = query?.toLowerCase() ?? '';
+
+      return results.where((j) {
+        final title = (j['name'] as String? ?? '').toLowerCase();
+        final contents = (j['contents'] as String? ?? '').toLowerCase();
+        return aiFilter.hasMatch(title) ||
+            (searchLower.isNotEmpty &&
+                (title.contains(searchLower) || contents.contains(searchLower)));
+      }).map((j) {
+        final locations = (j['locations'] as List? ?? []);
+        final location = locations.isNotEmpty
+            ? (locations[0]['name'] as String? ?? 'Remote')
+            : 'Remote';
+        final levels = (j['levels'] as List? ?? []);
+        final levelName = levels.isNotEmpty
+            ? (levels[0]['name'] as String? ?? '')
+            : '';
+
+        return Job(
+          id: 'muse_${j['id']}',
+          title: j['name'] ?? '',
+          company: j['company']?['name'] ?? '',
+          location: location,
+          type: location.toLowerCase().contains('remote') ? 'Remote' : 'On-site',
+          level: _mapMuseLevel(levelName),
+          description: _stripHtml(j['contents'] ?? '', 300),
+          skills: _extractSkills(j['contents'] ?? ''),
+          salaryRange: 'Not disclosed',
+          postedAt: (j['publication_date'] as String? ?? '').split('T').first,
+          applyUrl: j['refs']?['landing_page'] ?? '',
+        );
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static String _mapMuseLevel(String level) {
+    final l = level.toLowerCase();
+    if (l.contains('senior') || l.contains('management')) return 'Senior';
+    if (l.contains('mid') || l.contains('experienced')) return 'Mid';
+    if (l.contains('entry') || l.contains('junior') || l.contains('intern')) return 'Junior';
+    return 'Mid';
+  }
+
+  // ── Arbeitnow API (free, no key — EU remote tech jobs) ───────────────────
+  static Future<List<Job>> _fetchArbeitnowJobs({String? query}) async {
+    final url = Uri.parse('https://arbeitnow.com/api/job-board-api');
+
+    try {
+      final response = await http.get(url,
+        headers: {'User-Agent': 'AIWire/1.0'},
+      ).timeout(const Duration(seconds: 10));
+      if (response.statusCode != 200) return [];
+
+      final data = json.decode(response.body);
+      final jobs = data['data'] as List? ?? [];
+
+      final aiFilter = RegExp(
+        r'(machine.?learn|data.?scien|deep.?learn|nlp|llm|computer.?vision|'
+        r'\bai\b|\bml\b|artificial.?intelligence|mlops|neural|python|pytorch|'
+        r'tensorflow|data.?engineer)',
+        caseSensitive: false,
+      );
+      final searchLower = query?.toLowerCase() ?? '';
+
+      return jobs.where((j) {
+        final title = (j['title'] as String? ?? '').toLowerCase();
+        final desc = (j['description'] as String? ?? '').toLowerCase();
+        final tags = (j['tags'] as List? ?? [])
+            .map((t) => t.toString().toLowerCase())
+            .join(' ');
+        return aiFilter.hasMatch(title) ||
+            aiFilter.hasMatch(tags) ||
+            (searchLower.isNotEmpty && (title.contains(searchLower) || desc.contains(searchLower)));
+      }).map((j) {
+        final createdAt = j['created_at'];
+        String postedAt = '';
+        if (createdAt is int) {
+          postedAt = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000)
+              .toIso8601String()
+              .split('T')
+              .first;
+        }
+
+        return Job(
+          id: 'arbeitnow_${j['slug'] ?? j.hashCode}',
+          title: j['title'] ?? '',
+          company: j['company_name'] ?? '',
+          location: j['location'] ?? 'Europe',
+          type: j['remote'] == true ? 'Remote' : 'On-site',
+          level: _inferLevel(j['title'] ?? ''),
+          description: _stripHtml(j['description'] ?? '', 300),
+          skills: _extractSkills(j['description'] ?? ''),
+          salaryRange: 'Not disclosed',
+          postedAt: postedAt,
+          applyUrl: j['url'] ?? '',
+        );
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ── Jobicy API (free, no key — remote jobs with salary & logo) ──────────
+  static Future<List<Job>> _fetchJobicyJobs({String? query}) async {
+    final url = Uri.parse(
+      'https://jobicy.com/api/v2/remote-jobs?count=50',
+    );
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {'User-Agent': 'AIWire/1.0'},
+      ).timeout(const Duration(seconds: 10));
+      if (response.statusCode != 200) return [];
+
+      final data = json.decode(response.body);
+      final jobs = data['jobs'] as List? ?? [];
+
+      // Filter to AI/ML/Data Science roles
+      const aiIndustries = {
+        'data science', 'machine learning', 'artificial intelligence',
+        'software development', 'software engineering', 'devops',
+      };
+      final aiTitles = RegExp(
+        r'(machine learning|deep learning|data scien|nlp|llm|ai |ml |'
+        r'artificial intelligence|computer vision|mlops|pytorch|tensorflow)',
+        caseSensitive: false,
+      );
+      const aiQueryTerms = {
+        'machine learning', 'deep learning', 'data science', 'nlp', 'llm',
+        'computer vision', 'mlops', 'ai', 'ml',
+      };
+
+      final searchTerms = query?.toLowerCase().split(' ').toSet() ?? aiQueryTerms;
+
+      return jobs.where((j) {
+        final industry = (j['jobIndustry'] as List? ?? [])
+            .map((i) => i.toString().toLowerCase())
+            .toSet();
+        final title = (j['jobTitle'] as String? ?? '').toLowerCase();
+        final excerpt = (j['jobExcerpt'] as String? ?? '').toLowerCase();
+
+        // Keep if industry matches, title matches, or search query overlaps
+        return industry.any((i) => aiIndustries.contains(i)) ||
+            aiTitles.hasMatch(title) ||
+            searchTerms.any((t) => title.contains(t) || excerpt.contains(t));
+      }).map((j) {
+        final salaryMin = j['salaryMin'];
+        final salaryMax = j['salaryMax'];
+        final currency = j['salaryCurrency'] as String? ?? 'USD';
+        String salaryRange = 'Not disclosed';
+        if (salaryMin != null && salaryMax != null) {
+          salaryRange = '$currency ${_formatSalary(salaryMin)}K – ${_formatSalary(salaryMax)}K / yr';
+        } else if (salaryMin != null) {
+          salaryRange = 'From $currency ${_formatSalary(salaryMin)}K / yr';
+        }
+
+        return Job(
+          id: 'jobicy_${j['id']}',
+          title: j['jobTitle'] ?? '',
+          company: j['companyName'] ?? '',
+          location: j['jobGeo'] ?? 'Worldwide',
+          type: 'Remote',
+          level: j['jobLevel'] as String? ?? _inferLevel(j['jobTitle'] ?? ''),
+          description: _stripHtml(
+              (j['jobDescription'] ?? j['jobExcerpt'] ?? '') as String, 300),
+          skills: _extractSkills(
+              (j['jobDescription'] ?? j['jobExcerpt'] ?? '') as String),
+          salaryRange: salaryRange,
+          postedAt: (j['pubDate'] as String? ?? '').split('T').first,
+          companyLogo: j['companyLogo'] as String?,
+          applyUrl: j['url'] ?? '',
+          featured: salaryMin != null && (salaryMin as num) > 150000,
+        );
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ── Reed.co.uk API (free key — reed.co.uk/developers/jobseeker) ──────────
+  static Future<List<Job>> _fetchReedJobs({String? query}) async {
+    const apiKey = String.fromEnvironment('REED_API_KEY');
+    if (apiKey.isEmpty) return [];
+
+    final search =
+        Uri.encodeComponent(query ?? 'artificial intelligence machine learning');
+    final url = Uri.parse(
+      'https://www.reed.co.uk/api/1.0/search'
+      '?keywords=$search&resultsToTake=15',
+    );
+
+    try {
+      // Reed uses HTTP Basic Auth: API key as username, empty password
+      final credentials = base64Encode(utf8.encode('$apiKey:'));
+      final response = await http.get(url, headers: {
+        'Authorization': 'Basic $credentials',
+      }).timeout(const Duration(seconds: 10));
+      if (response.statusCode != 200) return [];
+
+      final data = json.decode(response.body);
+      final results = data['results'] as List? ?? [];
+
+      return results.map((j) {
+        final min = j['minimumSalary'];
+        final max = j['maximumSalary'];
+        String salary = 'Not disclosed';
+        if (min != null && max != null) {
+          salary = '£${_formatSalary(min)}K – £${_formatSalary(max)}K';
+        } else if (min != null) {
+          salary = 'From £${_formatSalary(min)}K';
+        }
+        return Job(
+          id: 'reed_${j['jobId']}',
+          title: j['jobTitle'] ?? '',
+          company: j['employerName'] ?? '',
+          location: j['locationName'] ?? 'UK',
+          type: _inferType(j['jobDescription'] ?? '', j['locationName'] ?? ''),
+          level: _inferLevel(j['jobTitle'] ?? ''),
+          description: _stripHtml(j['jobDescription'] ?? '', 300),
+          skills: _extractSkills(j['jobDescription'] ?? ''),
+          salaryRange: salary,
+          postedAt: (j['date'] as String? ?? '').split('T').first,
+          applyUrl: j['jobUrl'] ?? '',
+        );
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   // ── Secondary: Adzuna API (free tier — 250 req/day) ──────────────────────
   static Future<List<Job>> _fetchAdzunaJobs({String? query, String country = 'us'}) async {
     const appId = String.fromEnvironment('ADZUNA_APP_ID');
@@ -91,17 +346,59 @@ class JobService {
     }
   }
 
-  // ── Public method: fetches from all sources ──────────────────────────────
-  static Future<List<Job>> fetchJobs({String? query, String? type, String? level}) async {
-    // Fetch from both APIs in parallel
+  // ── Resume-matched jobs: country-aware search ─────────────────────────────
+  static Future<List<Job>> fetchJobsForResume({
+    required List<String> skills,
+    required String countryCode,
+    required String jobTitle,
+  }) async {
+    final query = '$jobTitle ${skills.take(3).join(' ')}';
     final results = await Future.wait([
       _fetchRemotiveJobs(query: query).catchError((_) => <Job>[]),
-      _fetchAdzunaJobs(query: query).catchError((_) => <Job>[]),
+      _fetchJobicyJobs(query: query).catchError((_) => <Job>[]),
+      _fetchTheMuseJobs(query: query).catchError((_) => <Job>[]),
+      _fetchArbeitnowJobs(query: query).catchError((_) => <Job>[]),
+      _fetchAdzunaJobs(query: query, country: countryCode).catchError((_) => <Job>[]),
+      _fetchReedJobs(query: query).catchError((_) => <Job>[]),
     ]);
 
-    var jobs = [...results[0], ...results[1]];
+    var jobs = [
+      ...results[0], ...results[1], ...results[2],
+      ...results[3], ...results[4], ...results[5],
+    ];
+    if (jobs.isEmpty) jobs = List.from(_fallbackJobs);
 
-    // If both APIs fail, use fallback sample data
+    final seen = <String>{};
+    jobs = jobs.where((j) => seen.add('${j.title}|${j.company}')).toList();
+
+    jobs.sort((a, b) {
+      if (a.featured && !b.featured) return -1;
+      if (!a.featured && b.featured) return 1;
+      return b.postedAt.compareTo(a.postedAt);
+    });
+    return jobs;
+  }
+
+  // ── Public method: fetches from all sources ──────────────────────────────
+  static Future<List<Job>> fetchJobs({String? query, String? type, String? level}) async {
+    final results = await Future.wait([
+      _fetchRemotiveJobs(query: query).catchError((_) => <Job>[]),
+      _fetchJobicyJobs(query: query).catchError((_) => <Job>[]),
+      _fetchTheMuseJobs(query: query).catchError((_) => <Job>[]),
+      _fetchArbeitnowJobs(query: query).catchError((_) => <Job>[]),
+      _fetchAdzunaJobs(query: query).catchError((_) => <Job>[]),
+      _fetchReedJobs(query: query).catchError((_) => <Job>[]),
+    ]);
+
+    var jobs = [
+      ...results[0], ...results[1], ...results[2],
+      ...results[3], ...results[4], ...results[5],
+    ];
+
+    // Deduplicate by title+company
+    final seen = <String>{};
+    jobs = jobs.where((j) => seen.add('${j.title}|${j.company}')).toList();
+
     if (jobs.isEmpty) {
       jobs = _fallbackJobs;
     }

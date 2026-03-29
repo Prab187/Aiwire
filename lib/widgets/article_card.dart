@@ -11,6 +11,61 @@ import '../services/bookmark_service.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+// Maps known source names to their domain for favicon lookup
+const _sourceDomains = {
+  'TechCrunch AI':   'techcrunch.com',
+  'VentureBeat AI':  'venturebeat.com',
+  'AI News':         'artificialintelligence-news.com',
+  'MarkTechPost':    'marktechpost.com',
+  'Synced Review':   'syncedreview.com',
+  'AI Trends':       'aitrends.com',
+  'TechXplore AI':   'techxplore.com',
+  'OpenAI':          'openai.com',
+  'DeepMind':        'deepmind.com',
+  'HuggingFace':     'huggingface.co',
+  'Stanford HAI':    'hai.stanford.edu',
+  'Berkeley AI':     'bair.berkeley.edu',
+  'The Gradient':    'thegradient.pub',
+  'MIT Tech Review': 'technologyreview.com',
+  'Wired':           'wired.com',
+  'Ars Technica':    'arstechnica.com',
+  'The Verge':       'theverge.com',
+  'ZDNet':           'zdnet.com',
+  'Crunchbase':      'crunchbase.com',
+};
+
+class _SourceIcon extends StatelessWidget {
+  final String? source;
+  final AppTheme theme;
+  const _SourceIcon({required this.source, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    final domain = _sourceDomains[source];
+    final fallback = Container(
+      width: 24, height: 24,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: theme.primary),
+      child: Center(child: Text(
+        (source ?? 'A')[0].toUpperCase(),
+        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: theme.background),
+      )),
+    );
+
+    if (domain == null) return fallback;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: CachedNetworkImage(
+        imageUrl: 'https://www.google.com/s2/favicons?domain=$domain&sz=64',
+        width: 24, height: 24, fit: BoxFit.cover,
+        fadeInDuration: const Duration(milliseconds: 150),
+        placeholder: (_, __) => fallback,
+        errorWidget: (_, __, ___) => fallback,
+      ),
+    );
+  }
+}
+
 class ArticleCard extends StatefulWidget {
   final Article article;
   final AppTheme theme;
@@ -164,14 +219,7 @@ class _ArticleCardState extends State<ArticleCard> with TickerProviderStateMixin
 
             // Author row
             Row(children: [
-              Container(
-                width: 24, height: 24,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: t.primary),
-                child: Center(child: Text(
-                  (widget.article.source ?? 'A')[0].toUpperCase(),
-                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: t.background),
-                )),
-              ),
+              _SourceIcon(source: widget.article.source, theme: t),
               const SizedBox(width: 7),
               Text(widget.article.source ?? 'AIWire',
                   style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: t.primary)),

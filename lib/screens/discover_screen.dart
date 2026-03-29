@@ -6,6 +6,7 @@ import 'events_hub_screen.dart';
 import 'certification_screen.dart';
 import 'forecast_screen.dart';
 import 'investment_screen.dart';
+import 'resume_scan_screen.dart';
 
 class DiscoverScreen extends StatelessWidget {
   final AppTheme theme;
@@ -38,6 +39,15 @@ class DiscoverScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
+                  _DiscoverCard(
+                    theme: t,
+                    icon: Icons.document_scanner_outlined,
+                    title: 'Scan Resume',
+                    subtitle: 'Upload CV · get matched jobs by country',
+                    meta: 'AI',
+                    onTap: () => Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => ResumeScanScreen(theme: t))),
+                  ),
                   _DiscoverCard(
                     theme: t,
                     icon: Icons.work_outline_rounded,
