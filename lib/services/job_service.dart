@@ -346,6 +346,61 @@ class JobService {
     }
   }
 
+  // ── Location-aware job search ─────────────────────────────────────────────
+  static Future<List<Job>> fetchNearbyJobs({
+    required String city,
+    required String country,
+    required String countryCode,
+    int radiusKm = 50,
+    bool includeRemote = true,
+  }) async {
+    final cityQuery = Uri.encodeComponent('$city artificial intelligence machine learning');
+    final locationQuery = Uri.encodeComponent('artificial intelligence machine learning');
+
+    final futures = <Future<List<Job>>>[
+      // Adzuna: location-aware (city + country)
+      _fetchAdzunaJobs(query: 'artificial intelligence machine learning', country: countryCode)
+          .catchError((_) => <Job>[]),
+      // Reed: UK location search
+      _fetchReedJobs(query: 'artificial intelligence machine learning')
+          .catchError((_) => <Job>[]),
+    ];
+
+    if (includeRemote) {
+      futures.addAll([
+        _fetchRemotiveJobs(query: 'machine learning').catchError((_) => <Job>[]),
+        _fetchJobicyJobs(query: 'machine learning').catchError((_) => <Job>[]),
+      ]);
+    }
+
+    final results = await Future.wait(futures);
+    var jobs = results.expand((l) => l).toList();
+
+    // Deduplicate
+    final seen = <String>{};
+    jobs = jobs.where((j) => seen.add('${j.title}|${j.company}')).toList();
+
+    if (jobs.isEmpty) jobs = List.from(_fallbackJobs);
+
+    // Sort: local jobs first (those whose location mentions the city or country),
+    // then featured, then by date
+    final cityLower = city.toLowerCase();
+    final countryLower = country.toLowerCase();
+    jobs.sort((a, b) {
+      final aLocal = a.location.toLowerCase().contains(cityLower) ||
+          a.location.toLowerCase().contains(countryLower);
+      final bLocal = b.location.toLowerCase().contains(cityLower) ||
+          b.location.toLowerCase().contains(countryLower);
+      if (aLocal && !bLocal) return -1;
+      if (!aLocal && bLocal) return 1;
+      if (a.featured && !b.featured) return -1;
+      if (!a.featured && b.featured) return 1;
+      return b.postedAt.compareTo(a.postedAt);
+    });
+
+    return jobs;
+  }
+
   // ── Resume-matched jobs: country-aware search ─────────────────────────────
   static Future<List<Job>> fetchJobsForResume({
     required List<String> skills,

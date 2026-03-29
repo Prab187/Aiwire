@@ -7,6 +7,7 @@ import 'certification_screen.dart';
 import 'forecast_screen.dart';
 import 'investment_screen.dart';
 import 'resume_scan_screen.dart';
+import 'nearby_jobs_screen.dart';
 
 class DiscoverScreen extends StatelessWidget {
   final AppTheme theme;
@@ -24,7 +25,7 @@ class DiscoverScreen extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
                 child: Text('Discover', style: GoogleFonts.sourceSerif4(
-                  fontSize: 28, fontWeight: FontWeight.w700, color: t.primary)),
+                  fontSize: 28, fontWeight: FontWeight.w600, color: t.primary)),
               ),
             ),
             SliverToBoxAdapter(
@@ -39,6 +40,15 @@ class DiscoverScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
+                  _DiscoverCard(
+                    theme: t,
+                    icon: Icons.near_me_rounded,
+                    title: 'Jobs Near You',
+                    subtitle: 'AI/ML roles in your city & nearby',
+                    meta: 'GPS',
+                    onTap: () => Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => NearbyJobsScreen(theme: t))),
+                  ),
                   _DiscoverCard(
                     theme: t,
                     icon: Icons.document_scanner_outlined,
