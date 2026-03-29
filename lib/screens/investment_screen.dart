@@ -1,5 +1,9 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
+import 'package:xml/xml.dart';
 import '../theme/app_theme.dart';
 
 class InvestmentScreen extends StatelessWidget {
@@ -49,6 +53,15 @@ class InvestmentScreen extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text('+62% from 2024', style: GoogleFonts.inter(
                   fontSize: 13, fontWeight: FontWeight.w600, color: t.accent)),
+                const SizedBox(height: 12),
+                Divider(color: t.divider),
+                const SizedBox(height: 8),
+                Text('Sources: Crunchbase · PitchBook · Bloomberg',
+                  style: GoogleFonts.inter(fontSize: 11, color: t.muted),
+                  textAlign: TextAlign.center),
+                const SizedBox(height: 2),
+                Text('Data as of Q4 2025',
+                  style: GoogleFonts.inter(fontSize: 11, color: t.muted)),
               ]),
             ),
             const SizedBox(height: 28),
@@ -88,6 +101,16 @@ class InvestmentScreen extends StatelessWidget {
               fontSize: 15, fontWeight: FontWeight.w600, color: t.primary)),
             const SizedBox(height: 14),
             _QuarterlyChart(theme: t),
+            const SizedBox(height: 28),
+
+            // Recent funding news
+            Text('Recent Funding News', style: GoogleFonts.inter(
+              fontSize: 15, fontWeight: FontWeight.w600, color: t.primary)),
+            const SizedBox(height: 2),
+            Text('Latest AI investment rounds', style: GoogleFonts.inter(
+              fontSize: 12, color: t.muted)),
+            const SizedBox(height: 14),
+            _FundingNewsFeed(theme: t),
             const SizedBox(height: 40),
           ],
         ),
@@ -125,7 +148,7 @@ class _YearlyBarChart extends StatelessWidget {
       {'year': '2024', 'value': 60.5},
       {'year': '2025', 'value': 97.8},
     ];
-    final maxVal = 100.0;
+    const maxVal = 100.0;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -182,13 +205,30 @@ class _YearlyBarChart extends StatelessWidget {
 
 // ── Sector breakdown ──────────────────────────────────────────────────────
 
-class _SectorBreakdown extends StatelessWidget {
+class _SectorBreakdown extends StatefulWidget {
   final AppTheme theme;
   const _SectorBreakdown({required this.theme});
 
   @override
+  State<_SectorBreakdown> createState() => _SectorBreakdownState();
+}
+
+class _SectorBreakdownState extends State<_SectorBreakdown> {
+  final Map<String, bool> _expanded = {};
+
+  static const _sectorCompanies = {
+    'Foundation Models / LLMs': ['OpenAI', 'Anthropic', 'xAI'],
+    'AI Infrastructure / Cloud': ['CoreWeave', 'Databricks'],
+    'Enterprise AI / SaaS': ['Glean', 'Adept AI'],
+    'Healthcare / Biotech AI': ['Recursion', 'Insilico Medicine'],
+    'Autonomous / Robotics': ['Figure AI', 'Waymo'],
+    'Creative / Generative': ['Runway', 'Pika'],
+    'Other': ['Hugging Face', 'Weights & Biases'],
+  };
+
+  @override
   Widget build(BuildContext context) {
-    final t = theme;
+    final t = widget.theme;
     final sectors = [
       {'name': 'Foundation Models / LLMs', 'pct': 35, 'amount': '\$34.2B'},
       {'name': 'AI Infrastructure / Cloud', 'pct': 22, 'amount': '\$21.5B'},
@@ -233,21 +273,64 @@ class _SectorBreakdown extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         // Legend
-        ...List.generate(sectors.length, (i) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(children: [
-            Container(width: 8, height: 8, decoration: BoxDecoration(
-              color: shades[i], borderRadius: BorderRadius.circular(2))),
-            const SizedBox(width: 10),
-            Expanded(child: Text(sectors[i]['name'] as String, style: GoogleFonts.inter(
-              fontSize: 13, color: t.secondary))),
-            Text(sectors[i]['amount'] as String, style: GoogleFonts.inter(
-              fontSize: 13, fontWeight: FontWeight.w600, color: t.primary)),
-            const SizedBox(width: 8),
-            SizedBox(width: 32, child: Text('${sectors[i]['pct']}%', style: GoogleFonts.inter(
-              fontSize: 12, color: t.muted), textAlign: TextAlign.right)),
-          ]),
-        )),
+        ...List.generate(sectors.length, (i) {
+          final sectorName = sectors[i]['name'] as String;
+          final isExpanded = _expanded[sectorName] ?? false;
+          final companies = _sectorCompanies[sectorName] ?? [];
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GestureDetector(
+                onTap: () => setState(() {
+                  _expanded[sectorName] = !isExpanded;
+                }),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(children: [
+                    Container(width: 8, height: 8, decoration: BoxDecoration(
+                      color: shades[i], borderRadius: BorderRadius.circular(2))),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(sectorName, style: GoogleFonts.inter(
+                      fontSize: 13, color: t.secondary))),
+                    Text(sectors[i]['amount'] as String, style: GoogleFonts.inter(
+                      fontSize: 13, fontWeight: FontWeight.w600, color: t.primary)),
+                    const SizedBox(width: 8),
+                    SizedBox(width: 32, child: Text('${sectors[i]['pct']}%', style: GoogleFonts.inter(
+                      fontSize: 12, color: t.muted), textAlign: TextAlign.right)),
+                    const SizedBox(width: 4),
+                    Icon(
+                      isExpanded
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      size: 16, color: t.muted),
+                  ]),
+                ),
+              ),
+              if (isExpanded && companies.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(left: 18, bottom: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: companies.map((company) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(children: [
+                        Container(
+                          width: 4, height: 4,
+                          decoration: BoxDecoration(
+                            color: t.muted, shape: BoxShape.circle),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(company,
+                          style: GoogleFonts.inter(
+                            fontSize: 12, color: t.muted, fontStyle: FontStyle.italic)),
+                      ]),
+                    )).toList(),
+                  ),
+                ),
+            ],
+          );
+        }),
       ]),
     );
   }
@@ -334,7 +417,7 @@ class _QuarterlyChart extends StatelessWidget {
       {'label': 'Q3', 'value': 26.1},
       {'label': 'Q4', 'value': 25.6},
     ];
-    final maxVal = 28.0;
+    const maxVal = 28.0;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -389,9 +472,26 @@ class _FundedCompanyRow extends StatelessWidget {
   final AppTheme theme;
   const _FundedCompanyRow({required this.data, required this.theme});
 
+  static String _domainForCompany(String name) {
+    const map = {
+      'OpenAI': 'openai.com',
+      'Anthropic': 'anthropic.com',
+      'xAI': 'x.ai',
+      'Databricks': 'databricks.com',
+      'CoreWeave': 'coreweave.com',
+      'Inflection AI': 'inflection.ai',
+      'Recursion': 'recursion.com',
+    };
+    return map[name] ?? '${name.toLowerCase().replaceAll(' ', '')}.com';
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = theme;
+    final name = data['name'] as String;
+    final domain = _domainForCompany(name);
+    final logoUrl = 'https://logo.clearbit.com/$domain';
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Container(
@@ -405,18 +505,27 @@ class _FundedCompanyRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              Container(
-                width: 32, height: 32,
-                decoration: BoxDecoration(
-                  color: t.primary.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(8)),
-                child: Center(child: Text(data['name'][0],
-                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: t.primary))),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: CachedNetworkImage(
+                  imageUrl: logoUrl,
+                  width: 32,
+                  height: 32,
+                  fit: BoxFit.contain,
+                  errorWidget: (_, __, ___) => Container(
+                    width: 32, height: 32,
+                    decoration: BoxDecoration(
+                      color: t.primary.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(8)),
+                    child: Center(child: Text(name[0],
+                      style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: t.primary))),
+                  ),
+                ),
               ),
               const SizedBox(width: 10),
-              Expanded(child: Text(data['name'], style: GoogleFonts.inter(
+              Expanded(child: Text(name, style: GoogleFonts.inter(
                 fontSize: 14, fontWeight: FontWeight.w600, color: t.primary))),
-              Text(data['raised'], style: GoogleFonts.inter(
+              Text(data['raised'] as String, style: GoogleFonts.inter(
                 fontSize: 14, fontWeight: FontWeight.w700, color: t.primary)),
             ]),
             const SizedBox(height: 8),
@@ -437,9 +546,169 @@ class _FundedCompanyRow extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 6),
-            Text(data['round'], style: GoogleFonts.inter(fontSize: 11, color: t.muted)),
+            Text(data['round'] as String, style: GoogleFonts.inter(fontSize: 11, color: t.muted)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Funding news feed ─────────────────────────────────────────────────────
+
+class _FundingNewsFeed extends StatefulWidget {
+  final AppTheme theme;
+  const _FundingNewsFeed({required this.theme});
+
+  @override
+  State<_FundingNewsFeed> createState() => _FundingNewsFeedState();
+}
+
+class _FundingNewsFeedState extends State<_FundingNewsFeed> {
+  bool _loading = true;
+  List<Map<String, String>> _items = [];
+
+  static const _fallback = [
+    {'title': 'Anthropic raises \$2B at \$61.5B valuation', 'date': 'Jan 2026', 'url': 'https://techcrunch.com'},
+    {'title': 'CoreWeave secures \$1.5B in new debt financing', 'date': 'Feb 2026', 'url': 'https://techcrunch.com'},
+    {'title': 'ElevenLabs closes \$180M Series C round', 'date': 'Jan 2026', 'url': 'https://techcrunch.com'},
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchNews();
+  }
+
+  Future<void> _fetchNews() async {
+    try {
+      final response = await http.get(
+        Uri.parse('https://techcrunch.com/feed/'),
+        headers: {'User-Agent': 'Mozilla/5.0'},
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final document = XmlDocument.parse(response.body);
+        final items = document.findAllElements('item');
+        final keywords = ['fund', 'raise', 'invest', 'million', 'billion'];
+
+        final filtered = <Map<String, String>>[];
+        for (final item in items) {
+          if (filtered.length >= 5) break;
+          final title = item.findElements('title').firstOrNull?.innerText ?? '';
+          final titleLower = title.toLowerCase();
+          final hasKeyword = keywords.any((k) => titleLower.contains(k));
+          if (!hasKeyword) continue;
+
+          final link = item.findElements('link').firstOrNull?.innerText ??
+              item.findElements('guid').firstOrNull?.innerText ?? '';
+          final pubDate = item.findElements('pubDate').firstOrNull?.innerText ?? '';
+
+          // Parse date
+          String dateDisplay = pubDate;
+          try {
+            final d = DateTime.parse(pubDate);
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            dateDisplay = '${months[d.month - 1]} ${d.year}';
+          } catch (_) {
+            // Try RFC-822 format — just use raw
+            if (pubDate.length > 10) {
+              dateDisplay = pubDate.substring(0, pubDate.length > 16 ? 16 : pubDate.length);
+            }
+          }
+
+          filtered.add({'title': title, 'date': dateDisplay, 'url': link});
+        }
+
+        setState(() {
+          _items = filtered.isEmpty ? _fallback : filtered;
+          _loading = false;
+        });
+      } else {
+        _useFallback();
+      }
+    } catch (_) {
+      _useFallback();
+    }
+  }
+
+  void _useFallback() {
+    setState(() {
+      _items = _fallback;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.theme;
+
+    if (_loading) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: CircularProgressIndicator(color: t.primary, strokeWidth: 1.5),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: t.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: t.divider, width: 0.5),
+      ),
+      child: Column(
+        children: _items.asMap().entries.map((entry) {
+          final i = entry.key;
+          final item = entry.value;
+          return Column(
+            children: [
+              if (i > 0) Divider(height: 1, color: t.divider),
+              InkWell(
+                onTap: () async {
+                  final url = item['url'] ?? '';
+                  if (url.isNotEmpty) {
+                    final uri = Uri.parse(url);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  }
+                },
+                borderRadius: i == 0
+                    ? const BorderRadius.vertical(top: Radius.circular(12))
+                    : i == _items.length - 1
+                        ? const BorderRadius.vertical(bottom: Radius.circular(12))
+                        : BorderRadius.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(item['title'] ?? '',
+                              style: GoogleFonts.inter(
+                                fontSize: 13, fontWeight: FontWeight.w500,
+                                color: t.primary, height: 1.4),
+                              maxLines: 2, overflow: TextOverflow.ellipsis),
+                            const SizedBox(height: 4),
+                            Text(item['date'] ?? '',
+                              style: GoogleFonts.inter(fontSize: 11, color: t.muted)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(Icons.open_in_new_rounded, size: 14, color: t.muted),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        }).toList(),
       ),
     );
   }

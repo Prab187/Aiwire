@@ -15,10 +15,13 @@ class CertificationScreen extends StatefulWidget {
 
 class _CertificationScreenState extends State<CertificationScreen>
     with SingleTickerProviderStateMixin {
+  List<Certification> _allCerts = [];
   List<Certification> _certs = [];
   bool _loading = true;
   String _levelFilter = 'All';
   String _providerFilter = 'All';
+  String _searchQuery = '';
+  final _searchCtrl = TextEditingController();
   late TabController _tabCtrl;
 
   AppTheme get t => widget.theme;
@@ -33,6 +36,7 @@ class _CertificationScreenState extends State<CertificationScreen>
   @override
   void dispose() {
     _tabCtrl.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -40,7 +44,21 @@ class _CertificationScreenState extends State<CertificationScreen>
     setState(() => _loading = true);
     final certs = await CertificationService.fetchCertifications(
       level: _levelFilter, providerType: _providerFilter);
-    setState(() { _certs = certs; _loading = false; });
+    _allCerts = certs;
+    _applySearch();
+    setState(() => _loading = false);
+  }
+
+  void _applySearch() {
+    if (_searchQuery.isEmpty) {
+      _certs = List.from(_allCerts);
+    } else {
+      final q = _searchQuery.toLowerCase();
+      _certs = _allCerts.where((c) =>
+        c.name.toLowerCase().contains(q) ||
+        c.provider.toLowerCase().contains(q)
+      ).toList();
+    }
   }
 
   @override
@@ -92,8 +110,43 @@ class _CertificationScreenState extends State<CertificationScreen>
   Widget _buildBrowseTab() {
     return Column(
       children: [
+        // Search bar
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: TextField(
+            controller: _searchCtrl,
+            style: GoogleFonts.inter(color: t.primary, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'Search certifications, providers...',
+              hintStyle: GoogleFonts.inter(color: t.muted, fontSize: 14),
+              prefixIcon: Icon(Icons.search_rounded, color: t.muted, size: 20),
+              filled: true,
+              fillColor: t.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: t.divider),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: t.divider),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: t.primary),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+            onChanged: (v) {
+              setState(() {
+                _searchQuery = v;
+                _applySearch();
+              });
+            },
+          ),
+        ),
+        // Level filter chips
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
           child: SizedBox(
             height: 36,
             child: ListView(
@@ -180,9 +233,36 @@ class _CertCard extends StatelessWidget {
     }
   }
 
+  String? _timeCommitmentHelper() {
+    final duration = cert.duration;
+    if (duration == null) return null;
+
+    // Try to match "N weeks"
+    final weeksMatch = RegExp(r'(\d+)\s*week', caseSensitive: false).firstMatch(duration);
+    if (weeksMatch != null) {
+      final weeks = int.tryParse(weeksMatch.group(1) ?? '');
+      if (weeks != null) return 'At 5 hrs/week → ~$weeks weeks';
+    }
+
+    // Try to match "N hours"
+    final hoursMatch = RegExp(r'(\d+)\s*hour', caseSensitive: false).firstMatch(duration);
+    if (hoursMatch != null) {
+      final hours = int.tryParse(hoursMatch.group(1) ?? '');
+      if (hours != null) {
+        final weeks = (hours / 5.0).ceil();
+        return 'At 5 hrs/week → ~$weeks weeks';
+      }
+    }
+
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = theme;
+    final timeHelper = _timeCommitmentHelper();
+    final isPopular = cert.enrolledCount != null && cert.enrolledCount! >= 100000;
+
     return GestureDetector(
       onTap: _openSource,
       child: Container(
@@ -219,7 +299,18 @@ class _CertCard extends StatelessWidget {
                               fontSize: 15, fontWeight: FontWeight.w600, color: t.primary),
                               maxLines: 2, overflow: TextOverflow.ellipsis),
                           ),
-                          if (cert.isNew) ...[
+                          if (isPopular) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: t.primary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text('Popular', style: GoogleFonts.inter(
+                                fontSize: 10, fontWeight: FontWeight.w600, color: t.primary)),
+                            ),
+                          ] else if (cert.isNew) ...[
                             const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -286,6 +377,12 @@ class _CertCard extends StatelessWidget {
                     color: t.primary)),
               ],
             ),
+            // Time commitment helper
+            if (timeHelper != null) ...[
+              const SizedBox(height: 6),
+              Text(timeHelper,
+                style: GoogleFonts.inter(fontSize: 11, color: t.muted, fontStyle: FontStyle.italic)),
+            ],
             if (cert.enrolledCount != null) ...[
               const SizedBox(height: 8),
               Text('${_formatNumber(cert.enrolledCount!)} enrolled',
@@ -343,21 +440,25 @@ class _ExperienceGuideTab extends StatelessWidget {
           name: 'Google AI Essentials',
           provider: 'Google',
           why: 'Covers core AI concepts and Google tools. No coding required — ideal first step.',
+          url: 'https://grow.google/intl/en_us/courses-and-tools/',
         ),
         _CertEntry(
           name: 'AWS Cloud Practitioner',
           provider: 'Amazon Web Services',
           why: 'Industry-standard cloud foundation. Pairs well with any AI/ML path.',
+          url: 'https://aws.amazon.com/certification/certified-cloud-practitioner/',
         ),
         _CertEntry(
           name: 'IBM AI Foundations for Everyone',
           provider: 'IBM / Coursera',
           why: 'Accessible, non-technical introduction to AI concepts and use cases.',
+          url: 'https://www.coursera.org/learn/ai-foundations-everyone',
         ),
         _CertEntry(
           name: 'Microsoft Azure AI Fundamentals (AI-900)',
           provider: 'Microsoft',
           why: 'Entry-level Azure AI cert. Good for those targeting Microsoft-stack roles.',
+          url: 'https://learn.microsoft.com/en-us/credentials/certifications/azure-ai-fundamentals/',
         ),
       ],
       avoid: 'Avoid advanced certs (AWS ML Specialty, GCP Professional ML Engineer) — they require production experience to pass and to apply effectively.',
@@ -372,21 +473,25 @@ class _ExperienceGuideTab extends StatelessWidget {
           name: 'TensorFlow Developer Certificate',
           provider: 'Google',
           why: 'Demonstrates practical model-building skills. Highly recognised by ML teams.',
+          url: 'https://www.tensorflow.org/certificate',
         ),
         _CertEntry(
           name: 'AWS Certified Machine Learning – Specialty',
           provider: 'Amazon Web Services',
           why: 'Validates end-to-end ML on AWS. Strong signal for cloud-first ML roles.',
+          url: 'https://aws.amazon.com/certification/certified-machine-learning-specialty/',
         ),
         _CertEntry(
           name: 'Deep Learning Specialization',
           provider: 'DeepLearning.AI / Coursera',
           why: 'Andrew Ng\'s flagship series. Builds genuine neural network understanding.',
+          url: 'https://www.coursera.org/specializations/deep-learning',
         ),
         _CertEntry(
           name: 'IBM Data Science Professional Certificate',
           provider: 'IBM / Coursera',
           why: 'Structured path covering Python, SQL, ML, and data viz in one bundle.',
+          url: 'https://www.coursera.org/professional-certificates/ibm-data-science',
         ),
       ],
       avoid: null,
@@ -401,21 +506,25 @@ class _ExperienceGuideTab extends StatelessWidget {
           name: 'GCP Professional ML Engineer',
           provider: 'Google Cloud',
           why: 'Rigorous, scenario-based exam. Strong signal for senior ML engineering roles at Google-stack companies.',
+          url: 'https://cloud.google.com/learn/certification/machine-learning-engineer',
         ),
         _CertEntry(
           name: 'Azure AI Engineer Associate (AI-102)',
           provider: 'Microsoft',
           why: 'Covers real AI solution architecture on Azure. Valued in enterprise environments.',
+          url: 'https://learn.microsoft.com/en-us/credentials/certifications/azure-ai-engineer/',
         ),
         _CertEntry(
           name: 'MLOps Specialization',
           provider: 'DeepLearning.AI / Coursera',
           why: 'Addresses the production ML gap — deployment, monitoring, and pipelines.',
+          url: 'https://www.coursera.org/specializations/machine-learning-engineering-for-production-mlops',
         ),
         _CertEntry(
           name: 'Databricks Certified Associate Developer for Apache Spark',
           provider: 'Databricks',
           why: 'Key credential for data engineering and large-scale ML pipelines.',
+          url: 'https://www.databricks.com/learn/certification/apache-spark-developer-associate',
         ),
       ],
       avoid: 'Entry-level certs (AI Essentials, AI-900) add little value on a mid-level CV — they may signal a gap rather than growth.',
@@ -430,21 +539,25 @@ class _ExperienceGuideTab extends StatelessWidget {
           name: 'AWS Certified Solutions Architect – Professional',
           provider: 'Amazon Web Services',
           why: 'Signals architectural leadership across large-scale AI infrastructure.',
+          url: 'https://aws.amazon.com/certification/certified-solutions-architect-professional/',
         ),
         _CertEntry(
           name: 'GCP Professional Data Engineer',
           provider: 'Google Cloud',
           why: 'Validates enterprise-scale data pipeline and ML system design.',
+          url: 'https://cloud.google.com/learn/certification/data-engineer',
         ),
         _CertEntry(
           name: 'NVIDIA DLI – Advanced AI Certifications',
           provider: 'NVIDIA',
           why: 'Cutting-edge GPU and inference expertise. Differentiates in LLM and generative AI roles.',
+          url: 'https://www.nvidia.com/en-us/training/',
         ),
         _CertEntry(
           name: 'Certified AI Professional (CAIP)',
           provider: 'Arcitura / Independent Bodies',
           why: 'Vendor-neutral professional credential. Relevant for consulting and advisory roles.',
+          url: 'https://www.arcitura.com/certifications/certified-ai-professional/',
         ),
       ],
       avoid: 'Foundation-level certs provide no return at this stage. Focus on thought leadership, open-source contributions, and speaking engagements alongside any formal credentials.',
@@ -474,7 +587,8 @@ class _ExpTier {
 
 class _CertEntry {
   final String name, provider, why;
-  const _CertEntry({required this.name, required this.provider, required this.why});
+  final String? url;
+  const _CertEntry({required this.name, required this.provider, required this.why, this.url});
 }
 
 class _ExpTierCard extends StatefulWidget {
@@ -563,7 +677,9 @@ class _ExpTierCardState extends State<_ExpTierCard> {
                     style: GoogleFonts.inter(
                       fontSize: 13, fontWeight: FontWeight.w700, color: onSurface)),
                   const SizedBox(height: 10),
-                  ...widget.tier.certifications.map((c) => _CertRow(entry: c, primary: primary, onSurface: onSurface, onSurfaceVariant: onSurfaceVariant, outlineVariant: outlineVariant)),
+                  ...widget.tier.certifications.map((c) => _CertRow(
+                    entry: c, primary: primary, onSurface: onSurface,
+                    onSurfaceVariant: onSurfaceVariant, outlineVariant: outlineVariant)),
                   if (widget.tier.avoid != null) ...[
                     const SizedBox(height: 14),
                     Container(
@@ -606,31 +722,45 @@ class _CertRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            margin: const EdgeInsets.only(top: 4),
-            width: 6, height: 6,
-            decoration: BoxDecoration(color: primary, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(entry.name,
-                  style: GoogleFonts.inter(
-                    fontSize: 13, fontWeight: FontWeight.w600, color: onSurface)),
-                Text(entry.provider,
-                  style: GoogleFonts.inter(fontSize: 11, color: onSurfaceVariant)),
-                const SizedBox(height: 2),
-                Text(entry.why,
-                  style: GoogleFonts.inter(fontSize: 12, color: onSurfaceVariant, height: 1.4)),
-              ],
+      child: GestureDetector(
+        onTap: entry.url != null
+            ? () async {
+                final uri = Uri.parse(entry.url!);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              }
+            : null,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 4),
+              width: 6, height: 6,
+              decoration: BoxDecoration(color: primary, shape: BoxShape.circle),
             ),
-          ),
-        ],
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(entry.name,
+                    style: GoogleFonts.inter(
+                      fontSize: 13, fontWeight: FontWeight.w600, color: onSurface)),
+                  Text(entry.provider,
+                    style: GoogleFonts.inter(fontSize: 11, color: onSurfaceVariant)),
+                  const SizedBox(height: 2),
+                  Text(entry.why,
+                    style: GoogleFonts.inter(fontSize: 12, color: onSurfaceVariant, height: 1.4)),
+                ],
+              ),
+            ),
+            if (entry.url != null) ...[
+              const SizedBox(width: 8),
+              Icon(Icons.open_in_new_rounded, size: 14, color: primary),
+            ],
+          ],
+        ),
       ),
     );
   }
