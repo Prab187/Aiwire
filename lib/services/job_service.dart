@@ -346,6 +346,54 @@ class JobService {
     }
   }
 
+  // ── Country alias map — all terms that refer to the same country ──────────
+  static const Map<String, List<String>> _countryAliases = {
+    'gb': ['united kingdom', 'uk', 'england', 'scotland', 'wales', 'britain',
+           'great britain', 'london', 'manchester', 'birmingham', 'edinburgh'],
+    'us': ['united states', 'usa', 'u.s.', 'america', 'new york', 'san francisco',
+           'seattle', 'boston', 'chicago', 'austin', 'los angeles'],
+    'au': ['australia', 'sydney', 'melbourne', 'brisbane', 'perth'],
+    'ca': ['canada', 'toronto', 'vancouver', 'montreal', 'calgary'],
+    'de': ['germany', 'berlin', 'munich', 'hamburg', 'frankfurt'],
+    'fr': ['france', 'paris', 'lyon', 'marseille'],
+    'in': ['india', 'bangalore', 'bengaluru', 'mumbai', 'delhi', 'new delhi',
+           'hyderabad', 'pune', 'chennai', 'kolkata', 'noida', 'gurgaon',
+           'gurugram', 'ghaziabad', 'ahmedabad', 'chandigarh', 'coimbatore',
+           'navi mumbai', 'jaipur', 'karnataka', 'maharashtra', 'telangana',
+           'tamil nadu', 'rajasthan', 'uttar pradesh'],
+    'nl': ['netherlands', 'amsterdam', 'rotterdam'],
+    'sg': ['singapore'],
+  };
+
+  static bool _jobMatchesCountry(Job job, String countryCode, String city, String country) {
+    final loc = job.location.toLowerCase();
+    final cityLower = city.toLowerCase();
+    final countryLower = country.toLowerCase();
+
+    // Always accept pure remote / worldwide
+    if (job.type == 'Remote' &&
+        (loc.contains('worldwide') || loc.contains('anywhere') ||
+         loc.contains('global') || loc == 'remote' || loc.isEmpty)) {
+      return true;
+    }
+
+    // Accept if location explicitly mentions user's city or country name
+    if (loc.contains(cityLower) || loc.contains(countryLower)) return true;
+
+    // Accept via alias map for user's country
+    final aliases = _countryAliases[countryCode] ?? [];
+    if (aliases.any((a) => loc.contains(a))) return true;
+
+    // Reject: check if location matches a DIFFERENT country's aliases
+    for (final entry in _countryAliases.entries) {
+      if (entry.key == countryCode) continue;
+      if (entry.value.any((a) => loc.contains(a))) return false;
+    }
+
+    // Location is ambiguous (e.g. just "Remote") — keep it
+    return true;
+  }
+
   // ── Location-aware job search ─────────────────────────────────────────────
   static Future<List<Job>> fetchNearbyJobs({
     required String city,
@@ -354,14 +402,11 @@ class JobService {
     int radiusKm = 50,
     bool includeRemote = true,
   }) async {
-    final cityQuery = Uri.encodeComponent('$city artificial intelligence machine learning');
-    final locationQuery = Uri.encodeComponent('artificial intelligence machine learning');
-
     final futures = <Future<List<Job>>>[
-      // Adzuna: location-aware (city + country)
+      // Adzuna: scoped to the user's country
       _fetchAdzunaJobs(query: 'artificial intelligence machine learning', country: countryCode)
           .catchError((_) => <Job>[]),
-      // Reed: UK location search
+      // Reed: UK-specific board
       _fetchReedJobs(query: 'artificial intelligence machine learning')
           .catchError((_) => <Job>[]),
     ];
@@ -380,19 +425,29 @@ class JobService {
     final seen = <String>{};
     jobs = jobs.where((j) => seen.add('${j.title}|${j.company}')).toList();
 
-    if (jobs.isEmpty) jobs = List.from(_fallbackJobs);
+    // ── LOCATION FILTER: only keep jobs in the user's country or truly remote ──
+    jobs = jobs.where((j) => _jobMatchesCountry(j, countryCode, city, country)).toList();
 
-    // Sort: local jobs first (those whose location mentions the city or country),
-    // then featured, then by date
+    if (jobs.isEmpty) {
+      // Fallback: show remote-only jobs rather than US fallback data
+      jobs = _fallbackJobs
+          .where((j) => j.type == 'Remote' || _jobMatchesCountry(j, countryCode, city, country))
+          .toList();
+    }
+
+    // Sort: local city matches first, then country matches, then remote
     final cityLower = city.toLowerCase();
     final countryLower = country.toLowerCase();
     jobs.sort((a, b) {
-      final aLocal = a.location.toLowerCase().contains(cityLower) ||
-          a.location.toLowerCase().contains(countryLower);
-      final bLocal = b.location.toLowerCase().contains(cityLower) ||
-          b.location.toLowerCase().contains(countryLower);
-      if (aLocal && !bLocal) return -1;
-      if (!aLocal && bLocal) return 1;
+      int score(Job j) {
+        final loc = j.location.toLowerCase();
+        if (loc.contains(cityLower)) return 3;
+        if (loc.contains(countryLower)) return 2;
+        if (j.type == 'Remote') return 1;
+        return 0;
+      }
+      final diff = score(b) - score(a);
+      if (diff != 0) return diff;
       if (a.featured && !b.featured) return -1;
       if (!a.featured && b.featured) return 1;
       return b.postedAt.compareTo(a.postedAt);
