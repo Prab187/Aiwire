@@ -14,10 +14,14 @@ class EventsHubScreen extends StatefulWidget {
 }
 
 class _EventsHubScreenState extends State<EventsHubScreen> {
-  List<AIEvent> _events = [];
+  List<AIEvent> _allEvents = [];
+  List<AIEvent> _filteredEvents = [];
   bool _loading = true;
   String _typeFilter = 'All';
   String _formatFilter = 'All';
+  String _dateFilter = 'All Dates';
+  String _searchQuery = '';
+  final _searchCtrl = TextEditingController();
 
   AppTheme get t => widget.theme;
 
@@ -27,11 +31,58 @@ class _EventsHubScreenState extends State<EventsHubScreen> {
     _loadEvents();
   }
 
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadEvents() async {
     setState(() => _loading = true);
     final events = await EventsService.fetchEvents(
       type: _typeFilter, format: _formatFilter);
-    setState(() { _events = events; _loading = false; });
+    _allEvents = events;
+    _applyFilters();
+    setState(() => _loading = false);
+  }
+
+  void _applyFilters() {
+    final now = DateTime.now();
+    var list = _allEvents.where((event) {
+      // Type filter
+      if (_typeFilter != 'All' && event.type != _typeFilter) return false;
+      // Format filter
+      if (_formatFilter != 'All' && event.format != _formatFilter) return false;
+      // Search filter
+      if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery.toLowerCase();
+        final haystack = '${event.title} ${event.organizer} ${event.description}'.toLowerCase();
+        if (!haystack.contains(q)) return false;
+      }
+      return true;
+    }).toList();
+
+    // Date filter — exclude past events unless unparseable
+    list = list.where((event) {
+      DateTime? eventDate;
+      try {
+        eventDate = DateTime.parse(event.date);
+      } catch (_) {
+        return true; // keep if unparseable
+      }
+      if (eventDate.isBefore(DateTime(now.year, now.month, now.day))) {
+        return false; // exclude past events
+      }
+      if (_dateFilter == 'This Week') {
+        return eventDate.difference(now).inDays <= 7;
+      }
+      if (_dateFilter == 'This Month') {
+        return eventDate.difference(now).inDays <= 30;
+      }
+      return true;
+    }).toList();
+
+    _filteredEvents = list;
   }
 
   @override
@@ -55,29 +106,65 @@ class _EventsHubScreenState extends State<EventsHubScreen> {
       ),
       body: Column(
         children: [
+          // Search bar
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: TextField(
+              controller: _searchCtrl,
+              style: GoogleFonts.inter(color: t.primary, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Search events, organizers...',
+                hintStyle: GoogleFonts.inter(color: t.muted, fontSize: 14),
+                prefixIcon: Icon(Icons.search_rounded, color: t.muted, size: 20),
+                filled: true,
+                fillColor: t.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: t.divider),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: t.divider),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: t.primary),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+              onChanged: (v) {
+                setState(() {
+                  _searchQuery = v;
+                  _applyFilters();
+                });
+              },
+            ),
+          ),
+          // Type filter chips
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: SizedBox(
               height: 36,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: [
                   _buildChip('All', _typeFilter == 'All', () {
-                    setState(() => _typeFilter = 'All'); _loadEvents(); }),
+                    setState(() { _typeFilter = 'All'; _applyFilters(); }); _loadEvents(); }),
                   _buildChip('Conference', _typeFilter == 'Conference', () {
-                    setState(() => _typeFilter = 'Conference'); _loadEvents(); }),
+                    setState(() { _typeFilter = 'Conference'; _applyFilters(); }); _loadEvents(); }),
                   _buildChip('Webinar', _typeFilter == 'Webinar', () {
-                    setState(() => _typeFilter = 'Webinar'); _loadEvents(); }),
+                    setState(() { _typeFilter = 'Webinar'; _applyFilters(); }); _loadEvents(); }),
                   _buildChip('Workshop', _typeFilter == 'Workshop', () {
-                    setState(() => _typeFilter = 'Workshop'); _loadEvents(); }),
+                    setState(() { _typeFilter = 'Workshop'; _applyFilters(); }); _loadEvents(); }),
                   _buildChip('Seminar', _typeFilter == 'Seminar', () {
-                    setState(() => _typeFilter = 'Seminar'); _loadEvents(); }),
+                    setState(() { _typeFilter = 'Seminar'; _applyFilters(); }); _loadEvents(); }),
                   _buildChip('Meetup', _typeFilter == 'Meetup', () {
-                    setState(() => _typeFilter = 'Meetup'); _loadEvents(); }),
+                    setState(() { _typeFilter = 'Meetup'; _applyFilters(); }); _loadEvents(); }),
                 ],
               ),
             ),
           ),
+          // Format filter chips
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: SizedBox(
@@ -86,13 +173,31 @@ class _EventsHubScreenState extends State<EventsHubScreen> {
                 scrollDirection: Axis.horizontal,
                 children: [
                   _buildChip('All Formats', _formatFilter == 'All', () {
-                    setState(() => _formatFilter = 'All'); _loadEvents(); }),
+                    setState(() { _formatFilter = 'All'; _applyFilters(); }); _loadEvents(); }),
                   _buildChip('Virtual', _formatFilter == 'Virtual', () {
-                    setState(() => _formatFilter = 'Virtual'); _loadEvents(); }),
+                    setState(() { _formatFilter = 'Virtual'; _applyFilters(); }); _loadEvents(); }),
                   _buildChip('In-Person', _formatFilter == 'In-Person', () {
-                    setState(() => _formatFilter = 'In-Person'); _loadEvents(); }),
+                    setState(() { _formatFilter = 'In-Person'; _applyFilters(); }); _loadEvents(); }),
                   _buildChip('Hybrid', _formatFilter == 'Hybrid', () {
-                    setState(() => _formatFilter = 'Hybrid'); _loadEvents(); }),
+                    setState(() { _formatFilter = 'Hybrid'; _applyFilters(); }); _loadEvents(); }),
+                ],
+              ),
+            ),
+          ),
+          // Date filter chips
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: SizedBox(
+              height: 36,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  _buildChip('All Dates', _dateFilter == 'All Dates', () {
+                    setState(() { _dateFilter = 'All Dates'; _applyFilters(); }); }),
+                  _buildChip('This Week', _dateFilter == 'This Week', () {
+                    setState(() { _dateFilter = 'This Week'; _applyFilters(); }); }),
+                  _buildChip('This Month', _dateFilter == 'This Month', () {
+                    setState(() { _dateFilter = 'This Month'; _applyFilters(); }); }),
                 ],
               ),
             ),
@@ -100,7 +205,7 @@ class _EventsHubScreenState extends State<EventsHubScreen> {
           Expanded(
             child: _loading
               ? Center(child: CircularProgressIndicator(color: t.primary, strokeWidth: 1.5))
-              : _events.isEmpty
+              : _filteredEvents.isEmpty
                 ? Center(child: Text('No events found', style: GoogleFonts.inter(color: t.muted)))
                 : RefreshIndicator(
                     color: t.primary,
@@ -108,9 +213,9 @@ class _EventsHubScreenState extends State<EventsHubScreen> {
                     onRefresh: _loadEvents,
                     child: ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
-                      itemCount: _events.length,
+                      itemCount: _filteredEvents.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (_, i) => _EventCard(event: _events[i], theme: t),
+                      itemBuilder: (_, i) => _EventCard(event: _filteredEvents[i], theme: t),
                     ),
                   ),
           ),
@@ -146,9 +251,44 @@ class _EventCard extends StatelessWidget {
 
   const _EventCard({required this.event, required this.theme});
 
+  String? _countdownText() {
+    try {
+      final d = DateTime.parse(event.date);
+      final now = DateTime.now();
+      final days = d.difference(DateTime(now.year, now.month, now.day)).inDays;
+      if (days < 0) return null; // past
+      if (days > 90) return null; // too far
+      if (days == 0) return 'Today';
+      if (days == 1) return 'Tomorrow';
+      if (days < 7) return 'In $days days';
+      if (days < 30) return 'In ${(days / 7).round()} weeks';
+      return 'In ${(days / 30).round()} months';
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _googleCalendarUrl() {
+    try {
+      final d = DateTime.parse(event.date);
+      final dateStr = '${d.year.toString().padLeft(4, '0')}'
+          '${d.month.toString().padLeft(2, '0')}'
+          '${d.day.toString().padLeft(2, '0')}';
+      final title = Uri.encodeComponent(event.title);
+      final details = Uri.encodeComponent(event.description);
+      return 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+          '&text=$title'
+          '&dates=$dateStr/$dateStr'
+          '&details=$details';
+    } catch (_) {
+      return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = theme;
+    final countdown = _countdownText();
 
     String dateDisplay = event.date;
     try {
@@ -175,6 +315,7 @@ class _EventCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Date badge
                 Container(
@@ -207,8 +348,26 @@ class _EventCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Text(event.type, style: GoogleFonts.inter(
-                  fontSize: 11, fontWeight: FontWeight.w500, color: t.muted)),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(event.type, style: GoogleFonts.inter(
+                      fontSize: 11, fontWeight: FontWeight.w500, color: t.muted)),
+                    if (countdown != null) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: t.accent.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(countdown,
+                          style: GoogleFonts.inter(
+                            fontSize: 10, fontWeight: FontWeight.w600, color: t.accent)),
+                      ),
+                    ],
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -267,6 +426,7 @@ class _EventCard extends StatelessWidget {
                 ],
               ],
             ),
+            // Register + Add to Calendar row
             if (event.registrationUrl != null) ...[
               const SizedBox(height: 10),
               Row(
@@ -276,7 +436,54 @@ class _EventCard extends StatelessWidget {
                   Text('Register / Learn more',
                     style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500,
                       color: t.accent)),
+                  const Spacer(),
+                  // Add to calendar
+                  GestureDetector(
+                    onTap: () async {
+                      final url = _googleCalendarUrl();
+                      if (url.isNotEmpty) {
+                        final uri = Uri.parse(url);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      }
+                    },
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.calendar_today_rounded, size: 12, color: t.secondary),
+                        const SizedBox(width: 4),
+                        Text('Add to calendar',
+                          style: GoogleFonts.inter(
+                            fontSize: 11, fontWeight: FontWeight.w500, color: t.secondary)),
+                      ],
+                    ),
+                  ),
                 ],
+              ),
+            ] else ...[
+              // Show calendar link even without registration URL
+              const SizedBox(height: 10),
+              GestureDetector(
+                onTap: () async {
+                  final url = _googleCalendarUrl();
+                  if (url.isNotEmpty) {
+                    final uri = Uri.parse(url);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  }
+                },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.calendar_today_rounded, size: 12, color: t.secondary),
+                    const SizedBox(width: 4),
+                    Text('Add to calendar',
+                      style: GoogleFonts.inter(
+                        fontSize: 11, fontWeight: FontWeight.w500, color: t.secondary)),
+                  ],
+                ),
               ),
             ],
           ],

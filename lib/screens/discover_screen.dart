@@ -52,8 +52,8 @@ class DiscoverScreen extends StatelessWidget {
                     theme: t,
                     icon: Icons.work_outline_rounded,
                     title: 'Job Board',
-                    subtitle: 'AI/ML openings worldwide',
-                    meta: 'Global',
+                    subtitle: 'Remote, hybrid & on-site AI/ML roles',
+                    meta: 'Live',
                     onTap: () => Navigator.push(context, MaterialPageRoute(
                       builder: (_) => JobBoardScreen(theme: t))),
                   ),

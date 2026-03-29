@@ -1,5 +1,8 @@
+import 'dart:convert';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../models/resume_profile.dart';
@@ -228,6 +231,29 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
 
   Widget _buildResults() {
     final p = _profile!;
+
+    // Compute skill gaps: skills from all jobs that user doesn't have
+    final profileSkillsLower = p.skills.map((s) => s.toLowerCase()).toSet();
+    final allJobSkills = <String>[];
+    for (final job in _jobs) {
+      for (final s in job.skills) {
+        if (!profileSkillsLower.contains(s.toLowerCase())) {
+          allJobSkills.add(s);
+        }
+      }
+    }
+    // Deduplicate preserving order, take top 8
+    final seen = <String>{};
+    final skillGaps = <String>[];
+    for (final s in allJobSkills) {
+      final lower = s.toLowerCase();
+      if (!seen.contains(lower)) {
+        seen.add(lower);
+        skillGaps.add(s);
+        if (skillGaps.length >= 8) break;
+      }
+    }
+
     return ListView(
       key: const ValueKey('results'),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
@@ -295,11 +321,56 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
           Text('in ${p.country}',
             style: GoogleFonts.inter(fontSize: 14, color: t.muted)),
         ]),
+        // Skill gap section
+        if (skillGaps.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: t.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: t.divider, width: 0.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Icon(Icons.lightbulb_outline_rounded, size: 15, color: t.accent),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text('Skills appearing in these jobs you don\'t have yet',
+                      style: GoogleFonts.inter(
+                        fontSize: 13, fontWeight: FontWeight.w600, color: t.primary)),
+                  ),
+                ]),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6, runSpacing: 6,
+                  children: skillGaps.map((s) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: t.accent.withValues(alpha: 0.07),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: t.accent.withValues(alpha: 0.2)),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.add_circle_outline_rounded, size: 12, color: t.accent),
+                      const SizedBox(width: 4),
+                      Text(s,
+                        style: GoogleFonts.inter(
+                          fontSize: 11, fontWeight: FontWeight.w500, color: t.accent)),
+                    ]),
+                  )).toList(),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
         // Job cards
         ..._jobs.map((job) => Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: _ResumeJobCard(job: job, theme: t),
+          child: _ResumeJobCard(job: job, theme: t, profile: p),
         )),
       ],
     );
@@ -351,11 +422,42 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
 class _ResumeJobCard extends StatelessWidget {
   final Job job;
   final AppTheme theme;
-  const _ResumeJobCard({required this.job, required this.theme});
+  final ResumeProfile profile;
+  const _ResumeJobCard({required this.job, required this.theme, required this.profile});
+
+  int _matchScore() {
+    if (job.skills.isEmpty) return 0;
+    final profileSkillsLower = profile.skills.map((s) => s.toLowerCase()).toSet();
+    final matched = job.skills.where((s) => profileSkillsLower.contains(s.toLowerCase())).length;
+    return ((matched / job.skills.length) * 100).round();
+  }
+
+  void _showCoverLetter(BuildContext context) {
+    final t = theme;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: t.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => _CoverLetterSheet(
+        job: job,
+        profile: profile,
+        theme: t,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final t = theme;
+    final score = _matchScore();
+    final scoreColor = score >= 70
+        ? const Color(0xFF22C55E)
+        : score >= 40
+            ? const Color(0xFFF59E0B)
+            : t.muted;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -367,18 +469,8 @@ class _ResumeJobCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            Container(
-              width: 40, height: 40,
-              decoration: BoxDecoration(
-                color: t.primary.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Center(child: Text(
-                job.company.isNotEmpty ? job.company[0] : '?',
-                style: GoogleFonts.inter(
-                  fontSize: 18, fontWeight: FontWeight.w700, color: t.primary),
-              )),
-            ),
+            // Company logo or letter avatar
+            _buildLogo(t),
             const SizedBox(width: 12),
             Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -392,7 +484,23 @@ class _ResumeJobCard extends StatelessWidget {
                   style: GoogleFonts.inter(fontSize: 13, color: t.secondary)),
               ],
             )),
+            // Match score pill
             Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: scoreColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text('Match: $score%',
+                style: GoogleFonts.inter(
+                  fontSize: 11, fontWeight: FontWeight.w600, color: scoreColor)),
+            ),
+          ]),
+          const SizedBox(height: 4),
+          // Level pill
+          Align(
+            alignment: Alignment.centerRight,
+            child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: t.primary.withValues(alpha: 0.06),
@@ -402,8 +510,8 @@ class _ResumeJobCard extends StatelessWidget {
                 style: GoogleFonts.inter(
                   fontSize: 10, fontWeight: FontWeight.w600, color: t.primary)),
             ),
-          ]),
-          const SizedBox(height: 10),
+          ),
+          const SizedBox(height: 8),
           Text(job.description,
             style: GoogleFonts.inter(fontSize: 13, color: t.muted, height: 1.4),
             maxLines: 2, overflow: TextOverflow.ellipsis),
@@ -457,8 +565,209 @@ class _ResumeJobCard extends StatelessWidget {
                     color: t.primary))),
               ),
             ),
+            const SizedBox(height: 8),
+            // Draft cover letter button
+            GestureDetector(
+              onTap: () => _showCoverLetter(context),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  border: Border.all(color: t.muted.withValues(alpha: 0.4)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.edit_note_rounded, size: 15, color: t.secondary),
+                    const SizedBox(width: 6),
+                    Text('Draft Cover Letter',
+                      style: GoogleFonts.inter(
+                        fontSize: 13, fontWeight: FontWeight.w500,
+                        color: t.secondary)),
+                  ],
+                )),
+              ),
+            ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildLogo(AppTheme t) {
+    if (job.companyLogo != null && job.companyLogo!.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: CachedNetworkImage(
+          imageUrl: job.companyLogo!,
+          width: 40,
+          height: 40,
+          fit: BoxFit.cover,
+          errorWidget: (_, __, ___) => _letterAvatar(t),
+        ),
+      );
+    }
+    return _letterAvatar(t);
+  }
+
+  Widget _letterAvatar(AppTheme t) {
+    return Container(
+      width: 40, height: 40,
+      decoration: BoxDecoration(
+        color: t.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Center(child: Text(
+        job.company.isNotEmpty ? job.company[0] : '?',
+        style: GoogleFonts.inter(
+          fontSize: 18, fontWeight: FontWeight.w700, color: t.primary),
+      )),
+    );
+  }
+}
+
+// ── Cover letter bottom sheet ─────────────────────────────────────────────
+
+class _CoverLetterSheet extends StatefulWidget {
+  final Job job;
+  final ResumeProfile profile;
+  final AppTheme theme;
+  const _CoverLetterSheet({required this.job, required this.profile, required this.theme});
+
+  @override
+  State<_CoverLetterSheet> createState() => _CoverLetterSheetState();
+}
+
+class _CoverLetterSheetState extends State<_CoverLetterSheet> {
+  bool _loading = true;
+  String? _letter;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _generate();
+  }
+
+  Future<void> _generate() async {
+    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    if (apiKey.isEmpty) {
+      setState(() {
+        _loading = false;
+        _error = 'ANTHROPIC_API_KEY not configured';
+      });
+      return;
+    }
+
+    final p = widget.profile;
+    final j = widget.job;
+    final candidateName = p.name ?? p.jobTitle;
+    final prompt =
+        'Write a short (150 word) cover letter for $candidateName applying for '
+        '${j.title} at ${j.company}. Skills: ${p.skills.join(', ')}. '
+        'Keep it professional and concise.';
+
+    try {
+      final response = await http.post(
+        Uri.parse('https://api.anthropic.com/v1/messages'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: json.encode({
+          'model': 'claude-haiku-4-5',
+          'max_tokens': 600,
+          'messages': [
+            {'role': 'user', 'content': prompt},
+          ],
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode != 200) {
+        throw Exception('API error: ${response.statusCode}');
+      }
+
+      final data = json.decode(response.body);
+      final text = (data['content'][0]['text'] as String).trim();
+      setState(() {
+        _letter = text;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.theme;
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      builder: (_, ctrl) => Container(
+        decoration: BoxDecoration(
+          color: t.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Handle
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 10, bottom: 8),
+                width: 36, height: 4,
+                decoration: BoxDecoration(
+                  color: t.divider,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text('Cover Letter Draft',
+                style: GoogleFonts.sourceSerif4(
+                  fontSize: 18, fontWeight: FontWeight.w700, color: t.primary)),
+            ),
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text('${widget.job.title} at ${widget.job.company}',
+                style: GoogleFonts.inter(fontSize: 13, color: t.muted)),
+            ),
+            const SizedBox(height: 16),
+            Divider(height: 1, color: t.divider),
+            Expanded(
+              child: _loading
+                  ? Center(child: CircularProgressIndicator(color: t.primary, strokeWidth: 1.5))
+                  : _error != null
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Text(_error!,
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.inter(fontSize: 13, color: t.muted)),
+                          ),
+                        )
+                      : SingleChildScrollView(
+                          controller: ctrl,
+                          padding: const EdgeInsets.all(20),
+                          child: SelectableText(
+                            _letter ?? '',
+                            style: GoogleFonts.inter(
+                              fontSize: 14, color: t.primary, height: 1.6),
+                          ),
+                        ),
+            ),
+          ],
+        ),
       ),
     );
   }

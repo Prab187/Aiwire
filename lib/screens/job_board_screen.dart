@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -7,25 +8,72 @@ import '../services/job_service.dart';
 
 class JobBoardScreen extends StatefulWidget {
   final AppTheme theme;
-  const JobBoardScreen({super.key, required this.theme});
+  final String? initialQuery;
+  const JobBoardScreen({super.key, required this.theme, this.initialQuery});
 
   @override
   State<JobBoardScreen> createState() => _JobBoardScreenState();
 }
 
 class _JobBoardScreenState extends State<JobBoardScreen> {
-  List<Job> _jobs = [];
+  List<Job> _allJobs = [];
   bool _loading = true;
   String _typeFilter = 'All';
   String _levelFilter = 'All';
+  String _salaryFilter = 'Any';
   String _searchQuery = '';
   final _searchController = TextEditingController();
+  final Set<String> _savedJobIds = {};
+  bool _showSavedOnly = false;
 
   AppTheme get t => widget.theme;
+
+  List<Job> get _filteredJobs {
+    var jobs = _allJobs;
+
+    // Salary filter
+    if (_salaryFilter != 'Any') {
+      final threshold = _salaryThreshold(_salaryFilter);
+      if (threshold != null) {
+        jobs = jobs.where((job) {
+          final salary = job.salaryRange;
+          if (salary.toLowerCase().contains('not disclosed') || salary.isEmpty) {
+            return true;
+          }
+          final match = RegExp(r'\d+').firstMatch(salary.replaceAll(',', ''));
+          if (match == null) return true;
+          var num = int.tryParse(match.group(0) ?? '0') ?? 0;
+          if (num < 1000) num = num * 1000;
+          return num >= threshold;
+        }).toList();
+      }
+    }
+
+    // Saved filter
+    if (_showSavedOnly) {
+      jobs = jobs.where((job) => _savedJobIds.contains(job.id)).toList();
+    }
+
+    return jobs;
+  }
+
+  int? _salaryThreshold(String filter) {
+    switch (filter) {
+      case '\$50K+': return 50000;
+      case '\$100K+': return 100000;
+      case '\$150K+': return 150000;
+      case '\$200K+': return 200000;
+      default: return null;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    if (widget.initialQuery != null && widget.initialQuery!.isNotEmpty) {
+      _searchQuery = widget.initialQuery!;
+      _searchController.text = widget.initialQuery!;
+    }
     _loadJobs();
   }
 
@@ -42,11 +90,12 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
       type: _typeFilter,
       level: _levelFilter,
     );
-    setState(() { _jobs = jobs; _loading = false; });
+    setState(() { _allJobs = jobs; _loading = false; });
   }
 
   @override
   Widget build(BuildContext context) {
+    final displayJobs = _filteredJobs;
     return Scaffold(
       backgroundColor: t.background,
       appBar: AppBar(
@@ -109,7 +158,16 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
                 const SizedBox(width: 8),
                 _FilterChip(label: 'Level: $_levelFilter', theme: t, onTap: () => _showFilterSheet('level')),
                 const SizedBox(width: 8),
-                _FilterChip(label: '${_jobs.length} jobs', theme: t, active: true, onTap: () {}),
+                _FilterChip(label: 'Salary: $_salaryFilter', theme: t, onTap: () => _showFilterSheet('salary')),
+                const SizedBox(width: 8),
+                _FilterChip(
+                  label: 'Saved',
+                  theme: t,
+                  active: _showSavedOnly,
+                  onTap: () => setState(() => _showSavedOnly = !_showSavedOnly),
+                ),
+                const SizedBox(width: 8),
+                _FilterChip(label: '${displayJobs.length} jobs', theme: t, active: true, onTap: () {}),
               ],
             ),
           ),
@@ -118,7 +176,7 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
           Expanded(
             child: _loading
               ? Center(child: CircularProgressIndicator(color: t.primary, strokeWidth: 1.5))
-              : _jobs.isEmpty
+              : displayJobs.isEmpty
                 ? Center(child: Text('No jobs found', style: GoogleFonts.inter(color: t.muted)))
                 : RefreshIndicator(
                     color: t.primary,
@@ -126,9 +184,21 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
                     onRefresh: _loadJobs,
                     child: ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
-                      itemCount: _jobs.length,
+                      itemCount: displayJobs.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (_, i) => _JobCard(job: _jobs[i], theme: t),
+                      itemBuilder: (_, i) => _JobCard(
+                        job: displayJobs[i],
+                        theme: t,
+                        isSaved: _savedJobIds.contains(displayJobs[i].id),
+                        onToggleSave: (id) => setState(() {
+                          if (_savedJobIds.contains(id)) {
+                            _savedJobIds.remove(id);
+                          } else {
+                            _savedJobIds.add(id);
+                          }
+                        }),
+                        onTap: () => _showJobDetail(context, displayJobs[i]),
+                      ),
                     ),
                   ),
           ),
@@ -137,11 +207,164 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
     );
   }
 
+  void _showJobDetail(BuildContext context, Job job) {
+    final t = widget.theme;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: t.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.75,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (_, ctrl) => Column(
+          children: [
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 10, bottom: 8),
+                width: 36, height: 4,
+                decoration: BoxDecoration(
+                  color: t.divider,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: ctrl,
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      _buildLogoWidget(job, t),
+                      const SizedBox(width: 12),
+                      Expanded(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(job.title, style: GoogleFonts.sourceSerif4(
+                            fontSize: 18, fontWeight: FontWeight.w700, color: t.primary)),
+                          const SizedBox(height: 2),
+                          Text(job.company, style: GoogleFonts.inter(
+                            fontSize: 14, color: t.secondary)),
+                        ],
+                      )),
+                    ]),
+                    const SizedBox(height: 16),
+                    Row(children: [
+                      Icon(Icons.location_on_outlined, size: 14, color: t.muted),
+                      const SizedBox(width: 4),
+                      Text(job.location, style: GoogleFonts.inter(fontSize: 13, color: t.muted)),
+                      const SizedBox(width: 12),
+                      Text(job.type, style: GoogleFonts.inter(fontSize: 13, color: t.muted)),
+                      const SizedBox(width: 12),
+                      Text(job.salaryRange, style: GoogleFonts.inter(
+                        fontSize: 13, fontWeight: FontWeight.w600, color: t.primary)),
+                    ]),
+                    const SizedBox(height: 16),
+                    Text('About the role', style: GoogleFonts.inter(
+                      fontSize: 14, fontWeight: FontWeight.w600, color: t.primary)),
+                    const SizedBox(height: 8),
+                    Text(job.description, style: GoogleFonts.inter(
+                      fontSize: 13, color: t.muted, height: 1.5)),
+                    const SizedBox(height: 16),
+                    Text('Skills required', style: GoogleFonts.inter(
+                      fontSize: 14, fontWeight: FontWeight.w600, color: t.primary)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6, runSpacing: 6,
+                      children: job.skills.map((s) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: t.background,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(s, style: GoogleFonts.inter(
+                          fontSize: 12, color: t.secondary, fontWeight: FontWeight.w500)),
+                      )).toList(),
+                    ),
+                    const SizedBox(height: 20),
+                    if (job.applyUrl.isNotEmpty)
+                      GestureDetector(
+                        onTap: () async {
+                          final uri = Uri.parse(job.applyUrl);
+                          if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: t.primary,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Center(child: Text('Apply Now', style: GoogleFonts.inter(
+                            fontSize: 14, fontWeight: FontWeight.w600, color: t.background))),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogoWidget(Job job, AppTheme t) {
+    if (job.companyLogo != null && job.companyLogo!.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: CachedNetworkImage(
+          imageUrl: job.companyLogo!,
+          width: 44,
+          height: 44,
+          fit: BoxFit.cover,
+          errorWidget: (_, __, ___) => _letterAvatarWidget(job, t, size: 44),
+        ),
+      );
+    }
+    return _letterAvatarWidget(job, t, size: 44);
+  }
+
+  Widget _letterAvatarWidget(Job job, AppTheme t, {double size = 40}) {
+    return Container(
+      width: size, height: size,
+      decoration: BoxDecoration(
+        color: t.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Center(child: Text(
+        job.company.isNotEmpty ? job.company[0] : '?',
+        style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w700, color: t.primary),
+      )),
+    );
+  }
+
   void _showFilterSheet(String filterType) {
-    final options = filterType == 'type'
-      ? ['All', 'Remote', 'Hybrid', 'On-site']
-      : ['All', 'Junior', 'Mid', 'Senior', 'Lead', 'Principal'];
-    final current = filterType == 'type' ? _typeFilter : _levelFilter;
+    List<String> options;
+    String current;
+    String title;
+
+    switch (filterType) {
+      case 'type':
+        options = ['All', 'Remote', 'Hybrid', 'On-site'];
+        current = _typeFilter;
+        title = 'Work Type';
+      case 'level':
+        options = ['All', 'Junior', 'Mid', 'Senior', 'Lead', 'Principal'];
+        current = _levelFilter;
+        title = 'Experience Level';
+      case 'salary':
+        options = ['Any', '\$50K+', '\$100K+', '\$150K+', '\$200K+'];
+        current = _salaryFilter;
+        title = 'Minimum Salary';
+      default:
+        return;
+    }
 
     showModalBottomSheet(
       context: context,
@@ -154,7 +377,7 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(filterType == 'type' ? 'Work Type' : 'Experience Level',
+            Text(title,
               style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: t.primary)),
             const SizedBox(height: 16),
             ...options.map((o) => ListTile(
@@ -163,10 +386,13 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
               onTap: () {
                 Navigator.pop(context);
                 setState(() {
-                  if (filterType == 'type') _typeFilter = o;
-                  else _levelFilter = o;
+                  switch (filterType) {
+                    case 'type': _typeFilter = o;
+                    case 'level': _levelFilter = o;
+                    case 'salary': _salaryFilter = o;
+                  }
                 });
-                _loadJobs();
+                if (filterType != 'salary') _loadJobs();
               },
             )),
             const SizedBox(height: 20),
@@ -204,54 +430,87 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
+// ── Relative date helper ──────────────────────────────────────────────────
+
+String _relativeDate(String postedAt) {
+  try {
+    final posted = DateTime.parse(postedAt);
+    final now = DateTime.now();
+    final diff = now.difference(posted).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    if (diff < 7) return '${diff}d ago';
+    if (diff < 30) return '${(diff / 7).round()}w ago';
+    return '${(diff / 30).round()}mo ago';
+  } catch (_) {
+    return '';
+  }
+}
+
 class _JobCard extends StatelessWidget {
   final Job job;
   final AppTheme theme;
+  final bool isSaved;
+  final ValueChanged<String> onToggleSave;
+  final VoidCallback onTap;
 
-  const _JobCard({required this.job, required this.theme});
+  const _JobCard({
+    required this.job,
+    required this.theme,
+    required this.isSaved,
+    required this.onToggleSave,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final t = theme;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: t.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: t.divider, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(
-                  color: t.primary.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(10),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: t.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: t.divider, width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                // Company logo
+                _buildLogo(t),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(job.title, style: GoogleFonts.inter(
+                        fontSize: 15, fontWeight: FontWeight.w600, color: t.primary),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 2),
+                      Text(job.company, style: GoogleFonts.inter(
+                        fontSize: 13, color: t.secondary)),
+                    ],
+                  ),
                 ),
-                child: Center(child: Text(
-                  job.company.substring(0, 1),
-                  style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w700, color: t.primary),
-                )),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(job.title, style: GoogleFonts.inter(
-                      fontSize: 15, fontWeight: FontWeight.w600, color: t.primary),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 2),
-                    Text(job.company, style: GoogleFonts.inter(
-                      fontSize: 13, color: t.secondary)),
-                  ],
+                // Bookmark button
+                GestureDetector(
+                  onTap: () => onToggleSave(job.id),
+                  child: Icon(
+                    isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                    color: isSaved ? t.primary : t.muted,
+                    size: 22,
+                  ),
                 ),
-              ),
-              if (job.featured)
-                Container(
+              ],
+            ),
+            const SizedBox(height: 4),
+            if (job.featured)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: t.accent.withValues(alpha: 0.1),
@@ -260,66 +519,106 @@ class _JobCard extends StatelessWidget {
                   child: Text('Featured', style: GoogleFonts.inter(
                     fontSize: 10, fontWeight: FontWeight.w600, color: t.accent)),
                 ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(job.description, style: GoogleFonts.inter(
-            fontSize: 13, color: t.muted, height: 1.4),
-            maxLines: 2, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 12),
-          // Skills
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: job.skills.take(4).map((s) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: t.background,
-                borderRadius: BorderRadius.circular(4),
               ),
-              child: Text(s, style: GoogleFonts.inter(
-                fontSize: 11, color: t.secondary, fontWeight: FontWeight.w500)),
-            )).toList(),
-          ),
-          const SizedBox(height: 12),
-          // Meta row
-          Row(
-            children: [
-              Icon(Icons.location_on_outlined, size: 14, color: t.muted),
-              const SizedBox(width: 4),
-              Flexible(
-                child: Text(job.location, style: GoogleFonts.inter(fontSize: 12, color: t.muted),
-                  overflow: TextOverflow.ellipsis, maxLines: 1),
-              ),
-              const SizedBox(width: 8),
-              Text(job.type, style: GoogleFonts.inter(
-                fontSize: 12, color: t.muted)),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(job.salaryRange, style: GoogleFonts.inter(
-            fontSize: 13, fontWeight: FontWeight.w600, color: t.primary)),
-          if (job.applyUrl.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            GestureDetector(
-              onTap: () async {
-                final uri = Uri.parse(job.applyUrl);
-                if (await canLaunchUrl(uri)) await launchUrl(uri);
-              },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 10),
+            const SizedBox(height: 6),
+            Text(job.description, style: GoogleFonts.inter(
+              fontSize: 13, color: t.muted, height: 1.4),
+              maxLines: 2, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 12),
+            // Skills
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: job.skills.take(4).map((s) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  border: Border.all(color: t.primary, width: 1),
-                  borderRadius: BorderRadius.circular(8),
+                  color: t.background,
+                  borderRadius: BorderRadius.circular(4),
                 ),
-                child: Center(child: Text('Apply Now', style: GoogleFonts.inter(
-                  fontSize: 13, fontWeight: FontWeight.w600, color: t.primary))),
-              ),
+                child: Text(s, style: GoogleFonts.inter(
+                  fontSize: 11, color: t.secondary, fontWeight: FontWeight.w500)),
+              )).toList(),
             ),
+            const SizedBox(height: 12),
+            // Meta row
+            Row(
+              children: [
+                Icon(Icons.location_on_outlined, size: 14, color: t.muted),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(job.location, style: GoogleFonts.inter(fontSize: 12, color: t.muted),
+                    overflow: TextOverflow.ellipsis, maxLines: 1),
+                ),
+                const SizedBox(width: 8),
+                Text(job.type, style: GoogleFonts.inter(
+                  fontSize: 12, color: t.muted)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(job.salaryRange, style: GoogleFonts.inter(
+                    fontSize: 13, fontWeight: FontWeight.w600, color: t.primary)),
+                ),
+                if (job.postedAt.isNotEmpty) ...[
+                  Text(_relativeDate(job.postedAt), style: GoogleFonts.inter(
+                    fontSize: 11, color: t.muted)),
+                ],
+              ],
+            ),
+            if (job.applyUrl.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              GestureDetector(
+                onTap: () async {
+                  final uri = Uri.parse(job.applyUrl);
+                  if (await canLaunchUrl(uri)) await launchUrl(uri);
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: t.primary, width: 1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(child: Text('Apply Now', style: GoogleFonts.inter(
+                    fontSize: 13, fontWeight: FontWeight.w600, color: t.primary))),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildLogo(AppTheme t) {
+    if (job.companyLogo != null && job.companyLogo!.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: CachedNetworkImage(
+          imageUrl: job.companyLogo!,
+          width: 40,
+          height: 40,
+          fit: BoxFit.cover,
+          errorWidget: (_, __, ___) => _letterAvatar(t),
+        ),
+      );
+    }
+    return _letterAvatar(t);
+  }
+
+  Widget _letterAvatar(AppTheme t) {
+    return Container(
+      width: 40, height: 40,
+      decoration: BoxDecoration(
+        color: t.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Center(child: Text(
+        job.company.isNotEmpty ? job.company.substring(0, 1) : '?',
+        style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w700, color: t.primary),
+      )),
     );
   }
 }
