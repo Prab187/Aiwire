@@ -1,11 +1,15 @@
 import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../models/job.dart';
-import '../services/job_service.dart';
+import '../services/firestore_service.dart';
+
 
 class JobBoardScreen extends StatefulWidget {
   final AppTheme theme;
@@ -29,6 +33,7 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
   bool _showSavedOnly = false;
   bool _searchFocused = false;
   final Set<String> _savedJobIds = {};
+  final Map<String, String> _appliedStatus = {}; // id → 'applied' | 'interview'
   final List<String> _recentSearches = [];
   final _searchCtrl = TextEditingController();
   final _searchFocus = FocusNode();
@@ -117,8 +122,8 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
         jobs.sort((a, b) {
           if (a.featured && !b.featured) return -1;
           if (!a.featured && b.featured) return 1;
-          final aHasSalary = !a.salaryRange.contains('Not disclosed');
-          final bHasSalary = !b.salaryRange.contains('Not disclosed');
+          final aHasSalary = !a.salaryRange.contains('Salary not listed');
+          final bHasSalary = !b.salaryRange.contains('Salary not listed');
           if (aHasSalary && !bHasSalary) return -1;
           if (!aHasSalary && bHasSalary) return 1;
           return b.postedAt.compareTo(a.postedAt);
@@ -140,10 +145,10 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
 
   int? _salaryThreshold(String f) {
     switch (f) {
-      case '\$50K+': return 50000;
-      case '\$100K+': return 100000;
-      case '\$150K+': return 150000;
-      case '\$200K+': return 200000;
+      case '50K+': return 50000;
+      case '100K+': return 100000;
+      case '150K+': return 150000;
+      case '200K+': return 200000;
       default: return null;
     }
   }
@@ -158,6 +163,7 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
     _searchFocus.addListener(() {
       setState(() => _searchFocused = _searchFocus.hasFocus);
     });
+    _loadPrefs();
     _loadJobs();
   }
 
@@ -171,7 +177,7 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
 
   Future<void> _loadJobs() async {
     setState(() => _loading = true);
-    final jobs = await JobService.fetchJobs(
+    final jobs = await FirestoreService.fetchJobs(
       query: _searchQuery.isEmpty ? null : _searchQuery,
       type: _typeFilter,
       level: _levelFilter,
@@ -196,6 +202,7 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
         _recentSearches.insert(0, value);
         if (_recentSearches.length > 5) _recentSearches.removeLast();
       });
+      _savePrefs();
     }
     _searchFocus.unfocus();
     _loadJobs();
@@ -211,6 +218,45 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
       _showSavedOnly = false;
     });
     _loadJobs();
+  }
+
+  Future<void> _loadPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList('jb_saved_ids') ?? [];
+    final recent = prefs.getStringList('jb_recent') ?? [];
+    final applied = prefs.getStringList('jb_applied_ids') ?? [];
+    final interview = prefs.getStringList('jb_interview_ids') ?? [];
+    if (!mounted) return;
+    setState(() {
+      _savedJobIds.addAll(saved);
+      _recentSearches.clear();
+      _recentSearches.addAll(recent.take(5));
+      for (final id in applied) _appliedStatus[id] = 'applied';
+      for (final id in interview) _appliedStatus[id] = 'interview';
+    });
+  }
+
+  Future<void> _savePrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('jb_saved_ids', _savedJobIds.toList());
+    await prefs.setStringList('jb_recent', _recentSearches.toList());
+    final applied = _appliedStatus.entries
+        .where((e) => e.value == 'applied').map((e) => e.key).toList();
+    final interview = _appliedStatus.entries
+        .where((e) => e.value == 'interview').map((e) => e.key).toList();
+    await prefs.setStringList('jb_applied_ids', applied);
+    await prefs.setStringList('jb_interview_ids', interview);
+  }
+
+  void _toggleApplied(String id, String status) {
+    setState(() {
+      if (_appliedStatus[id] == status) {
+        _appliedStatus.remove(id);
+      } else {
+        _appliedStatus[id] = status;
+      }
+    });
+    _savePrefs();
   }
 
   @override
@@ -438,10 +484,14 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
                             job: display[i],
                             theme: t,
                             isSaved: _savedJobIds.contains(display[i].id),
-                            onToggleSave: (id) => setState(() {
-                              if (_savedJobIds.contains(id)) _savedJobIds.remove(id);
-                              else _savedJobIds.add(id);
-                            }),
+                            appliedStatus: _appliedStatus[display[i].id],
+                            onToggleSave: (id) {
+                              setState(() {
+                                if (_savedJobIds.contains(id)) _savedJobIds.remove(id);
+                                else _savedJobIds.add(id);
+                              });
+                              _savePrefs();
+                            },
                             onTap: () => _showJobDetail(context, display[i]),
                           ),
                         ),
@@ -614,7 +664,7 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
                 _sheetSection('Experience Level', ['All', 'Junior', 'Mid', 'Senior', 'Lead', 'Principal'],
                   _levelFilter, (v) { setState(() => _levelFilter = v); setLocal(() {}); }),
                 const SizedBox(height: 16),
-                _sheetSection('Minimum Salary', ['Any', '\$50K+', '\$100K+', '\$150K+', '\$200K+'],
+                _sheetSection('Minimum Salary (local currency)', ['Any', '50K+', '100K+', '150K+', '200K+'],
                   _salaryFilter, (v) { setState(() => _salaryFilter = v); setLocal(() {}); }),
                 const SizedBox(height: 16),
                 _sheetSection('Date Posted', ['Any', 'Today', 'This Week', 'This Month'],
@@ -754,96 +804,192 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
       backgroundColor: t.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.75,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        builder: (_, ctrl) => Column(
-          children: [
-            Center(
-              child: Container(
-                margin: const EdgeInsets.only(top: 10, bottom: 8),
-                width: 36, height: 4,
-                decoration: BoxDecoration(
-                  color: t.divider, borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                controller: ctrl,
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      _buildLogoWidget(job, t),
-                      const SizedBox(width: 12),
-                      Expanded(child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(job.title, style: GoogleFonts.sourceSerif4(
-                            fontSize: 18, fontWeight: FontWeight.w700, color: t.primary)),
-                          Text(job.company, style: GoogleFonts.inter(
-                            fontSize: 14, color: t.secondary)),
-                        ],
-                      )),
-                    ]),
-                    const SizedBox(height: 14),
-                    Wrap(spacing: 8, runSpacing: 6, children: [
-                      _metaPill(t, Icons.location_on_outlined, job.location),
-                      _metaPill(t, Icons.work_outline_rounded, job.type),
-                      _metaPill(t, Icons.payments_outlined, job.salaryRange),
-                      _metaPill(t, Icons.bar_chart_rounded, job.level),
-                    ]),
-                    const SizedBox(height: 16),
-                    Text('About the role', style: GoogleFonts.inter(
-                      fontSize: 14, fontWeight: FontWeight.w600, color: t.primary)),
-                    const SizedBox(height: 8),
-                    Text(job.description, style: GoogleFonts.inter(
-                      fontSize: 13, color: t.muted, height: 1.55)),
-                    const SizedBox(height: 16),
-                    Text('Skills required', style: GoogleFonts.inter(
-                      fontSize: 14, fontWeight: FontWeight.w600, color: t.primary)),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6, runSpacing: 6,
-                      children: job.skills.map((s) => Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: t.background, borderRadius: BorderRadius.circular(6)),
-                        child: Text(s, style: GoogleFonts.inter(
-                          fontSize: 12, color: t.secondary, fontWeight: FontWeight.w500)),
-                      )).toList(),
-                    ),
-                    const SizedBox(height: 20),
-                    if (job.applyUrl.isNotEmpty)
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          final appStatus = _appliedStatus[job.id];
+          return DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.75,
+            minChildSize: 0.5,
+            maxChildSize: 0.95,
+            builder: (_, ctrl) => Column(
+              children: [
+                // Drag handle + action icons
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                  child: Row(
+                    children: [
                       GestureDetector(
                         onTap: () async {
-                          final uri = Uri.parse(job.applyUrl);
-                          if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          if (job.applyUrl.isNotEmpty) {
+                            await Clipboard.setData(ClipboardData(text: job.applyUrl));
+                            if (ctx.mounted) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                                content: Text('Link copied'),
+                                duration: Duration(seconds: 2)));
+                            }
+                          }
                         },
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          decoration: BoxDecoration(
-                            color: t.primary, borderRadius: BorderRadius.circular(10)),
-                          child: Center(child: Text('Apply Now', style: GoogleFonts.inter(
-                            fontSize: 15, fontWeight: FontWeight.w600, color: t.background))),
-                        ),
+                        child: Icon(Icons.link_rounded, size: 20, color: t.muted),
                       ),
-                  ],
+                      const Spacer(),
+                      Container(
+                        width: 36, height: 4,
+                        decoration: BoxDecoration(
+                          color: t.divider, borderRadius: BorderRadius.circular(2))),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () {
+                          if (job.applyUrl.isNotEmpty) {
+                            SharePlus.instance.share(ShareParams(
+                              text: '${job.title} at ${job.company}\n${job.applyUrl}'));
+                          }
+                        },
+                        child: Icon(Icons.share_outlined, size: 20, color: t.muted),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    controller: ctrl,
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          _buildLogoWidget(job, t),
+                          const SizedBox(width: 12),
+                          Expanded(child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(job.title, style: GoogleFonts.sourceSerif4(
+                                fontSize: 18, fontWeight: FontWeight.w700, color: t.primary)),
+                              Text(job.company, style: GoogleFonts.inter(
+                                fontSize: 14, color: t.secondary)),
+                            ],
+                          )),
+                        ]),
+                        const SizedBox(height: 14),
+                        Wrap(spacing: 8, runSpacing: 6, children: [
+                          _metaPill(t, Icons.location_on_outlined, job.location),
+                          _metaPill(t, Icons.work_outline_rounded, job.type),
+                          _metaPill(t, Icons.payments_outlined, job.salaryRange, isSalary: true),
+                          _metaPill(t, Icons.bar_chart_rounded, job.level),
+                        ]),
+                        const SizedBox(height: 16),
+                        Text('About the role', style: GoogleFonts.inter(
+                          fontSize: 14, fontWeight: FontWeight.w600, color: t.primary)),
+                        const SizedBox(height: 8),
+                        Text(job.description, style: GoogleFonts.inter(
+                          fontSize: 13, color: t.muted, height: 1.55)),
+                        const SizedBox(height: 16),
+                        Text('Skills required', style: GoogleFonts.inter(
+                          fontSize: 14, fontWeight: FontWeight.w600, color: t.primary)),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6, runSpacing: 6,
+                          children: job.skills.map((s) => Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: t.background, borderRadius: BorderRadius.circular(6)),
+                            child: Text(s, style: GoogleFonts.inter(
+                              fontSize: 12, color: t.secondary, fontWeight: FontWeight.w500)),
+                          )).toList(),
+                        ),
+                        const SizedBox(height: 20),
+                        if (job.applyUrl.isNotEmpty)
+                          GestureDetector(
+                            onTap: () async {
+                              final uri = Uri.parse(job.applyUrl);
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              }
+                            },
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              decoration: BoxDecoration(
+                                color: t.primary, borderRadius: BorderRadius.circular(10)),
+                              child: Center(child: Text('Apply Now', style: GoogleFonts.inter(
+                                fontSize: 15, fontWeight: FontWeight.w600, color: t.background))),
+                            ),
+                          ),
+                        const SizedBox(height: 10),
+                        // Track application status
+                        Row(children: [
+                          Expanded(child: _trackButton(
+                            label: appStatus == 'applied' ? 'Applied ✓' : 'I Applied',
+                            icon: appStatus == 'applied'
+                              ? Icons.check_circle_rounded
+                              : Icons.check_circle_outline_rounded,
+                            active: appStatus == 'applied',
+                            activeColor: const Color(0xFF16A34A),
+                            activeBg: const Color(0xFFDCFCE7),
+                            theme: t,
+                            onTap: () {
+                              _toggleApplied(job.id, 'applied');
+                              setSheet(() {});
+                            },
+                          )),
+                          const SizedBox(width: 10),
+                          Expanded(child: _trackButton(
+                            label: appStatus == 'interview' ? 'Interviewing' : 'Interview',
+                            icon: appStatus == 'interview'
+                              ? Icons.event_available_rounded
+                              : Icons.event_outlined,
+                            active: appStatus == 'interview',
+                            activeColor: const Color(0xFF7C3AED),
+                            activeBg: const Color(0xFFEDE9FE),
+                            theme: t,
+                            onTap: () {
+                              _toggleApplied(job.id, 'interview');
+                              setSheet(() {});
+                            },
+                          )),
+                        ]),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
-  Widget _metaPill(AppTheme t, IconData icon, String label) {
-    if (label.isEmpty || label == 'Not disclosed') return const SizedBox.shrink();
+  Widget _trackButton({
+    required String label, required IconData icon, required bool active,
+    required Color activeColor, required Color activeBg,
+    required AppTheme theme, required VoidCallback onTap,
+  }) {
+    final t = theme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        decoration: BoxDecoration(
+          color: active ? activeBg : t.background,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: active ? activeColor : t.divider)),
+        child: Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 14, color: active ? activeColor : t.muted),
+          const SizedBox(width: 5),
+          Text(label, style: GoogleFonts.inter(
+            fontSize: 12, fontWeight: FontWeight.w600,
+            color: active ? activeColor : t.secondary)),
+        ])),
+      ),
+    );
+  }
+
+  Widget _metaPill(AppTheme t, IconData icon, String label, {bool isSalary = false}) {
+    if (label.isEmpty && !isSalary) return const SizedBox.shrink();
+    final display = isSalary && (label.isEmpty || label == 'Salary not listed')
+        ? 'Salary not listed' : label;
+    if (display.isEmpty) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
@@ -852,7 +998,7 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(icon, size: 12, color: t.muted),
         const SizedBox(width: 5),
-        Text(label, style: GoogleFonts.inter(fontSize: 12, color: t.secondary)),
+        Text(display, style: GoogleFonts.inter(fontSize: 12, color: t.secondary)),
       ]),
     );
   }
@@ -998,12 +1144,14 @@ class _JobCard extends StatelessWidget {
   final Job job;
   final AppTheme theme;
   final bool isSaved;
+  final String? appliedStatus;
   final ValueChanged<String> onToggleSave;
   final VoidCallback onTap;
 
   const _JobCard({
     required this.job, required this.theme,
     required this.isSaved, required this.onToggleSave, required this.onTap,
+    this.appliedStatus,
   });
 
   @override
@@ -1097,27 +1245,38 @@ class _JobCard extends StatelessWidget {
                 Text(_relativeDate(job.postedAt), style: GoogleFonts.inter(
                   fontSize: 11, color: t.muted)),
             ]),
-            const SizedBox(height: 4),
-            Text(job.salaryRange, style: GoogleFonts.inter(
-              fontSize: 13, fontWeight: FontWeight.w600, color: t.primary)),
-            if (job.applyUrl.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              GestureDetector(
-                onTap: () async {
-                  final uri = Uri.parse(job.applyUrl);
-                  if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
-                },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: t.primary),
-                    borderRadius: BorderRadius.circular(8)),
-                  child: Center(child: Text('Apply Now', style: GoogleFonts.inter(
-                    fontSize: 13, fontWeight: FontWeight.w600, color: t.primary))),
-                ),
-              ),
-            ],
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(child: Text(
+                  job.salaryRange.isNotEmpty && job.salaryRange != 'Salary not listed'
+                    ? job.salaryRange : 'Salary not listed',
+                  style: GoogleFonts.inter(
+                    fontSize: 13, fontWeight: FontWeight.w600,
+                    color: job.salaryRange.isNotEmpty && job.salaryRange != 'Salary not listed'
+                      ? t.primary : t.muted))),
+                if (appliedStatus == 'applied')
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFDCFCE7),
+                      borderRadius: BorderRadius.circular(4)),
+                    child: Text('Applied ✓', style: GoogleFonts.inter(
+                      fontSize: 10, fontWeight: FontWeight.w600,
+                      color: const Color(0xFF16A34A))),
+                  )
+                else if (appliedStatus == 'interview')
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEDE9FE),
+                      borderRadius: BorderRadius.circular(4)),
+                    child: Text('Interviewing', style: GoogleFonts.inter(
+                      fontSize: 10, fontWeight: FontWeight.w600,
+                      color: const Color(0xFF7C3AED))),
+                  ),
+              ],
+            ),
           ],
         ),
       ),

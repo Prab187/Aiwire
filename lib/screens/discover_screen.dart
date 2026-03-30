@@ -1,5 +1,9 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../models/job.dart';
+import '../services/job_service.dart';
 import '../theme/app_theme.dart';
 import 'job_board_screen.dart';
 import 'events_hub_screen.dart';
@@ -19,8 +23,25 @@ class DiscoverScreen extends StatefulWidget {
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
   final _searchCtrl = TextEditingController();
+  List<Job> _hotJobs = [];
+  bool _hotLoading = true;
 
   AppTheme get t => widget.theme;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchHotJobs();
+  }
+
+  Future<void> _fetchHotJobs() async {
+    try {
+      final jobs = await JobService.fetchJobs(query: 'machine learning engineer', type: 'All', level: 'All');
+      if (mounted) setState(() { _hotJobs = jobs.take(8).toList(); _hotLoading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _hotLoading = false);
+    }
+  }
 
   static const _quickSearches = [
     'ML Engineer',
@@ -142,8 +163,68 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               ),
             ),
 
+            // ── Hot Jobs live strip ──────────────────────────────────────────
+            if (_hotLoading || _hotJobs.isNotEmpty)
+              SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+                      child: Row(
+                        children: [
+                          Icon(Icons.local_fire_department_rounded,
+                            size: 15, color: const Color(0xFFEF4444)),
+                          const SizedBox(width: 6),
+                          Text('Live Now', style: GoogleFonts.inter(
+                            fontSize: 13, fontWeight: FontWeight.w700, color: t.primary)),
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 7, height: 7,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF22C55E), shape: BoxShape.circle)),
+                          const Spacer(),
+                          GestureDetector(
+                            onTap: () => Navigator.push(context, MaterialPageRoute(
+                              builder: (_) => JobBoardScreen(theme: t))),
+                            child: Text('See all', style: GoogleFonts.inter(
+                              fontSize: 12, color: t.muted,
+                              decoration: TextDecoration.underline)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(
+                      height: 130,
+                      child: _hotLoading
+                        ? ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: 5,
+                            separatorBuilder: (_, __) => const SizedBox(width: 10),
+                            itemBuilder: (_, __) => Container(
+                              width: 180,
+                              decoration: BoxDecoration(
+                                color: t.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: t.divider, width: 0.5)),
+                            ),
+                          )
+                        : ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: _hotJobs.length,
+                            separatorBuilder: (_, __) => const SizedBox(width: 10),
+                            itemBuilder: (_, i) => _HotJobCard(job: _hotJobs[i], theme: t),
+                          ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+
             SliverToBoxAdapter(child: Padding(
-              padding: const EdgeInsets.fromLTRB(0, 16, 0, 0),
+              padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
               child: Divider(height: 1, color: t.divider),
             )),
 
@@ -225,6 +306,87 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     );
   }
 }
+
+// ── Hot job mini-card ──────────────────────────────────────────────────────────
+
+class _HotJobCard extends StatelessWidget {
+  final Job job;
+  final AppTheme theme;
+  const _HotJobCard({required this.job, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    return GestureDetector(
+      onTap: () async {
+        if (job.applyUrl.isNotEmpty) {
+          final uri = Uri.parse(job.applyUrl);
+          if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      },
+      child: Container(
+        width: 180,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: t.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: t.divider, width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              _logo(t),
+              const SizedBox(width: 8),
+              Expanded(child: Text(job.company, style: GoogleFonts.inter(
+                fontSize: 11, color: t.muted),
+                maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ]),
+            const SizedBox(height: 8),
+            Text(job.title, style: GoogleFonts.inter(
+              fontSize: 13, fontWeight: FontWeight.w600, color: t.primary),
+              maxLines: 2, overflow: TextOverflow.ellipsis),
+            const Spacer(),
+            Row(children: [
+              Icon(Icons.location_on_outlined, size: 11, color: t.muted),
+              const SizedBox(width: 2),
+              Expanded(child: Text(
+                job.location.isNotEmpty ? job.location : 'Remote',
+                style: GoogleFonts.inter(fontSize: 11, color: t.muted),
+                maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _logo(AppTheme t) {
+    if (job.companyLogo?.isNotEmpty == true) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: CachedNetworkImage(
+          imageUrl: job.companyLogo!, width: 26, height: 26, fit: BoxFit.cover,
+          errorWidget: (_, __, ___) => _letterAvatar(t)),
+      );
+    }
+    return _letterAvatar(t);
+  }
+
+  Widget _letterAvatar(AppTheme t) {
+    return Container(
+      width: 26, height: 26,
+      decoration: BoxDecoration(
+        color: t.primary.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(6)),
+      child: Center(child: Text(
+        job.company.isNotEmpty ? job.company[0] : '?',
+        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: t.primary))),
+    );
+  }
+}
+
+// ── Discover card ──────────────────────────────────────────────────────────────
 
 class _DiscoverCard extends StatelessWidget {
   final AppTheme theme;

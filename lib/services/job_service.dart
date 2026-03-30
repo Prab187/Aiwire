@@ -27,7 +27,7 @@ class JobService {
         level: _inferLevel(j['title'] ?? ''),
         description: _stripHtml(j['description'] ?? '', 300),
         skills: tags.take(5).toList(),
-        salaryRange: salary.isNotEmpty ? salary : 'Not disclosed',
+        salaryRange: salary.isNotEmpty ? salary : 'Salary not listed',
         postedAt: j['publication_date'] ?? '',
         companyLogo: j['company_logo'],
         applyUrl: j['url'] ?? '',
@@ -87,7 +87,7 @@ class JobService {
           level: _mapMuseLevel(levelName),
           description: _stripHtml(j['contents'] ?? '', 300),
           skills: _extractSkills(j['contents'] ?? ''),
-          salaryRange: 'Not disclosed',
+          salaryRange: 'Salary not listed',
           postedAt: (j['publication_date'] as String? ?? '').split('T').first,
           applyUrl: j['refs']?['landing_page'] ?? '',
         );
@@ -154,7 +154,7 @@ class JobService {
           level: _inferLevel(j['title'] ?? ''),
           description: _stripHtml(j['description'] ?? '', 300),
           skills: _extractSkills(j['description'] ?? ''),
-          salaryRange: 'Not disclosed',
+          salaryRange: 'Salary not listed',
           postedAt: postedAt,
           applyUrl: j['url'] ?? '',
         );
@@ -212,7 +212,7 @@ class JobService {
         final salaryMin = j['salaryMin'];
         final salaryMax = j['salaryMax'];
         final currency = j['salaryCurrency'] as String? ?? 'USD';
-        String salaryRange = 'Not disclosed';
+        String salaryRange = 'Salary not listed';
         if (salaryMin != null && salaryMax != null) {
           salaryRange = '$currency ${_formatSalary(salaryMin)}K – ${_formatSalary(salaryMax)}K / yr';
         } else if (salaryMin != null) {
@@ -268,7 +268,7 @@ class JobService {
       return results.map((j) {
         final min = j['minimumSalary'];
         final max = j['maximumSalary'];
-        String salary = 'Not disclosed';
+        String salary = 'Salary not listed';
         if (min != null && max != null) {
           salary = '£${_formatSalary(min)}K – £${_formatSalary(max)}K';
         } else if (min != null) {
@@ -319,7 +319,7 @@ class JobService {
         final title = j['title'] ?? '';
         final salaryMin = j['salary_min'];
         final salaryMax = j['salary_max'];
-        String salaryRange = 'Not disclosed';
+        String salaryRange = 'Salary not listed';
         if (salaryMin != null && salaryMax != null) {
           salaryRange = '\$${_formatSalary(salaryMin)}K – \$${_formatSalary(salaryMax)}K';
         } else if (salaryMin != null) {
