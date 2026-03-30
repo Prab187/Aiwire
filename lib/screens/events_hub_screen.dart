@@ -97,7 +97,7 @@ class _EventsHubScreenState extends State<EventsHubScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text('Events Hub', style: GoogleFonts.sourceSerif4(
-          fontSize: 20, fontWeight: FontWeight.w700, color: t.primary)),
+          fontSize: 20, fontWeight: FontWeight.w600, color: t.primary)),
         centerTitle: true,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),

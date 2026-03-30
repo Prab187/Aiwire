@@ -73,7 +73,7 @@ class _CertificationScreenState extends State<CertificationScreen>
           onPressed: () => Navigator.pop(context),
         ),
         title: Text('Certifications', style: GoogleFonts.sourceSerif4(
-          fontSize: 20, fontWeight: FontWeight.w700, color: t.primary)),
+          fontSize: 20, fontWeight: FontWeight.w600, color: t.primary)),
         centerTitle: true,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(49),

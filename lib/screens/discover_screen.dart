@@ -9,18 +9,51 @@ import 'investment_screen.dart';
 import 'resume_scan_screen.dart';
 import 'nearby_jobs_screen.dart';
 
-class DiscoverScreen extends StatelessWidget {
+class DiscoverScreen extends StatefulWidget {
   final AppTheme theme;
   const DiscoverScreen({super.key, required this.theme});
 
   @override
+  State<DiscoverScreen> createState() => _DiscoverScreenState();
+}
+
+class _DiscoverScreenState extends State<DiscoverScreen> {
+  final _searchCtrl = TextEditingController();
+
+  AppTheme get t => widget.theme;
+
+  static const _quickSearches = [
+    'ML Engineer',
+    'Data Scientist',
+    'LLM Engineer',
+    'Remote Python',
+    'AI Research',
+    'MLOps',
+    'NLP Engineer',
+    'Prompt Engineer',
+  ];
+
+  void _search(String query) {
+    if (query.trim().isEmpty) return;
+    _searchCtrl.clear();
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => JobBoardScreen(theme: t, initialQuery: query.trim())));
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final t = theme;
     return Scaffold(
       backgroundColor: t.background,
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
+            // Header
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
@@ -30,12 +63,91 @@ class DiscoverScreen extends StatelessWidget {
             ),
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 2, 20, 20),
+                padding: const EdgeInsets.fromLTRB(20, 2, 20, 16),
                 child: Text('AI/ML career, events & insights', style: GoogleFonts.inter(
                   fontSize: 14, color: t.muted)),
               ),
             ),
-            SliverToBoxAdapter(child: Divider(height: 1, color: t.divider)),
+
+            // ── Search bar ──────────────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                child: TextField(
+                  controller: _searchCtrl,
+                  style: GoogleFonts.inter(fontSize: 15, color: t.primary),
+                  decoration: InputDecoration(
+                    hintText: 'Search AI/ML jobs, roles, skills...',
+                    hintStyle: GoogleFonts.inter(fontSize: 15, color: t.muted),
+                    prefixIcon: Icon(Icons.search_rounded, color: t.muted, size: 22),
+                    suffixIcon: ValueListenableBuilder(
+                      valueListenable: _searchCtrl,
+                      builder: (_, v, __) => v.text.isNotEmpty
+                        ? GestureDetector(
+                            onTap: () => _searchCtrl.clear(),
+                            child: Icon(Icons.close_rounded, color: t.muted, size: 18))
+                        : const SizedBox.shrink(),
+                    ),
+                    filled: true,
+                    fillColor: t.surface,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: t.divider),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: t.divider),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: t.primary, width: 1.5),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  ),
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: _search,
+                ),
+              ),
+            ),
+
+            // ── Quick search chips ───────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12, bottom: 4),
+                child: SizedBox(
+                  height: 34,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _quickSearches.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (_, i) {
+                      final q = _quickSearches[i];
+                      return GestureDetector(
+                        onTap: () => _search(q),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: t.surface,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: t.divider),
+                          ),
+                          child: Text(q, style: GoogleFonts.inter(
+                            fontSize: 12, fontWeight: FontWeight.w500, color: t.secondary)),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+
+            SliverToBoxAdapter(child: Padding(
+              padding: const EdgeInsets.fromLTRB(0, 16, 0, 0),
+              child: Divider(height: 1, color: t.divider),
+            )),
+
+            // ── Feature cards ────────────────────────────────────────────────
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
               sliver: SliverList(
@@ -51,21 +163,21 @@ class DiscoverScreen extends StatelessWidget {
                   ),
                   _DiscoverCard(
                     theme: t,
-                    icon: Icons.document_scanner_outlined,
-                    title: 'Scan Resume',
-                    subtitle: 'Upload CV · get matched jobs by country',
-                    meta: 'AI',
-                    onTap: () => Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => ResumeScanScreen(theme: t))),
-                  ),
-                  _DiscoverCard(
-                    theme: t,
                     icon: Icons.work_outline_rounded,
                     title: 'Job Board',
                     subtitle: 'Remote, hybrid & on-site AI/ML roles',
                     meta: 'Live',
                     onTap: () => Navigator.push(context, MaterialPageRoute(
                       builder: (_) => JobBoardScreen(theme: t))),
+                  ),
+                  _DiscoverCard(
+                    theme: t,
+                    icon: Icons.document_scanner_outlined,
+                    title: 'Scan Resume',
+                    subtitle: 'Upload CV · get matched jobs by country',
+                    meta: 'AI',
+                    onTap: () => Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => ResumeScanScreen(theme: t))),
                   ),
                   _DiscoverCard(
                     theme: t,

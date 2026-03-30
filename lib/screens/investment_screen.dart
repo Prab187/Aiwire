@@ -23,7 +23,7 @@ class InvestmentScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text('AI Investment', style: GoogleFonts.sourceSerif4(
-          fontSize: 20, fontWeight: FontWeight.w700, color: t.primary)),
+          fontSize: 20, fontWeight: FontWeight.w600, color: t.primary)),
         centerTitle: true,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -46,7 +46,7 @@ class InvestmentScreen extends StatelessWidget {
               ),
               child: Column(children: [
                 Text('\$97.8B', style: GoogleFonts.sourceSerif4(
-                  fontSize: 36, fontWeight: FontWeight.w700, color: t.primary)),
+                  fontSize: 36, fontWeight: FontWeight.w600, color: t.primary)),
                 const SizedBox(height: 4),
                 Text('Total AI investment in 2025', style: GoogleFonts.inter(
                   fontSize: 14, color: t.secondary)),

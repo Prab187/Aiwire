@@ -111,7 +111,7 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
         ),
         title: Text('Resume Scanner',
           style: GoogleFonts.sourceSerif4(
-            fontSize: 20, fontWeight: FontWeight.w700, color: t.primary)),
+            fontSize: 20, fontWeight: FontWeight.w600, color: t.primary)),
         centerTitle: true,
         actions: _state == _ScanState.results
             ? [
@@ -160,7 +160,7 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
             const SizedBox(height: 24),
             Text('Scan Your Resume',
               style: GoogleFonts.sourceSerif4(
-                fontSize: 24, fontWeight: FontWeight.w700, color: t.primary)),
+                fontSize: 24, fontWeight: FontWeight.w600, color: t.primary)),
             const SizedBox(height: 12),
             Text(
               'Upload your CV and we\'ll find AI/ML jobs '
@@ -216,7 +216,7 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
             const SizedBox(height: 28),
             Text('Analyzing\u2026',
               style: GoogleFonts.sourceSerif4(
-                fontSize: 22, fontWeight: FontWeight.w700, color: t.primary)),
+                fontSize: 22, fontWeight: FontWeight.w600, color: t.primary)),
             const SizedBox(height: 10),
             Text(_statusMessage,
               textAlign: TextAlign.center,
