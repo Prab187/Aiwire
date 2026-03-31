@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +10,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../models/job.dart';
 import '../services/firestore_service.dart';
+import '../services/job_service.dart';
+import '../services/location_service.dart';
 
 
 class JobBoardScreen extends StatefulWidget {
@@ -19,6 +22,8 @@ class JobBoardScreen extends StatefulWidget {
   @override
   State<JobBoardScreen> createState() => _JobBoardScreenState();
 }
+
+enum _LocState { idle, locating, loading, results, denied, error }
 
 class _JobBoardScreenState extends State<JobBoardScreen> {
   List<Job> _allJobs = [];
@@ -40,6 +45,16 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
   final _searchCtrl = TextEditingController();
   final _searchFocus = FocusNode();
   Timer? _debounce;
+
+  // ── Nearby state ──────────────────────────────────────────────────────────
+  _LocState _locState = _LocState.idle;
+  LocationResult? _location;
+  List<Job> _nearbyJobs = [];
+  int _radiusKm = 50;
+  bool _includeRemote = true;
+  String _locError = '';
+  static const _radii = [25, 50, 100, 0];
+  static const _radiusLabels = ['25 km', '50 km', '100 km', 'Nationwide'];
 
   AppTheme get t => widget.theme;
 
@@ -173,6 +188,7 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
     });
     _loadPrefs();
     _loadJobs();
+    _locate(); // auto-fetch location in background
   }
 
   @override
@@ -181,6 +197,44 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
     _searchCtrl.dispose();
     _searchFocus.dispose();
     super.dispose();
+  }
+
+  // ── Nearby jobs logic ─────────────────────────────────────────────────────
+  Future<void> _locate() async {
+    setState(() { _locState = _LocState.locating; _locError = ''; });
+    try {
+      final loc = await LocationService.getCurrentLocation();
+      setState(() { _location = loc; _locState = _LocState.loading; });
+      await _loadNearbyJobs(loc);
+    } catch (e) {
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      setState(() {
+        _locError = msg;
+        _locState = msg.toLowerCase().contains('denied') ||
+            msg.toLowerCase().contains('permission')
+            ? _LocState.denied
+            : _LocState.error;
+      });
+    }
+  }
+
+  Future<void> _loadNearbyJobs(LocationResult loc) async {
+    setState(() => _locState = _LocState.loading);
+    try {
+      final jobs = await JobService.fetchNearbyJobs(
+        city: loc.city,
+        country: loc.country,
+        countryCode: loc.countryCode,
+        radiusKm: _radiusKm,
+        includeRemote: _includeRemote,
+      );
+      setState(() { _nearbyJobs = jobs; _locState = _LocState.results; });
+    } catch (e) {
+      setState(() {
+        _locState = _LocState.error;
+        _locError = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
   }
 
   Future<void> _loadJobs() async {
@@ -286,6 +340,197 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
     _savePrefs();
   }
 
+  // ── Nearby section widgets ────────────────────────────────────────────────
+  Widget _buildNearbySection() {
+    switch (_locState) {
+      case _LocState.idle:
+        return _nearbyBanner(
+          icon: Icons.near_me_rounded,
+          text: 'Find jobs near you',
+          action: 'Use location',
+          onAction: _locate,
+        );
+      case _LocState.locating:
+        return _nearbyBanner(icon: Icons.my_location_rounded, text: 'Detecting your location…');
+      case _LocState.loading:
+        return _nearbyBanner(
+          icon: Icons.search_rounded,
+          text: 'Searching near ${_location?.city ?? 'you'}…',
+        );
+      case _LocState.denied:
+      case _LocState.error:
+        return _nearbyBanner(
+          icon: Icons.location_off_rounded,
+          text: _locError.isNotEmpty ? _locError : 'Location unavailable',
+          action: _locState == _LocState.denied ? 'Settings' : 'Retry',
+          onAction: _locState == _LocState.denied
+              ? () => Geolocator.openAppSettings()
+              : _locate,
+        );
+      case _LocState.results:
+        final loc = _location!;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Location + radius bar
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Row(children: [
+                Icon(Icons.location_on_rounded, size: 13, color: t.primary),
+                const SizedBox(width: 4),
+                Expanded(child: Text(loc.displayName,
+                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: t.primary),
+                    maxLines: 1, overflow: TextOverflow.ellipsis)),
+                GestureDetector(
+                  onTap: _locate,
+                  child: Icon(Icons.refresh_rounded, size: 14, color: t.muted),
+                ),
+              ]),
+            ),
+            // Radius chips
+            SizedBox(height: 30, child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: _radii.length + 1,
+              itemBuilder: (_, i) {
+                if (i < _radii.length) {
+                  final r = _radii[i]; final active = _radiusKm == r;
+                  return Padding(padding: const EdgeInsets.only(right: 6),
+                    child: GestureDetector(
+                      onTap: () { setState(() => _radiusKm = r); _loadNearbyJobs(loc); },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: active ? t.primary.withValues(alpha: 0.08) : t.surface,
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(color: active ? t.primary.withValues(alpha: 0.25) : t.divider)),
+                        child: Text(_radiusLabels[i], style: GoogleFonts.inter(
+                          fontSize: 11, fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                          color: active ? t.primary : t.secondary)),
+                      ),
+                    ));
+                }
+                return Padding(padding: const EdgeInsets.only(right: 6),
+                  child: GestureDetector(
+                    onTap: () { setState(() => _includeRemote = !_includeRemote); _loadNearbyJobs(loc); },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _includeRemote ? t.primary.withValues(alpha: 0.08) : t.surface,
+                        borderRadius: BorderRadius.circular(7),
+                        border: Border.all(color: _includeRemote ? t.primary.withValues(alpha: 0.25) : t.divider)),
+                      child: Text('+ Remote', style: GoogleFonts.inter(
+                        fontSize: 11, fontWeight: _includeRemote ? FontWeight.w600 : FontWeight.w500,
+                        color: _includeRemote ? t.primary : t.secondary)),
+                    ),
+                  ));
+              },
+            )),
+            const SizedBox(height: 8),
+            // Nearby job cards horizontal strip
+            if (_nearbyJobs.isNotEmpty)
+              SizedBox(
+                height: 148,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: _nearbyJobs.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (_, i) {
+                    final j = _nearbyJobs[i];
+                    final isLocal = j.location.toLowerCase().contains(loc.city.toLowerCase()) ||
+                        j.location.toLowerCase().contains(loc.country.toLowerCase());
+                    return GestureDetector(
+                      onTap: () => _showJobDetail(context, j),
+                      child: Container(
+                        width: 190,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: t.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: t.divider, width: 0.5)),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Row(children: [
+                            _buildCompanyLogo(j, t, size: 26),
+                            const SizedBox(width: 7),
+                            Expanded(child: Text(j.company,
+                                style: GoogleFonts.inter(fontSize: 11, color: t.muted),
+                                maxLines: 1, overflow: TextOverflow.ellipsis)),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isLocal
+                                    ? t.primary.withValues(alpha: 0.08)
+                                    : t.accent.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(4)),
+                              child: Text(isLocal ? 'Local' : 'Remote',
+                                  style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600,
+                                      color: isLocal ? t.primary : t.accent)),
+                            ),
+                          ]),
+                          const SizedBox(height: 6),
+                          Text(j.title, style: GoogleFonts.inter(
+                              fontSize: 13, fontWeight: FontWeight.w600, color: t.primary),
+                              maxLines: 2, overflow: TextOverflow.ellipsis),
+                          const Spacer(),
+                          Text(
+                            j.salaryRange.isNotEmpty && j.salaryRange != 'Salary not listed'
+                                ? j.salaryRange : j.location,
+                            style: GoogleFonts.inter(fontSize: 11,
+                                fontWeight: FontWeight.w500, color: t.muted),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ]),
+                      ),
+                    );
+                  },
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text('No nearby jobs found — try a wider radius',
+                    style: GoogleFonts.inter(fontSize: 13, color: t.muted)),
+              ),
+            const SizedBox(height: 4),
+          ],
+        );
+    }
+  }
+
+  Widget _nearbyBanner({
+    required IconData icon, required String text,
+    String? action, VoidCallback? onAction,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: t.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: t.divider, width: 0.5)),
+        child: Row(children: [
+          Icon(icon, size: 15, color: t.primary),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text,
+              style: GoogleFonts.inter(fontSize: 13, color: t.primary))),
+          if (action != null && onAction != null) ...[
+            GestureDetector(
+              onTap: onAction,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: t.primary, borderRadius: BorderRadius.circular(6)),
+                child: Text(action, style: GoogleFonts.inter(
+                  fontSize: 11, fontWeight: FontWeight.w600, color: t.background)),
+              ),
+            ),
+          ],
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final display = _displayJobs;
@@ -298,11 +543,10 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
           icon: Icon(Icons.arrow_back_ios_new_rounded, color: t.primary, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('AI/ML Jobs', style: GoogleFonts.sourceSerif4(
+        title: Text('Find Jobs', style: GoogleFonts.sourceSerif4(
           fontSize: 20, fontWeight: FontWeight.w600, color: t.primary)),
         centerTitle: true,
         actions: [
-          // Sort button
           IconButton(
             icon: Icon(Icons.sort_rounded, color: t.primary, size: 22),
             onPressed: _showSortSheet,
@@ -397,6 +641,20 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
                 ),
               ),
               const SizedBox(height: 10),
+
+              // ── Near Me section ───────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+                child: Row(children: [
+                  Icon(Icons.near_me_rounded, size: 13, color: t.primary),
+                  const SizedBox(width: 5),
+                  Text('Near Me', style: GoogleFonts.inter(
+                    fontSize: 12, fontWeight: FontWeight.w700, color: t.primary)),
+                ]),
+              ),
+              _buildNearbySection(),
+              Divider(height: 1, color: t.divider),
+              const SizedBox(height: 8),
 
               // ── Job count + sort indicator ────────────────────────────────
               Padding(
@@ -582,6 +840,18 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildCompanyLogo(Job job, AppTheme t, {double size = 40}) {
+    if (job.companyLogo?.isNotEmpty == true) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(size * 0.25),
+        child: CachedNetworkImage(
+          imageUrl: job.companyLogo!, width: size, height: size, fit: BoxFit.cover,
+          errorWidget: (_, __, ___) => _letterAvatarWidget(job, t, size: size)),
+      );
+    }
+    return _letterAvatarWidget(job, t, size: size);
   }
 
   // ── Empty state ───────────────────────────────────────────────────────────

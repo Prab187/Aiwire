@@ -11,7 +11,6 @@ import 'certification_screen.dart';
 import 'forecast_screen.dart';
 import 'investment_screen.dart';
 import 'resume_scan_screen.dart';
-import 'nearby_jobs_screen.dart';
 
 class DiscoverScreen extends StatefulWidget {
   final AppTheme theme;
@@ -287,26 +286,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 delegate: SliverChildListDelegate([
                   _DiscoverCard(
                     theme: t,
-                    icon: Icons.near_me_rounded,
+                    icon: Icons.work_outline_rounded,
                     iconColor: const Color(0xFF3B82F6),
                     iconBg: const Color(0xFFEFF6FF),
-                    title: 'Jobs Near You',
-                    subtitle: 'AI/ML roles in your city & region',
-                    badge: 'GPS',
+                    title: 'Find Jobs',
+                    subtitle: 'Near you · Remote · Hybrid · On-site',
+                    badge: 'GPS + Live',
                     badgeColor: const Color(0xFF3B82F6),
-                    onTap: () => Navigator.push(context,
-                        MaterialPageRoute(
-                            builder: (_) => NearbyJobsScreen(theme: t))),
-                  ),
-                  _DiscoverCard(
-                    theme: t,
-                    icon: Icons.work_outline_rounded,
-                    iconColor: const Color(0xFF8B5CF6),
-                    iconBg: const Color(0xFFF5F3FF),
-                    title: 'Job Board',
-                    subtitle: 'Remote, hybrid & on-site AI/ML roles',
-                    badge: 'Live',
-                    badgeColor: const Color(0xFF22C55E),
                     onTap: () => Navigator.push(context,
                         MaterialPageRoute(
                             builder: (_) => JobBoardScreen(theme: t))),
