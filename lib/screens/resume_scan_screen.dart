@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../models/resume_profile.dart';
@@ -67,6 +68,14 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
       setState(() => _statusMessage = 'Extracting skills & experience\u2026');
 
       final profile = await ResumeService.analyzeResume(file);
+
+      // Persist skills so Job Board can show match scores
+      if (profile.skills.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList('user_skills', profile.skills);
+        await prefs.setString('user_job_title', profile.jobTitle);
+        await prefs.setString('user_level', profile.experienceLevel);
+      }
 
       setState(() => _statusMessage =
           'Finding jobs in ${profile.country}\u2026');

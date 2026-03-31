@@ -35,6 +35,8 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
   final Set<String> _savedJobIds = {};
   final Map<String, String> _appliedStatus = {}; // id → 'applied' | 'interview'
   final List<String> _recentSearches = [];
+  List<String> _userSkills = [];
+  bool _matchFilterActive = false;
   final _searchCtrl = TextEditingController();
   final _searchFocus = FocusNode();
   Timer? _debounce;
@@ -56,6 +58,7 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
     if (_salaryFilter != 'Any') count++;
     if (_dateFilter != 'Any') count++;
     if (_visaOnly) count++;
+    if (_matchFilterActive) count++;
     return count;
   }
 
@@ -98,6 +101,11 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
         } catch (_) {}
         return true;
       }).toList();
+    }
+
+    // Match filter — only show jobs ≥40% match (when resume scanned)
+    if (_matchFilterActive && _userSkills.isNotEmpty) {
+      jobs = jobs.where((j) => _matchPercent(j) >= 40).toList();
     }
 
     // Visa sponsorship filter
@@ -216,6 +224,7 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
       _dateFilter = 'Any';
       _visaOnly = false;
       _showSavedOnly = false;
+      _matchFilterActive = false;
     });
     _loadJobs();
   }
@@ -226,6 +235,7 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
     final recent = prefs.getStringList('jb_recent') ?? [];
     final applied = prefs.getStringList('jb_applied_ids') ?? [];
     final interview = prefs.getStringList('jb_interview_ids') ?? [];
+    final skills = prefs.getStringList('user_skills') ?? [];
     if (!mounted) return;
     setState(() {
       _savedJobIds.addAll(saved);
@@ -233,7 +243,24 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
       _recentSearches.addAll(recent.take(5));
       for (final id in applied) _appliedStatus[id] = 'applied';
       for (final id in interview) _appliedStatus[id] = 'interview';
+      _userSkills = skills;
     });
+  }
+
+  /// How many of the user's skills appear in this job (0–100)
+  int _matchPercent(Job job) {
+    if (_userSkills.isEmpty) return 0;
+    final userLower = _userSkills
+        .where((s) => s.length > 1)
+        .map((s) => s.toLowerCase())
+        .toSet();
+    final jobText =
+        '${job.title} ${job.description} ${job.skills.join(' ')}'.toLowerCase();
+    int matched = 0;
+    for (final skill in userLower) {
+      if (jobText.contains(skill)) matched++;
+    }
+    return ((matched / userLower.length) * 100).clamp(0, 100).round();
   }
 
   Future<void> _savePrefs() async {
@@ -461,6 +488,15 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
                       active: _showSavedOnly,
                       onTap: () => setState(() => _showSavedOnly = !_showSavedOnly),
                     ),
+                    if (_userSkills.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      _FilterChip(
+                        label: 'My Match 40%+',
+                        theme: t,
+                        active: _matchFilterActive,
+                        onTap: () => setState(() => _matchFilterActive = !_matchFilterActive),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -480,20 +516,24 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
                           padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
                           itemCount: display.length,
                           separatorBuilder: (_, __) => const SizedBox(height: 10),
-                          itemBuilder: (_, i) => _JobCard(
-                            job: display[i],
-                            theme: t,
-                            isSaved: _savedJobIds.contains(display[i].id),
-                            appliedStatus: _appliedStatus[display[i].id],
-                            onToggleSave: (id) {
-                              setState(() {
-                                if (_savedJobIds.contains(id)) _savedJobIds.remove(id);
-                                else _savedJobIds.add(id);
-                              });
-                              _savePrefs();
-                            },
-                            onTap: () => _showJobDetail(context, display[i]),
-                          ),
+                          itemBuilder: (_, i) {
+                            final mp = _matchPercent(display[i]);
+                            return _JobCard(
+                              job: display[i],
+                              theme: t,
+                              isSaved: _savedJobIds.contains(display[i].id),
+                              appliedStatus: _appliedStatus[display[i].id],
+                              matchPercent: _userSkills.isNotEmpty ? mp : null,
+                              onToggleSave: (id) {
+                                setState(() {
+                                  if (_savedJobIds.contains(id)) _savedJobIds.remove(id);
+                                  else _savedJobIds.add(id);
+                                });
+                                _savePrefs();
+                              },
+                              onTap: () => _showJobDetail(context, display[i]),
+                            );
+                          },
                         ),
                       ),
               ),
@@ -1145,28 +1185,38 @@ class _JobCard extends StatelessWidget {
   final AppTheme theme;
   final bool isSaved;
   final String? appliedStatus;
+  final int? matchPercent; // null = no resume scanned
   final ValueChanged<String> onToggleSave;
   final VoidCallback onTap;
 
   const _JobCard({
     required this.job, required this.theme,
     required this.isSaved, required this.onToggleSave, required this.onTap,
-    this.appliedStatus,
+    this.appliedStatus, this.matchPercent,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = theme;
     final isNew = _isNew(job.postedAt);
+    final mp = matchPercent;
+    final isLowMatch = mp != null && mp < 40;
+    final isGoodMatch = mp != null && mp >= 40;
 
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: Opacity(
+        opacity: isLowMatch ? 0.55 : 1.0,
+        child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: t.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: t.divider, width: 0.5),
+          border: Border.all(
+            color: isGoodMatch
+              ? const Color(0xFF22C55E).withValues(alpha: 0.4)
+              : t.divider,
+            width: isGoodMatch ? 1.0 : 0.5),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1195,8 +1245,28 @@ class _JobCard extends StatelessWidget {
                     ],
                   ]),
                   const SizedBox(height: 2),
-                  Text(job.company, style: GoogleFonts.inter(
-                    fontSize: 13, color: t.secondary)),
+                  Row(children: [
+                    Expanded(child: Text(job.company, style: GoogleFonts.inter(
+                      fontSize: 13, color: t.secondary))),
+                    if (mp != null) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isGoodMatch
+                            ? const Color(0xFF22C55E).withValues(alpha: 0.1)
+                            : const Color(0xFFF59E0B).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4)),
+                        child: Text(
+                          isGoodMatch ? '$mp% match' : '$mp% match',
+                          style: GoogleFonts.inter(
+                            fontSize: 10, fontWeight: FontWeight.w700,
+                            color: isGoodMatch
+                              ? const Color(0xFF16A34A)
+                              : const Color(0xFFD97706))),
+                      ),
+                    ],
+                  ]),
                 ],
               )),
               GestureDetector(
@@ -1277,8 +1347,18 @@ class _JobCard extends StatelessWidget {
                   ),
               ],
             ),
+            // Low match notice
+            if (isLowMatch) ...[
+              const SizedBox(height: 6),
+              Text('$mp% match · below your 40% threshold',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  color: const Color(0xFFD97706),
+                  fontStyle: FontStyle.italic)),
+            ],
           ],
         ),
+      ),
       ),
     );
   }
