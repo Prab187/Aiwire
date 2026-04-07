@@ -53,11 +53,16 @@ class AIService {
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
-      final summary = data['content'][0]['text'] as String;
+      final contentList = data['content'] as List?;
+      if (contentList == null || contentList.isEmpty) {
+        throw Exception('Empty response from AI');
+      }
+      final summary = (contentList[0]['text'] as String?) ?? '';
+      if (summary.isEmpty) throw Exception('Empty summary');
       if (url != null) SummaryCache.set(url, summary);
       return summary;
     } else {
-      throw Exception('Failed: ${response.statusCode}');
+      throw Exception('AI service error: ${response.statusCode}');
     }
   }
 

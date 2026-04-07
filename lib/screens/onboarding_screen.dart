@@ -63,7 +63,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(p['icon']!, style: const TextStyle(fontSize: 48)),
                   const SizedBox(height: 40),
-                  Text(p['title']!, style: GoogleFonts.playfairDisplay(
+                  Text(p['title']!, style: GoogleFonts.sourceSerif4(
                     fontSize: 42, fontWeight: FontWeight.w700,
                     color: Colors.white, height: 1.15)),
                   const SizedBox(height: 24),

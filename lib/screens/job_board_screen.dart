@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -22,11 +23,36 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
   String _levelFilter = 'All';
   String _salaryFilter = 'Any';
   String _searchQuery = '';
+  String _region = 'us';
+  String _regionLabel = 'US';
   final _searchController = TextEditingController();
   final Set<String> _savedJobIds = {};
   bool _showSavedOnly = false;
 
   AppTheme get t => widget.theme;
+
+  static const _regionMap = {
+    'US': 'us', 'GB': 'gb', 'UK': 'gb', 'CA': 'ca', 'AU': 'au',
+    'DE': 'de', 'FR': 'fr', 'IN': 'in', 'NL': 'nl', 'BR': 'br',
+    'SG': 'sg', 'NZ': 'nz', 'IT': 'it', 'ES': 'es', 'PL': 'pl',
+    'AT': 'at', 'CH': 'ch', 'ZA': 'za', 'RU': 'ru', 'SE': 'se',
+  };
+
+  static const _regionLabels = {
+    'us': 'US', 'gb': 'UK', 'ca': 'Canada', 'au': 'Australia',
+    'de': 'Germany', 'fr': 'France', 'in': 'India', 'nl': 'Netherlands',
+    'br': 'Brazil', 'sg': 'Singapore', 'nz': 'New Zealand',
+    'it': 'Italy', 'es': 'Spain', 'pl': 'Poland',
+    'at': 'Austria', 'ch': 'Switzerland', 'za': 'South Africa',
+    'ru': 'Russia', 'se': 'Sweden',
+  };
+
+  void _detectRegion() {
+    final locale = ui.PlatformDispatcher.instance.locale;
+    final cc = locale.countryCode?.toUpperCase() ?? 'US';
+    _region = _regionMap[cc] ?? 'us';
+    _regionLabel = _regionLabels[_region] ?? 'Global';
+  }
 
   List<Job> get _filteredJobs {
     var jobs = _allJobs;
@@ -70,6 +96,7 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
   @override
   void initState() {
     super.initState();
+    _detectRegion();
     if (widget.initialQuery != null && widget.initialQuery!.isNotEmpty) {
       _searchQuery = widget.initialQuery!;
       _searchController.text = widget.initialQuery!;
@@ -89,6 +116,7 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
       query: _searchQuery.isEmpty ? null : _searchQuery,
       type: _typeFilter,
       level: _levelFilter,
+      country: _region,
     );
     setState(() { _allJobs = jobs; _loading = false; });
   }
@@ -105,7 +133,7 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
           icon: Icon(Icons.arrow_back_ios_new_rounded, color: t.primary, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('AI/ML Jobs', style: GoogleFonts.sourceSerif4(
+        title: Text('Find Jobs', style: GoogleFonts.sourceSerif4(
           fontSize: 20, fontWeight: FontWeight.w700, color: t.primary)),
         centerTitle: true,
         bottom: PreferredSize(
@@ -154,6 +182,8 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               children: [
+                _FilterChip(label: _regionLabel, theme: t, active: true, onTap: () => _showFilterSheet('region')),
+                const SizedBox(width: 8),
                 _FilterChip(label: 'Type: $_typeFilter', theme: t, onTap: () => _showFilterSheet('type')),
                 const SizedBox(width: 8),
                 _FilterChip(label: 'Level: $_levelFilter', theme: t, onTap: () => _showFilterSheet('level')),
@@ -350,6 +380,10 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
     String title;
 
     switch (filterType) {
+      case 'region':
+        options = ['US', 'UK', 'Canada', 'Australia', 'Germany', 'France', 'India', 'Netherlands', 'Singapore', 'Global'];
+        current = _regionLabel;
+        title = 'Region';
       case 'type':
         options = ['All', 'Remote', 'Hybrid', 'On-site'];
         current = _typeFilter;
@@ -387,6 +421,15 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
                 Navigator.pop(context);
                 setState(() {
                   switch (filterType) {
+                    case 'region':
+                      _regionLabel = o;
+                      if (o == 'Global') {
+                        _region = 'us';
+                      } else {
+                        _region = _regionLabels.entries
+                            .firstWhere((e) => e.value == o, orElse: () => const MapEntry('us', 'US'))
+                            .key;
+                      }
                     case 'type': _typeFilter = o;
                     case 'level': _levelFilter = o;
                     case 'salary': _salaryFilter = o;

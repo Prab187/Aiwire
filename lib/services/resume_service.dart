@@ -4,6 +4,40 @@ import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import '../models/resume_profile.dart';
 
+const _sampleResumeText = '''ALEX MORGAN
+ML Engineer · San Francisco, CA · alex.morgan@email.com · +1 (415) 555-0142
+
+PROFESSIONAL SUMMARY
+Machine learning engineer with 4 years of experience building production ML systems at consumer-tech companies. Specialized in recommendation systems, NLP, and MLOps. Improved core engagement metrics by 18% through model iteration and rigorous offline/online evaluation.
+
+EXPERIENCE
+
+Senior ML Engineer · Lumen Labs · 2023 — Present (San Francisco, CA)
+• Led the redesign of the personalized feed ranker, lifting click-through rate by 18% and watch-time by 12%
+• Built a real-time feature store on GCP serving 200M predictions/day with p99 latency under 80ms
+• Mentored 3 junior engineers and ran weekly ML reading group on transformer architectures
+
+ML Engineer · Sift Inc · 2021 — 2023 (Remote)
+• Developed a fraud-detection model using gradient boosted trees that reduced false positives by 30%
+• Owned the ML evaluation pipeline using MLflow and Airflow on AWS
+• Shipped a BERT-based ticket triage classifier saving 1,200 hours/month of manual work
+
+EDUCATION
+M.S. Computer Science (Machine Learning) · UC Berkeley · 2021
+B.S. Computer Science · UCLA · 2019
+
+SKILLS
+Python, PyTorch, TensorFlow, scikit-learn, SQL, AWS, GCP, Docker, Kubernetes, MLflow, Airflow, Spark, BigQuery, Transformers, NLP, Recommendation Systems
+
+CERTIFICATIONS
+AWS Certified Machine Learning – Specialty (2023)
+Deep Learning Specialization, DeepLearning.AI / Coursera (2022)
+
+PROJECTS
+Open-source contributor to Hugging Face Datasets (3 merged PRs)
+Built a personal ML dashboard tracking 50+ Kaggle competitions
+''';
+
 class ResumeService {
   /// Pick a resume file from device (PDF or TXT).
   static Future<PlatformFile?> pickResumeFile() async {
@@ -13,6 +47,17 @@ class ResumeService {
       withData: true,
     );
     return result?.files.firstOrNull;
+  }
+
+  /// Returns an in-memory PlatformFile containing a built-in sample resume,
+  /// so users can try the scanner without uploading their own.
+  static PlatformFile sampleResumeFile() {
+    final bytes = Uint8List.fromList(utf8.encode(_sampleResumeText));
+    return PlatformFile(
+      name: 'sample_resume.txt',
+      size: bytes.length,
+      bytes: bytes,
+    );
   }
 
   /// Analyze the picked file with Claude and return a ResumeProfile.
@@ -28,18 +73,29 @@ class ResumeService {
         ? _pdfContent(bytes)
         : _textContent(bytes);
 
-    final prompt = '''Analyze this resume/CV and respond with ONLY a valid JSON object — no markdown, no explanation:
+    final prompt = '''Analyze this resume/CV thoroughly and respond with ONLY a valid JSON object — no markdown, no explanation:
 {
-  "name": "candidate full name or null if not found",
-  "skills": ["up to 8 most important technical skills"],
+  "name": "candidate full name or null",
+  "skills": ["up to 10 most important technical skills found in the resume"],
   "experience_level": "Junior|Mid|Senior|Lead|Principal",
-  "country": "full country name where the candidate is located",
-  "country_code": "2-letter lowercase Adzuna country code — choose from: us gb au ca de fr in nl sg br za pl es it at be ch nz mx — use us if unsure",
-  "job_title": "best matching job title to search for (e.g. ML Engineer, Data Scientist)",
-  "summary": "1-2 sentence professional summary"
+  "years_of_experience": 0,
+  "country": "full country name",
+  "country_code": "2-letter lowercase code — us gb au ca de fr in nl sg br za pl es it at be ch nz mx — use us if unsure",
+  "job_title": "best matching job title (e.g. ML Engineer, Data Scientist)",
+  "summary": "2-3 sentence professional summary highlighting their strongest qualifications",
+  "projects": ["up to 4 notable projects or work achievements mentioned — short 1-line each"],
+  "certifications": ["all certifications or courses mentioned"],
+  "education": "highest education: degree, institution, year if available",
+  "strengths": ["3 key strengths based on what stands out in the resume"],
+  "gaps": ["2-3 skill gaps or areas for improvement based on current AI/ML market demands"],
+  "ats_score": <integer 0-100 estimating how well this resume would pass an ATS scanner — based on keywords, structure, action verbs, quantified achievements, formatting>,
+  "ats_issues": ["2-4 specific fixes to improve the ATS score, e.g. 'Add quantified achievements (% improved, dollars saved)', 'Use standard section headings', 'Add missing keywords: TensorFlow, Kubernetes'"]
 }
 
-Determine the country from: address, phone country code (+44 = gb, +1 = us/ca, +91 = in, +61 = au, +49 = de, etc.), or any location mention.''';
+Extract years_of_experience by calculating from work history dates. If dates unclear, estimate from experience_level.
+Determine country from: address, phone country code, or any location mention.
+For strengths: identify what makes this candidate competitive.
+For gaps: identify what's missing compared to top AI/ML job requirements today (e.g. missing cloud certs, no LLM experience, no MLOps, etc).''';
 
     final response = await http.post(
       Uri.parse('https://api.anthropic.com/v1/messages'),
@@ -51,7 +107,7 @@ Determine the country from: address, phone country code (+44 = gb, +1 = us/ca, +
       },
       body: json.encode({
         'model': 'claude-haiku-4-5',
-        'max_tokens': 400,
+        'max_tokens': 1100,
         'messages': [
           {
             'role': 'user',

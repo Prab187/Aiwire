@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../models/certification.dart';
@@ -24,13 +26,33 @@ class _CertificationScreenState extends State<CertificationScreen>
   final _searchCtrl = TextEditingController();
   late TabController _tabCtrl;
 
+  // Resume-based recommendation state
+  List<String> _userSkills = [];
+  String _userLevel = '';
+  String _userJobTitle = '';
+  bool _hasResume = false;
+
+  // Manual skill input state (when no resume)
+  String? _selectedSkill;
+  String _selectedYears = '0-1';
+
   AppTheme get t => widget.theme;
+
+  static const _commonSkills = [
+    'Python', 'Machine Learning', 'Deep Learning', 'NLP',
+    'Computer Vision', 'Data Science', 'TensorFlow', 'PyTorch',
+    'Cloud (AWS/GCP/Azure)', 'MLOps', 'SQL', 'Statistics',
+    'LLM', 'Generative AI', 'Reinforcement Learning',
+  ];
+
+  static const _yearOptions = ['0-1', '1-2', '2-4', '5+'];
 
   @override
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 2, vsync: this);
     _loadCerts();
+    _loadResumeSkills();
   }
 
   @override
@@ -40,13 +62,27 @@ class _CertificationScreenState extends State<CertificationScreen>
     super.dispose();
   }
 
+  Future<void> _loadResumeSkills() async {
+    final prefs = await SharedPreferences.getInstance();
+    final skills = prefs.getStringList('user_skills') ?? [];
+    final level = prefs.getString('user_level') ?? '';
+    final title = prefs.getString('user_job_title') ?? '';
+    if (mounted) setState(() {
+      _userSkills = skills;
+      _userLevel = level;
+      _userJobTitle = title;
+      _hasResume = skills.isNotEmpty;
+      if (skills.isNotEmpty) _selectedSkill = skills.first;
+    });
+  }
+
   Future<void> _loadCerts() async {
     setState(() => _loading = true);
     final certs = await CertificationService.fetchCertifications(
       level: _levelFilter, providerType: _providerFilter);
     _allCerts = certs;
     _applySearch();
-    setState(() => _loading = false);
+    if (mounted) setState(() => _loading = false);
   }
 
   void _applySearch() {
@@ -56,9 +92,42 @@ class _CertificationScreenState extends State<CertificationScreen>
       final q = _searchQuery.toLowerCase();
       _certs = _allCerts.where((c) =>
         c.name.toLowerCase().contains(q) ||
-        c.provider.toLowerCase().contains(q)
+        c.provider.toLowerCase().contains(q) ||
+        c.skills.any((s) => s.toLowerCase().contains(q))
       ).toList();
     }
+  }
+
+  // Get recommended certs based on skill + experience
+  List<Certification> get _recommended {
+    final skill = _selectedSkill?.toLowerCase() ?? '';
+    final years = _selectedYears;
+
+    if (skill.isEmpty) return _allCerts.take(5).toList();
+
+    // Map years to cert levels
+    final targetLevels = <String>[];
+    switch (years) {
+      case '0-1': targetLevels.addAll(['Beginner']);
+      case '1-2': targetLevels.addAll(['Beginner', 'Intermediate']);
+      case '2-4': targetLevels.addAll(['Intermediate', 'Advanced']);
+      case '5+': targetLevels.addAll(['Advanced']);
+    }
+
+    // Score certs by relevance
+    final scored = _allCerts.map((c) {
+      int score = 0;
+      // Skill match
+      if (c.skills.any((s) => s.toLowerCase().contains(skill))) score += 3;
+      if (c.name.toLowerCase().contains(skill)) score += 2;
+      if (c.description.toLowerCase().contains(skill)) score += 1;
+      // Level match
+      if (targetLevels.contains(c.level)) score += 2;
+      return (cert: c, score: score);
+    }).where((r) => r.score > 0).toList()
+      ..sort((a, b) => b.score.compareTo(a.score));
+
+    return scored.take(6).map((r) => r.cert).toList();
   }
 
   @override
@@ -77,333 +146,378 @@ class _CertificationScreenState extends State<CertificationScreen>
         centerTitle: true,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(49),
-          child: Column(
-            children: [
-              TabBar(
-                controller: _tabCtrl,
-                labelColor: t.primary,
-                unselectedLabelColor: t.muted,
-                indicatorColor: t.primary,
-                indicatorWeight: 1.5,
-                labelStyle: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
-                unselectedLabelStyle: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w400),
-                tabs: const [
-                  Tab(text: 'Browse'),
-                  Tab(text: 'By Experience'),
-                ],
-              ),
-              Divider(height: 1, color: t.divider),
-            ],
-          ),
+          child: Column(children: [
+            TabBar(
+              controller: _tabCtrl,
+              labelColor: t.primary,
+              unselectedLabelColor: t.muted,
+              indicatorColor: t.primary,
+              indicatorWeight: 1.5,
+              labelStyle: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
+              unselectedLabelStyle: GoogleFonts.inter(fontSize: 14),
+              tabs: const [Tab(text: 'Browse'), Tab(text: 'For You')],
+            ),
+            Divider(height: 1, color: t.divider),
+          ]),
         ),
       ),
       body: TabBarView(
         controller: _tabCtrl,
         children: [
           _buildBrowseTab(),
-          const _ExperienceGuideTab(),
+          _buildForYouTab(),
         ],
       ),
     );
   }
 
+  // ── Browse Tab ─────────────────────────────────────────────────────────────
   Widget _buildBrowseTab() {
-    return Column(
-      children: [
-        // Search bar
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: TextField(
-            controller: _searchCtrl,
-            style: GoogleFonts.inter(color: t.primary, fontSize: 14),
-            decoration: InputDecoration(
-              hintText: 'Search certifications, providers...',
-              hintStyle: GoogleFonts.inter(color: t.muted, fontSize: 14),
-              prefixIcon: Icon(Icons.search_rounded, color: t.muted, size: 20),
-              filled: true,
-              fillColor: t.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: t.divider),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: t.divider),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: t.primary),
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            ),
-            onChanged: (v) {
-              setState(() {
-                _searchQuery = v;
-                _applySearch();
-              });
-            },
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+        child: TextField(
+          controller: _searchCtrl,
+          style: GoogleFonts.inter(color: t.primary, fontSize: 14),
+          decoration: InputDecoration(
+            hintText: 'Search certifications, skills...',
+            hintStyle: GoogleFonts.inter(color: t.muted, fontSize: 14),
+            prefixIcon: Icon(Icons.search_rounded, color: t.muted, size: 20),
+            filled: true, fillColor: t.surface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: t.divider)),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: t.divider)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: t.primary)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           ),
+          onChanged: (v) => setState(() { _searchQuery = v; _applySearch(); }),
         ),
-        // Level filter chips
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-          child: SizedBox(
-            height: 36,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                _buildChip('All Levels', _levelFilter == 'All', () {
-                  setState(() => _levelFilter = 'All'); _loadCerts(); }),
-                _buildChip('Beginner', _levelFilter == 'Beginner', () {
-                  setState(() => _levelFilter = 'Beginner'); _loadCerts(); }),
-                _buildChip('Intermediate', _levelFilter == 'Intermediate', () {
-                  setState(() => _levelFilter = 'Intermediate'); _loadCerts(); }),
-                _buildChip('Advanced', _levelFilter == 'Advanced', () {
-                  setState(() => _levelFilter = 'Advanced'); _loadCerts(); }),
+      ),
+      SizedBox(
+        height: 36,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          children: [
+            for (final l in ['All', 'Beginner', 'Intermediate', 'Advanced'])
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: _buildChip(l == 'All' ? 'All Levels' : l, _levelFilter == l, () {
+                  setState(() => _levelFilter = l); _loadCerts();
+                }),
+              ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 4),
+      SizedBox(
+        height: 36,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          children: [
+            for (final p in ['All', 'Tech Company', 'University', 'Platform'])
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: _buildChip(p == 'All' ? 'All Providers' : p, _providerFilter == p, () {
+                  setState(() => _providerFilter = p); _loadCerts();
+                }),
+              ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 8),
+      Expanded(
+        child: _loading
+          ? Center(child: CircularProgressIndicator(color: t.primary, strokeWidth: 1.5))
+          : _certs.isEmpty
+            ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.school_outlined, size: 44, color: t.muted.withValues(alpha: 0.3)),
+                const SizedBox(height: 12),
+                Text('No certifications found', style: GoogleFonts.sourceSerif4(
+                  fontSize: 16, fontWeight: FontWeight.w600, color: t.primary)),
+                const SizedBox(height: 4),
+                Text('Try different filters', style: GoogleFonts.inter(fontSize: 13, color: t.muted)),
+              ]))
+            : ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
+                itemCount: _certs.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (_, i) => _CertCard(cert: _certs[i], theme: t),
+              ),
+      ),
+    ]);
+  }
+
+  // ── For You Tab (Resume-based or Manual) ───────────────────────────────────
+  Widget _buildForYouTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+
+        // Profile card
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: t.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: t.divider, width: 0.5)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(9)),
+                child: const Icon(Icons.auto_awesome_rounded, size: 16, color: Color(0xFF6366F1)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Text(
+                _hasResume ? 'Based on your resume' : 'Select your skill',
+                style: GoogleFonts.inter(
+                  fontSize: 15, fontWeight: FontWeight.w700, color: t.primary))),
+            ]),
+            const SizedBox(height: 12),
+
+            if (_hasResume) ...[
+              // Show detected skills from resume
+              Text('Skills: ${_userSkills.take(5).join(", ")}', style: GoogleFonts.inter(
+                fontSize: 13, color: t.muted)),
+              if (_userJobTitle.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text('Role: $_userJobTitle · $_userLevel', style: GoogleFonts.inter(
+                  fontSize: 13, color: t.muted)),
               ],
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-          child: SizedBox(
-            height: 36,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                _buildChip('All Providers', _providerFilter == 'All', () {
-                  setState(() => _providerFilter = 'All'); _loadCerts(); }),
-                _buildChip('Tech Company', _providerFilter == 'Tech Company', () {
-                  setState(() => _providerFilter = 'Tech Company'); _loadCerts(); }),
-                _buildChip('University', _providerFilter == 'University', () {
-                  setState(() => _providerFilter = 'University'); _loadCerts(); }),
-                _buildChip('Platform', _providerFilter == 'Platform', () {
-                  setState(() => _providerFilter = 'Platform'); _loadCerts(); }),
-              ],
-            ),
-          ),
-        ),
-        Expanded(
-          child: _loading
-            ? Center(child: CircularProgressIndicator(color: t.primary, strokeWidth: 1.5))
-            : _certs.isEmpty
-              ? Center(child: Text('No certifications found', style: GoogleFonts.inter(color: t.muted)))
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
-                  itemCount: _certs.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (_, i) => _CertCard(cert: _certs[i], theme: t),
+              const SizedBox(height: 12),
+              Text('We recommend courses to strengthen your profile:', style: GoogleFonts.inter(
+                fontSize: 13, color: t.secondary, height: 1.4)),
+            ] else ...[
+              // Manual skill picker
+              Text('Pick your primary skill:', style: GoogleFonts.inter(
+                fontSize: 13, color: t.muted)),
+              const SizedBox(height: 10),
+              Wrap(spacing: 6, runSpacing: 6, children: _commonSkills.map((s) =>
+                GestureDetector(
+                  onTap: () { HapticFeedback.selectionClick(); setState(() => _selectedSkill = s); },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: _selectedSkill == s
+                        ? t.primary.withValues(alpha: 0.1) : t.background,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: _selectedSkill == s
+                          ? t.primary.withValues(alpha: 0.3) : t.divider)),
+                    child: Text(s, style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: _selectedSkill == s ? FontWeight.w600 : FontWeight.w400,
+                      color: _selectedSkill == s ? t.primary : t.secondary)),
+                  ),
                 ),
+              ).toList()),
+              const SizedBox(height: 14),
+
+              // Years of experience
+              Text('Years of experience:', style: GoogleFonts.inter(
+                fontSize: 13, color: t.muted)),
+              const SizedBox(height: 8),
+              Row(children: _yearOptions.map((y) => Expanded(child: Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: GestureDetector(
+                  onTap: () { HapticFeedback.selectionClick(); setState(() => _selectedYears = y); },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _selectedYears == y
+                        ? t.primary.withValues(alpha: 0.1) : t.background,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _selectedYears == y
+                          ? t.primary.withValues(alpha: 0.3) : t.divider)),
+                    child: Center(child: Text('$y yr${y == '5+' ? 's' : ''}',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: _selectedYears == y ? FontWeight.w700 : FontWeight.w400,
+                        color: _selectedYears == y ? t.primary : t.secondary))),
+                  ),
+                ),
+              ))).toList()),
+            ],
+          ]),
         ),
-      ],
+
+        const SizedBox(height: 20),
+
+        // Recommended certs
+        if (_selectedSkill != null || _hasResume) ...[
+          Text('Recommended for you', style: GoogleFonts.sourceSerif4(
+            fontSize: 17, fontWeight: FontWeight.w700, color: t.primary)),
+          const SizedBox(height: 4),
+          Text(
+            _hasResume
+              ? 'Based on your $_userLevel profile in $_userJobTitle'
+              : 'Based on $_selectedSkill · $_selectedYears years',
+            style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
+          const SizedBox(height: 12),
+
+          if (_loading)
+            Center(child: Padding(
+              padding: const EdgeInsets.all(40),
+              child: CircularProgressIndicator(color: t.primary, strokeWidth: 1.5)))
+          else if (_recommended.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Center(child: Text('No matching certifications found',
+                style: GoogleFonts.inter(fontSize: 13, color: t.muted))),
+            )
+          else
+            ..._recommended.map((c) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _CertCard(cert: c, theme: t, showWhy: true,
+                skill: _selectedSkill ?? (_userSkills.isNotEmpty ? _userSkills.first : '')),
+            )),
+        ] else
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: Column(children: [
+              Icon(Icons.touch_app_outlined, size: 40, color: t.muted.withValues(alpha: 0.3)),
+              const SizedBox(height: 12),
+              Text('Select a skill above', style: GoogleFonts.inter(
+                fontSize: 14, color: t.muted)),
+              const SizedBox(height: 4),
+              Text('to get personalized recommendations', style: GoogleFonts.inter(
+                fontSize: 13, color: t.muted.withValues(alpha: 0.6))),
+            ])),
+          ),
+      ]),
     );
   }
 
   Widget _buildChip(String label, bool active, VoidCallback onTap) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          decoration: BoxDecoration(
-            color: active ? t.primary.withValues(alpha: 0.08) : t.surface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: active ? t.primary.withValues(alpha: 0.2) : t.divider),
-          ),
-          child: Text(label, style: GoogleFonts.inter(
-            fontSize: 12, fontWeight: active ? FontWeight.w600 : FontWeight.w500,
-            color: active ? t.primary : t.secondary)),
-        ),
+    return GestureDetector(
+      onTap: () { HapticFeedback.selectionClick(); onTap(); },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: active ? t.primary.withValues(alpha: 0.08) : t.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: active ? t.primary.withValues(alpha: 0.2) : t.divider)),
+        child: Text(label, style: GoogleFonts.inter(
+          fontSize: 12, fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+          color: active ? t.primary : t.secondary)),
       ),
     );
   }
 }
 
+// ── Cert Card ──────────────────────────────────────────────────────────────────
 class _CertCard extends StatelessWidget {
   final Certification cert;
   final AppTheme theme;
+  final bool showWhy;
+  final String skill;
 
-  const _CertCard({required this.cert, required this.theme});
-
-  Future<void> _openSource() async {
-    if (cert.url != null) {
-      final uri = Uri.parse(cert.url!);
-      if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
-
-  String? _timeCommitmentHelper() {
-    final duration = cert.duration;
-    if (duration == null) return null;
-
-    // Try to match "N weeks"
-    final weeksMatch = RegExp(r'(\d+)\s*week', caseSensitive: false).firstMatch(duration);
-    if (weeksMatch != null) {
-      final weeks = int.tryParse(weeksMatch.group(1) ?? '');
-      if (weeks != null) return 'At 5 hrs/week → ~$weeks weeks';
-    }
-
-    // Try to match "N hours"
-    final hoursMatch = RegExp(r'(\d+)\s*hour', caseSensitive: false).firstMatch(duration);
-    if (hoursMatch != null) {
-      final hours = int.tryParse(hoursMatch.group(1) ?? '');
-      if (hours != null) {
-        final weeks = (hours / 5.0).ceil();
-        return 'At 5 hrs/week → ~$weeks weeks';
-      }
-    }
-
-    return null;
-  }
+  const _CertCard({required this.cert, required this.theme,
+    this.showWhy = false, this.skill = ''});
 
   @override
   Widget build(BuildContext context) {
     final t = theme;
-    final timeHelper = _timeCommitmentHelper();
-    final isPopular = cert.enrolledCount != null && cert.enrolledCount! >= 100000;
-
     return GestureDetector(
-      onTap: _openSource,
+      onTap: () async {
+        HapticFeedback.lightImpact();
+        if (cert.url != null) {
+          final uri = Uri.parse(cert.url!);
+          if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      },
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: t.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: t.divider, width: 0.5),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+          border: Border.all(color: t.divider, width: 0.5)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                color: t.primary.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(10)),
+              child: Icon(_providerIcon(cert.providerType), color: t.primary, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 44, height: 44,
-                  decoration: BoxDecoration(
-                    color: t.primary.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(_providerIcon(cert.providerType),
-                    color: t.primary, size: 22),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(cert.name, style: GoogleFonts.inter(
-                              fontSize: 15, fontWeight: FontWeight.w600, color: t.primary),
-                              maxLines: 2, overflow: TextOverflow.ellipsis),
-                          ),
-                          if (isPopular) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: t.primary.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text('Popular', style: GoogleFonts.inter(
-                                fontSize: 10, fontWeight: FontWeight.w600, color: t.primary)),
-                            ),
-                          ] else if (cert.isNew) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: t.accent.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text('New', style: GoogleFonts.inter(
-                                fontSize: 10, fontWeight: FontWeight.w600, color: t.accent)),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(cert.provider, style: GoogleFonts.inter(
-                        fontSize: 13, color: t.secondary)),
-                    ],
-                  ),
-                ),
+                Text(cert.name, style: GoogleFonts.inter(
+                  fontSize: 14, fontWeight: FontWeight.w600, color: t.primary),
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                Text(cert.provider, style: GoogleFonts.inter(fontSize: 12, color: t.secondary)),
               ],
+            )),
+          ]),
+          const SizedBox(height: 8),
+
+          // Why this cert (for "For You" tab)
+          if (showWhy && skill.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(8)),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Icon(Icons.auto_awesome_rounded, size: 12, color: Color(0xFF6366F1)),
+                const SizedBox(width: 6),
+                Expanded(child: Text(
+                  'Recommended for $skill professionals at ${cert.level} level',
+                  style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF6366F1), height: 1.4))),
+              ]),
             ),
-            const SizedBox(height: 10),
-            Text(cert.description, style: GoogleFonts.inter(
-              fontSize: 13, color: t.muted, height: 1.4),
-              maxLines: 2, overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 12),
-            // Skills
-            Wrap(
-              spacing: 6, runSpacing: 6,
-              children: cert.skills.take(4).map((s) => Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: t.background,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(s, style: GoogleFonts.inter(
-                  fontSize: 11, color: t.secondary, fontWeight: FontWeight.w500)),
-              )).toList(),
-            ),
-            const SizedBox(height: 12),
-            // Meta
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(cert.level, style: GoogleFonts.inter(
-                  fontSize: 12, fontWeight: FontWeight.w600, color: t.secondary)),
-                if (cert.duration != null)
-                  Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.schedule_rounded, size: 14, color: t.muted),
-                    const SizedBox(width: 4),
-                    Text(cert.duration!, style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
-                  ]),
-                if (cert.rating != null)
-                  Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.star_rounded, size: 14, color: t.muted),
-                    const SizedBox(width: 2),
-                    Text(cert.rating!.toStringAsFixed(1), style: GoogleFonts.inter(
-                      fontSize: 12, color: t.secondary, fontWeight: FontWeight.w500)),
-                  ]),
-                Text(cert.isFree ? 'Free' : cert.price ?? 'Paid',
-                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600,
-                    color: t.primary)),
-              ],
-            ),
-            // Time commitment helper
-            if (timeHelper != null) ...[
-              const SizedBox(height: 6),
-              Text(timeHelper,
-                style: GoogleFonts.inter(fontSize: 11, color: t.muted, fontStyle: FontStyle.italic)),
-            ],
-            if (cert.enrolledCount != null) ...[
-              const SizedBox(height: 8),
-              Text('${_formatNumber(cert.enrolledCount!)} enrolled',
-                style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
-            ],
-            if (cert.url != null) ...[
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Icon(Icons.open_in_new_rounded, size: 14, color: t.accent),
-                  const SizedBox(width: 6),
-                  Text('Register / Enroll',
-                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600,
-                      color: t.accent)),
-                  const Spacer(),
-                  Icon(Icons.arrow_forward_ios_rounded, size: 12, color: t.accent),
-                ],
-              ),
-            ],
+            const SizedBox(height: 8),
           ],
-        ),
+
+          // Skills
+          Wrap(spacing: 5, runSpacing: 5, children: cert.skills.take(4).map((s) =>
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: t.background, borderRadius: BorderRadius.circular(4)),
+              child: Text(s, style: GoogleFonts.inter(
+                fontSize: 10, color: t.secondary, fontWeight: FontWeight.w500)),
+            )).toList()),
+          const SizedBox(height: 8),
+
+          // Meta row
+          Row(children: [
+            Text(cert.level, style: GoogleFonts.inter(
+              fontSize: 12, fontWeight: FontWeight.w600, color: t.secondary)),
+            if (cert.duration != null) ...[
+              const SizedBox(width: 8),
+              Icon(Icons.schedule_rounded, size: 13, color: t.muted),
+              const SizedBox(width: 3),
+              Text(cert.duration!, style: GoogleFonts.inter(fontSize: 11, color: t.muted)),
+            ],
+            if (cert.rating != null) ...[
+              const SizedBox(width: 8),
+              Icon(Icons.star_rounded, size: 13, color: t.muted),
+              const SizedBox(width: 2),
+              Text(cert.rating!.toStringAsFixed(1), style: GoogleFonts.inter(
+                fontSize: 11, color: t.secondary, fontWeight: FontWeight.w500)),
+            ],
+            const Spacer(),
+            Text(cert.isFree ? 'Free' : (cert.price ?? 'Paid'), style: GoogleFonts.inter(
+              fontSize: 12, fontWeight: FontWeight.w600,
+              color: cert.isFree ? t.accent : t.primary)),
+          ]),
+        ]),
       ),
     );
   }
@@ -415,353 +529,5 @@ class _CertCard extends StatelessWidget {
       case 'Platform': return Icons.laptop_mac_rounded;
       default: return Icons.verified_outlined;
     }
-  }
-
-  String _formatNumber(int n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n >= 10000 ? 0 : 1)}K';
-    return '$n';
-  }
-}
-
-// ─── Certifications by Experience Level ──────────────────────────────────────
-
-class _ExperienceGuideTab extends StatelessWidget {
-  const _ExperienceGuideTab();
-
-  static const _tiers = [
-    _ExpTier(
-      range: '0 – 1 Year',
-      label: 'Starting Out',
-      icon: Icons.rocket_launch_outlined,
-      description: 'Build a solid foundation. Focus on broad AI/ML literacy and one hands-on platform certification to demonstrate practical ability to employers.',
-      certifications: [
-        _CertEntry(
-          name: 'Google AI Essentials',
-          provider: 'Google',
-          why: 'Covers core AI concepts and Google tools. No coding required — ideal first step.',
-          url: 'https://grow.google/intl/en_us/courses-and-tools/',
-        ),
-        _CertEntry(
-          name: 'AWS Cloud Practitioner',
-          provider: 'Amazon Web Services',
-          why: 'Industry-standard cloud foundation. Pairs well with any AI/ML path.',
-          url: 'https://aws.amazon.com/certification/certified-cloud-practitioner/',
-        ),
-        _CertEntry(
-          name: 'IBM AI Foundations for Everyone',
-          provider: 'IBM / Coursera',
-          why: 'Accessible, non-technical introduction to AI concepts and use cases.',
-          url: 'https://www.coursera.org/learn/ai-foundations-everyone',
-        ),
-        _CertEntry(
-          name: 'Microsoft Azure AI Fundamentals (AI-900)',
-          provider: 'Microsoft',
-          why: 'Entry-level Azure AI cert. Good for those targeting Microsoft-stack roles.',
-          url: 'https://learn.microsoft.com/en-us/credentials/certifications/azure-ai-fundamentals/',
-        ),
-      ],
-      avoid: 'Avoid advanced certs (AWS ML Specialty, GCP Professional ML Engineer) — they require production experience to pass and to apply effectively.',
-    ),
-    _ExpTier(
-      range: '1 – 2 Years',
-      label: 'Building Depth',
-      icon: Icons.auto_graph_rounded,
-      description: 'You have the basics. Now specialise. Choose certifications that align with your focus area — cloud ML, data science, or applied engineering.',
-      certifications: [
-        _CertEntry(
-          name: 'TensorFlow Developer Certificate',
-          provider: 'Google',
-          why: 'Demonstrates practical model-building skills. Highly recognised by ML teams.',
-          url: 'https://www.tensorflow.org/certificate',
-        ),
-        _CertEntry(
-          name: 'AWS Certified Machine Learning – Specialty',
-          provider: 'Amazon Web Services',
-          why: 'Validates end-to-end ML on AWS. Strong signal for cloud-first ML roles.',
-          url: 'https://aws.amazon.com/certification/certified-machine-learning-specialty/',
-        ),
-        _CertEntry(
-          name: 'Deep Learning Specialization',
-          provider: 'DeepLearning.AI / Coursera',
-          why: 'Andrew Ng\'s flagship series. Builds genuine neural network understanding.',
-          url: 'https://www.coursera.org/specializations/deep-learning',
-        ),
-        _CertEntry(
-          name: 'IBM Data Science Professional Certificate',
-          provider: 'IBM / Coursera',
-          why: 'Structured path covering Python, SQL, ML, and data viz in one bundle.',
-          url: 'https://www.coursera.org/professional-certificates/ibm-data-science',
-        ),
-      ],
-      avoid: null,
-    ),
-    _ExpTier(
-      range: '2 – 4 Years',
-      label: 'Mid-Level',
-      icon: Icons.insights_rounded,
-      description: 'You have meaningful experience. Certifications should validate specialisation, not teach fundamentals. Target platform-specific or role-specific credentials.',
-      certifications: [
-        _CertEntry(
-          name: 'GCP Professional ML Engineer',
-          provider: 'Google Cloud',
-          why: 'Rigorous, scenario-based exam. Strong signal for senior ML engineering roles at Google-stack companies.',
-          url: 'https://cloud.google.com/learn/certification/machine-learning-engineer',
-        ),
-        _CertEntry(
-          name: 'Azure AI Engineer Associate (AI-102)',
-          provider: 'Microsoft',
-          why: 'Covers real AI solution architecture on Azure. Valued in enterprise environments.',
-          url: 'https://learn.microsoft.com/en-us/credentials/certifications/azure-ai-engineer/',
-        ),
-        _CertEntry(
-          name: 'MLOps Specialization',
-          provider: 'DeepLearning.AI / Coursera',
-          why: 'Addresses the production ML gap — deployment, monitoring, and pipelines.',
-          url: 'https://www.coursera.org/specializations/machine-learning-engineering-for-production-mlops',
-        ),
-        _CertEntry(
-          name: 'Databricks Certified Associate Developer for Apache Spark',
-          provider: 'Databricks',
-          why: 'Key credential for data engineering and large-scale ML pipelines.',
-          url: 'https://www.databricks.com/learn/certification/apache-spark-developer-associate',
-        ),
-      ],
-      avoid: 'Entry-level certs (AI Essentials, AI-900) add little value on a mid-level CV — they may signal a gap rather than growth.',
-    ),
-    _ExpTier(
-      range: '5+ Years',
-      label: 'Senior & Expert',
-      icon: Icons.verified_rounded,
-      description: 'At this level, your portfolio and track record carry more weight than certifications. Choose credentials that signal strategic capability or unlock specific enterprise contracts.',
-      certifications: [
-        _CertEntry(
-          name: 'AWS Certified Solutions Architect – Professional',
-          provider: 'Amazon Web Services',
-          why: 'Signals architectural leadership across large-scale AI infrastructure.',
-          url: 'https://aws.amazon.com/certification/certified-solutions-architect-professional/',
-        ),
-        _CertEntry(
-          name: 'GCP Professional Data Engineer',
-          provider: 'Google Cloud',
-          why: 'Validates enterprise-scale data pipeline and ML system design.',
-          url: 'https://cloud.google.com/learn/certification/data-engineer',
-        ),
-        _CertEntry(
-          name: 'NVIDIA DLI – Advanced AI Certifications',
-          provider: 'NVIDIA',
-          why: 'Cutting-edge GPU and inference expertise. Differentiates in LLM and generative AI roles.',
-          url: 'https://www.nvidia.com/en-us/training/',
-        ),
-        _CertEntry(
-          name: 'Certified AI Professional (CAIP)',
-          provider: 'Arcitura / Independent Bodies',
-          why: 'Vendor-neutral professional credential. Relevant for consulting and advisory roles.',
-          url: 'https://www.arcitura.com/certifications/certified-ai-professional/',
-        ),
-      ],
-      avoid: 'Foundation-level certs provide no return at this stage. Focus on thought leadership, open-source contributions, and speaking engagements alongside any formal credentials.',
-    ),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
-      itemCount: _tiers.length,
-      itemBuilder: (_, i) => _ExpTierCard(tier: _tiers[i]),
-    );
-  }
-}
-
-class _ExpTier {
-  final String range, label, description;
-  final IconData icon;
-  final List<_CertEntry> certifications;
-  final String? avoid;
-  const _ExpTier({
-    required this.range, required this.label, required this.description,
-    required this.icon, required this.certifications, required this.avoid,
-  });
-}
-
-class _CertEntry {
-  final String name, provider, why;
-  final String? url;
-  const _CertEntry({required this.name, required this.provider, required this.why, this.url});
-}
-
-class _ExpTierCard extends StatefulWidget {
-  final _ExpTier tier;
-  const _ExpTierCard({required this.tier});
-
-  @override
-  State<_ExpTierCard> createState() => _ExpTierCardState();
-}
-
-class _ExpTierCardState extends State<_ExpTierCard> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final primary = colorScheme.primary;
-    final surface = colorScheme.surface;
-    final onSurface = colorScheme.onSurface;
-    final onSurfaceVariant = colorScheme.onSurfaceVariant;
-    final outlineVariant = colorScheme.outlineVariant;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: outlineVariant, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header — always visible
-          InkWell(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(
-                      color: primary.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(widget.tier.icon, color: primary, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(widget.tier.range,
-                          style: GoogleFonts.inter(
-                            fontSize: 15, fontWeight: FontWeight.w700, color: onSurface)),
-                        const SizedBox(height: 2),
-                        Text(widget.tier.label,
-                          style: GoogleFonts.inter(
-                            fontSize: 12, color: onSurfaceVariant)),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    _expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                    color: onSurfaceVariant, size: 22,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // Expanded content
-          if (_expanded) ...[
-            Divider(height: 1, color: outlineVariant),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(widget.tier.description,
-                    style: GoogleFonts.inter(
-                      fontSize: 13, color: onSurfaceVariant, height: 1.5)),
-                  const SizedBox(height: 16),
-                  Text('Recommended Certifications',
-                    style: GoogleFonts.inter(
-                      fontSize: 13, fontWeight: FontWeight.w700, color: onSurface)),
-                  const SizedBox(height: 10),
-                  ...widget.tier.certifications.map((c) => _CertRow(
-                    entry: c, primary: primary, onSurface: onSurface,
-                    onSurfaceVariant: onSurfaceVariant, outlineVariant: outlineVariant)),
-                  if (widget.tier.avoid != null) ...[
-                    const SizedBox(height: 14),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.06),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.orange.withValues(alpha: 0.15)),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(Icons.info_outline_rounded, size: 16, color: Colors.orange.shade600),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(widget.tier.avoid!,
-                              style: GoogleFonts.inter(
-                                fontSize: 12, color: Colors.orange.shade700, height: 1.4)),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _CertRow extends StatelessWidget {
-  final _CertEntry entry;
-  final Color primary, onSurface, onSurfaceVariant, outlineVariant;
-  const _CertRow({required this.entry, required this.primary, required this.onSurface, required this.onSurfaceVariant, required this.outlineVariant});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: GestureDetector(
-        onTap: entry.url != null
-            ? () async {
-                final uri = Uri.parse(entry.url!);
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                }
-              }
-            : null,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              margin: const EdgeInsets.only(top: 4),
-              width: 6, height: 6,
-              decoration: BoxDecoration(color: primary, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(entry.name,
-                    style: GoogleFonts.inter(
-                      fontSize: 13, fontWeight: FontWeight.w600, color: onSurface)),
-                  Text(entry.provider,
-                    style: GoogleFonts.inter(fontSize: 11, color: onSurfaceVariant)),
-                  const SizedBox(height: 2),
-                  Text(entry.why,
-                    style: GoogleFonts.inter(fontSize: 12, color: onSurfaceVariant, height: 1.4)),
-                ],
-              ),
-            ),
-            if (entry.url != null) ...[
-              const SizedBox(width: 8),
-              Icon(Icons.open_in_new_rounded, size: 14, color: primary),
-            ],
-          ],
-        ),
-      ),
-    );
   }
 }

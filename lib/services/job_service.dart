@@ -380,13 +380,13 @@ class JobService {
   }
 
   // ── Public method: fetches from all sources ──────────────────────────────
-  static Future<List<Job>> fetchJobs({String? query, String? type, String? level}) async {
+  static Future<List<Job>> fetchJobs({String? query, String? type, String? level, String country = 'us'}) async {
     final results = await Future.wait([
       _fetchRemotiveJobs(query: query).catchError((_) => <Job>[]),
       _fetchJobicyJobs(query: query).catchError((_) => <Job>[]),
       _fetchTheMuseJobs(query: query).catchError((_) => <Job>[]),
       _fetchArbeitnowJobs(query: query).catchError((_) => <Job>[]),
-      _fetchAdzunaJobs(query: query).catchError((_) => <Job>[]),
+      _fetchAdzunaJobs(query: query, country: country).catchError((_) => <Job>[]),
       _fetchReedJobs(query: query).catchError((_) => <Job>[]),
     ]);
 

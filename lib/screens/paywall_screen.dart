@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/subscription_service.dart';
 import '../theme/app_theme.dart';
+import 'privacy_policy_screen.dart';
 
 class PaywallScreen extends StatefulWidget {
   final AppTheme theme;
@@ -186,6 +188,38 @@ class _PaywallScreenState extends State<PaywallScreen> {
                                 : 'Restore purchases',
                             style: GoogleFonts.inter(
                                 fontSize: 13, color: t.muted)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      GestureDetector(
+                        onTap: () async {
+                          final uri = Uri.parse('https://aiwire.app/terms');
+                          if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        },
+                        child: Text('Terms',
+                            style: GoogleFonts.inter(
+                                fontSize: 11, color: t.muted.withValues(alpha: 0.6),
+                                decoration: TextDecoration.underline,
+                                decorationColor: t.muted.withValues(alpha: 0.3))),
+                      ),
+                      Text('  ·  ',
+                          style: GoogleFonts.inter(
+                              color: t.muted.withValues(alpha: 0.4), fontSize: 11)),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(context,
+                            MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()));
+                        },
+                        child: Text('Privacy',
+                            style: GoogleFonts.inter(
+                                fontSize: 11, color: t.muted.withValues(alpha: 0.6),
+                                decoration: TextDecoration.underline,
+                                decorationColor: t.muted.withValues(alpha: 0.3))),
                       ),
                     ],
                   ),

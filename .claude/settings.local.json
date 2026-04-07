@@ -18,7 +18,26 @@
       "Bash(killall Xcode)",
       "Bash(git check-ignore:*)",
       "Bash(find /Users/apple/development/aiwire/ios/Flutter/ephemeral -type f -name *.json -o -name *.pbxproj)",
-      "Bash(chmod +x /Users/apple/development/aiwire/ios/ci_scripts/ci_post_clone.sh)"
+      "Bash(chmod +x /Users/apple/development/aiwire/ios/ci_scripts/ci_post_clone.sh)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Read(//Users/apple/development/aiwire/**)",
+      "Bash(ls *.env*)",
+      "Bash(ls .env*)",
+      "Bash(flutter build:*)",
+      "Bash(xcrun devicectl:*)",
+      "Bash(grep -v \"^$\")",
+      "Bash(flutter install:*)",
+      "Bash(export PATH=\"$HOME/development/flutter/bin:$PATH\")",
+      "Bash(export PATH=\"$HOME/development/flutter/bin:$HOME/.gem/ruby/3.0.0/bin:/opt/homebrew/bin:/usr/local/bin:$PATH\")",
+      "Bash(pod --version)",
+      "Bash(gem environment:*)",
+      "Bash(ruby -v)",
+      "Bash(export PATH=\"$HOME/.rbenv/versions/3.3.3/bin:$HOME/.rbenv/shims:$HOME/development/flutter/bin:$PATH\")",
+      "Bash(grep -n \"closedCaptions\\\\|ClosedCaption\\\\|manifest\\\\|tracks\" /Users/apple/.pub-cache/hosted/pub.dev/youtube_explode_dart-3.0.5/lib/src/videos/closed_captions/*.dart)",
+      "Bash(ls /Users/apple/development/aiwire/.claude/worktrees/intelligent-matsumoto/ios/Runner/Assets.xcassets/AppIcon.appiconset/*.jpg)",
+      "Bash(grep -n \"uploadDate\\\\|publishDate\\\\|SearchFilter\\\\|TypeFilters\\\\|UploadDate\" /Users/apple/.pub-cache/hosted/pub.dev/youtube_explode_dart-3.0.5/lib/src/search/*.dart)"
     ]
   }
 }
