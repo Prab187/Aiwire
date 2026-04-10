@@ -66,6 +66,10 @@
 	<string>Main</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>AIWire needs photo library access to select files for resume scanning.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>AIWire needs microphone access so you can speak your mock interview answers instead of typing.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>AIWire uses speech recognition to transcribe your spoken interview answers.</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

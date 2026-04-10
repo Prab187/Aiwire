@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'claude_error.dart';
 import 'summary_cache.dart';
 
 class AIService {
@@ -35,7 +36,11 @@ class AIService {
     const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
     if (apiKey.isEmpty) throw Exception('ANTHROPIC_API_KEY not configured');
     final context = description ?? content ?? '';
-    final prompt = 'Write a 4-5 sentence summary of this AI news article. Weave in the key insight naturally — no bullet points, no headers, just flowing editorial prose.\n\nTitle: $title\n\n$context';
+    final prompt = '''Summarize this AI news article in exactly 4 concise bullet points. Each bullet starts with "• " and is a single short sentence. Cover: the core news, who's involved, the key insight, and why it matters. No preamble, no headers, no closing remark — just 4 bullets.
+
+Title: $title
+
+$context''';
 
     final response = await http.post(
       Uri.parse('https://api.anthropic.com/v1/messages'),
@@ -62,23 +67,17 @@ class AIService {
       if (url != null) SummaryCache.set(url, summary);
       return summary;
     } else {
-      throw Exception('AI service error: ${response.statusCode}');
+      throw Exception('Article summary failed — ${claudeError(response.statusCode, response.body)}');
     }
   }
 
-  // Pre-fetch top N articles silently in background
+  // Prefetch disabled to save Claude API credits. Summaries are now
+  // generated on-demand only when the user taps an article.
+  // The old behavior fired 8 parallel calls every time the home feed
+  // loaded, costing ~$0.015 per app open for summaries most users
+  // never read. Leaving the method as a no-op so existing callers
+  // don't need to change.
   static void prefetch(List<dynamic> articles) {
-    final top = articles.take(8).toList();
-    for (final article in top) {
-      final url = article.url as String;
-      if (!SummaryCache.has(url)) {
-        summarizeArticle(
-          title: article.title,
-          description: article.description,
-          content: article.content,
-          url: url,
-        ).catchError((_) => '');
-      }
-    }
+    // Intentionally no-op. See comment above.
   }
 }

@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import '../models/resume_profile.dart';
+import 'claude_cache.dart';
+import 'claude_error.dart';
 
 const _sampleResumeText = '''ALEX MORGAN
 ML Engineer · San Francisco, CA · alex.morgan@email.com · +1 (415) 555-0142
@@ -61,12 +63,33 @@ class ResumeService {
   }
 
   /// Analyze the picked file with Claude and return a ResumeProfile.
+  /// Results are cached by file-byte hash for 30 days — re-scanning
+  /// the same file returns the cached profile without hitting Claude.
   static Future<ResumeProfile> analyzeResume(PlatformFile file) async {
     const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
     if (apiKey.isEmpty) throw Exception('ANTHROPIC_API_KEY not configured');
 
     final bytes = file.bytes;
     if (bytes == null || bytes.isEmpty) throw Exception('Could not read file');
+
+    // Cache lookup keyed on file hash
+    final cacheKey = ClaudeCache.keyFrom([
+      file.extension,
+      bytes.length,
+      // Sample first 128 + last 128 bytes as a lightweight hash surrogate
+      bytes.take(128).join(','),
+      bytes.skip(bytes.length - 128).take(128).join(','),
+    ]);
+    final cached = await ClaudeCache.get('resume', cacheKey,
+        ttl: const Duration(days: 30));
+    if (cached != null) {
+      try {
+        final parsed = json.decode(cached) as Map<String, dynamic>;
+        return ResumeProfile.fromJson(parsed);
+      } catch (_) {
+        // fall through to fresh fetch
+      }
+    }
 
     final isPdf = file.extension?.toLowerCase() == 'pdf';
     final content = isPdf
@@ -121,7 +144,7 @@ For gaps: identify what's missing compared to top AI/ML job requirements today (
     ).timeout(const Duration(seconds: 30));
 
     if (response.statusCode != 200) {
-      throw Exception('Claude API error: ${response.statusCode}');
+      throw Exception('Resume analysis failed — ${claudeError(response.statusCode, response.body)}');
     }
 
     final data = json.decode(response.body);
@@ -135,6 +158,8 @@ For gaps: identify what's missing compared to top AI/ML job requirements today (
         .trim();
 
     final parsed = json.decode(jsonText) as Map<String, dynamic>;
+    // Store in cache for 30 days
+    await ClaudeCache.set('resume', cacheKey, jsonText);
     return ResumeProfile.fromJson(parsed);
   }
 

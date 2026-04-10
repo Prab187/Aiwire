@@ -10,6 +10,7 @@ import '../services/youtube_service.dart';
 import '../services/job_service.dart';
 import '../services/career_progress_service.dart';
 import '../services/application_tracker_service.dart';
+import '../widgets/bullet_summary.dart';
 import 'job_board_screen.dart';
 import 'events_hub_screen.dart';
 import 'certification_screen.dart';
@@ -19,7 +20,14 @@ import 'resume_scan_screen.dart';
 import 'application_tracker_screen.dart';
 import 'mock_interview_screen.dart';
 import 'salary_calculator_screen.dart';
-import 'career_progress_screen.dart';
+
+// ── Minimal color system ────────────────────────────────────────────────────
+// Action blue: things you do (Find Jobs, Mock Interview, Events)
+const _actionBlue = Color(0xFF3B82F6);
+// Growth green: things you build (Certifications, Salary, Job Tracker)
+const _growthGreen = Color(0xFF10B981);
+// Hero indigo: career plan identity (used only in the hero gradient)
+const _heroIndigo = Color(0xFF6366F1);
 
 class DiscoverScreen extends StatefulWidget {
   final AppTheme theme;
@@ -60,20 +68,24 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   Future<void> _loadResumeState() async {
     final prefs = await SharedPreferences.getInstance();
     final skills = prefs.getStringList('user_skills') ?? [];
-    if (mounted) setState(() {
-      _hasResume = skills.isNotEmpty;
-      _userTitle = prefs.getString('user_job_title') ?? '';
-      _userLevel = prefs.getString('user_level') ?? '';
-    });
+    if (mounted) {
+      setState(() {
+        _hasResume = skills.isNotEmpty;
+        _userTitle = prefs.getString('user_job_title') ?? '';
+        _userLevel = prefs.getString('user_level') ?? '';
+      });
+    }
   }
 
   Future<void> _loadProgress() async {
     final streak = await CareerProgressService.currentStreak();
     final counts = await ApplicationTrackerService.counts();
-    if (mounted) setState(() {
-      _streak = streak;
-      _appCount = counts.values.fold<int>(0, (a, b) => a + b);
-    });
+    if (mounted) {
+      setState(() {
+        _streak = streak;
+        _appCount = counts.values.fold<int>(0, (a, b) => a + b);
+      });
+    }
   }
 
   Future<void> _loadTrendingSkills() async {
@@ -89,10 +101,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       }
       final sorted = freq.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
-      if (mounted) setState(() {
-        _trendingSkills = sorted.take(8).map((e) => (skill: e.key, count: e.value)).toList();
-        _trendingLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _trendingSkills = sorted.take(8).map((e) => (skill: e.key, count: e.value)).toList();
+          _trendingLoading = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _trendingLoading = false);
     }
@@ -119,11 +133,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     }
   }
 
-  String get _greeting {
-    final h = DateTime.now().hour;
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
-    return 'Good evening';
+  void _navTo(Widget screen) {
+    HapticFeedback.lightImpact();
+    Navigator.push(context, MaterialPageRoute(builder: (_) => screen))
+        .then((_) { _loadResumeState(); _loadProgress(); });
   }
 
   @override
@@ -136,54 +149,47 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         child: RefreshIndicator(
           color: t.primary,
           backgroundColor: t.surface,
-          onRefresh: () async { await _loadVideos(); await _loadResumeState(); },
+          onRefresh: () async {
+            await _loadVideos();
+            await _loadResumeState();
+            await _loadProgress();
+            await _loadTrendingSkills();
+          },
           child: CustomScrollView(
             slivers: [
               // ── Header ──
               SliverToBoxAdapter(child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                child: Text(_greeting, style: GoogleFonts.inter(
-                  fontSize: 14, color: t.muted, fontWeight: FontWeight.w500)),
-              )),
-              SliverToBoxAdapter(child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+                padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
                 child: Text('Discover', style: GoogleFonts.sourceSerif4(
-                  fontSize: 30, fontWeight: FontWeight.w700, color: t.primary)),
+                  fontSize: 32, fontWeight: FontWeight.w700,
+                  color: t.primary, letterSpacing: -0.5)),
               )),
 
-              // ── Hero: Career Plan CTA ──
+              // ── Hero Career Plan Card ──
               SliverToBoxAdapter(child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                 child: GestureDetector(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => ResumeScanScreen(theme: t)))
-                      .then((_) => _loadResumeState());
-                  },
+                  onTap: () => _navTo(ResumeScanScreen(theme: t)),
                   child: Container(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(22),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topLeft, end: Alignment.bottomRight,
                         colors: [
-                          const Color(0xFF6366F1).withValues(alpha: 0.15),
-                          const Color(0xFF3B82F6).withValues(alpha: 0.08),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: const Color(0xFF6366F1).withValues(alpha: 0.2)),
-                    ),
+                          _heroIndigo.withValues(alpha: 0.16),
+                          _actionBlue.withValues(alpha: 0.06),
+                        ]),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: _heroIndigo.withValues(alpha: 0.2))),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Row(children: [
                         Container(
-                          width: 44, height: 44,
+                          width: 46, height: 46,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF6366F1).withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(12)),
+                            color: _heroIndigo.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(13)),
                           child: const Icon(Icons.auto_awesome_rounded,
-                            size: 22, color: Color(0xFF6366F1)),
+                            size: 22, color: _heroIndigo),
                         ),
                         const SizedBox(width: 14),
                         Expanded(child: Column(
@@ -194,253 +200,97 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                 ? 'Your Career Plan'
                                 : 'Get Your AI Career Plan',
                               style: GoogleFonts.sourceSerif4(
-                                fontSize: 18, fontWeight: FontWeight.w700,
-                                color: t.primary)),
-                            const SizedBox(height: 2),
+                                fontSize: 19, fontWeight: FontWeight.w700,
+                                color: t.primary, letterSpacing: -0.3)),
+                            const SizedBox(height: 3),
                             Text(
-                              _hasResume
+                              _hasResume && _userTitle.isNotEmpty
                                 ? '$_userTitle · $_userLevel'
-                                : 'Upload resume or answer 3 questions',
+                                : 'Upload resume → 90-day plan in 30 seconds',
                               style: GoogleFonts.inter(
                                 fontSize: 13, color: t.muted)),
                           ],
                         )),
-                        Icon(Icons.arrow_forward_ios_rounded,
-                          size: 16, color: t.muted),
+                        Icon(Icons.arrow_forward_ios_rounded, size: 15, color: t.muted),
                       ]),
-                      if (!_hasResume) ...[
-                        const SizedBox(height: 14),
+                      // Inline stats row (only when resume exists)
+                      if (_hasResume) ...[
+                        const SizedBox(height: 16),
                         Row(children: [
-                          _heroPill(t, Icons.upload_file_rounded, 'Upload CV'),
+                          _HeroChip(
+                            emoji: '🔥',
+                            label: '$_streak day${_streak == 1 ? "" : "s"} streak',
+                            theme: t),
                           const SizedBox(width: 8),
-                          _heroPill(t, Icons.bolt_rounded, '90-Day Plan'),
-                          const SizedBox(width: 8),
-                          _heroPill(t, Icons.work_outline_rounded, 'Job Match'),
+                          _HeroChip(
+                            emoji: '📋',
+                            label: '$_appCount tracked',
+                            theme: t),
                         ]),
-                      ] else ...[
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: t.accent.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(8)),
-                          child: Row(children: [
-                            Icon(Icons.check_circle_rounded, size: 14, color: t.accent),
-                            const SizedBox(width: 6),
-                            Expanded(child: Text(
-                              'Resume scanned · Tap to view recommendation & apply',
-                              style: GoogleFonts.inter(
-                                fontSize: 12, color: t.accent, fontWeight: FontWeight.w500))),
-                          ]),
-                        ),
                       ],
                     ]),
                   ),
                 ),
               )),
 
-              // ── Today's Brief progress strip ──
-              if (_hasResume) SliverToBoxAdapter(child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: Row(children: [
-                  Expanded(child: _MiniStatCard(theme: t,
-                    icon: Icons.local_fire_department_rounded,
-                    label: 'Streak',
-                    value: '$_streak day${_streak == 1 ? "" : "s"}',
-                    color: const Color(0xFFF59E0B),
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      Navigator.push(context, MaterialPageRoute(
-                        builder: (_) => CareerProgressScreen(theme: t)))
-                        .then((_) => _loadProgress());
-                    })),
-                  const SizedBox(width: 10),
-                  Expanded(child: _MiniStatCard(theme: t,
-                    icon: Icons.business_center_outlined,
-                    label: 'Tracked',
-                    value: '$_appCount job${_appCount == 1 ? "" : "s"}',
-                    color: const Color(0xFF8B5CF6),
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      Navigator.push(context, MaterialPageRoute(
-                        builder: (_) => ApplicationTrackerScreen(theme: t)))
-                        .then((_) => _loadProgress());
-                    })),
-                ]),
-              )),
-
-              // ── Career Tools (NEW row) ──
-              _sectionHeader(t, 'Career Tools'),
+              // ── Unified 6-tile grid (no section header) ──
               SliverToBoxAdapter(child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
                 child: Column(children: [
                   Row(children: [
-                    Expanded(child: _QuickAction(theme: t,
-                      icon: Icons.psychology_rounded,
-                      iconColor: const Color(0xFF8B5CF6),
-                      label: 'Mock Interview',
-                      subtitle: 'AI practice',
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        Navigator.push(context, MaterialPageRoute(
-                          builder: (_) => MockInterviewScreen(theme: t)));
-                      })),
-                    const SizedBox(width: 10),
-                    Expanded(child: _QuickAction(theme: t,
-                      icon: Icons.payments_outlined,
-                      iconColor: const Color(0xFF10B981),
-                      label: 'Salary',
-                      subtitle: 'Calculator + script',
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        Navigator.push(context, MaterialPageRoute(
-                          builder: (_) => SalaryCalculatorScreen(theme: t)));
-                      })),
-                  ]),
-                  Row(children: [
-                    Expanded(child: _QuickAction(theme: t,
-                      icon: Icons.business_center_outlined,
-                      iconColor: const Color(0xFF6366F1),
-                      label: 'Job Tracker',
-                      subtitle: 'Saved & applied',
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        Navigator.push(context, MaterialPageRoute(
-                          builder: (_) => ApplicationTrackerScreen(theme: t)))
-                          .then((_) => _loadProgress());
-                      })),
-                    const SizedBox(width: 10),
-                    Expanded(child: _QuickAction(theme: t,
-                      icon: Icons.insights_rounded,
-                      iconColor: const Color(0xFFEC4899),
-                      label: 'Progress',
-                      subtitle: 'Streak & growth',
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        Navigator.push(context, MaterialPageRoute(
-                          builder: (_) => CareerProgressScreen(theme: t)))
-                          .then((_) => _loadProgress());
-                      })),
-                  ]),
-                ]),
-              )),
-
-              // ── Discover ──
-              _sectionHeader(t, 'Discover'),
-              SliverToBoxAdapter(child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                child: Column(children: [
-                  Row(children: [
-                    Expanded(child: _QuickAction(theme: t,
+                    Expanded(child: _Tile(theme: t,
                       icon: Icons.work_outline_rounded,
-                      iconColor: const Color(0xFF3B82F6),
+                      color: _actionBlue,
                       label: 'Find Jobs',
-                      subtitle: 'AI/ML roles',
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        Navigator.push(context, MaterialPageRoute(
-                          builder: (_) => JobBoardScreen(theme: t)));
-                      })),
+                      onTap: () => _navTo(JobBoardScreen(theme: t)))),
                     const SizedBox(width: 10),
-                    Expanded(child: _QuickAction(theme: t,
-                      icon: Icons.event_outlined,
-                      iconColor: const Color(0xFFEC4899),
-                      label: 'Events',
-                      subtitle: 'Webinars & more',
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        Navigator.push(context, MaterialPageRoute(
-                          builder: (_) => EventsHubScreen(theme: t)));
-                      })),
+                    Expanded(child: _Tile(theme: t,
+                      icon: Icons.psychology_rounded,
+                      color: _actionBlue,
+                      label: 'Mock Interview',
+                      onTap: () => _navTo(MockInterviewScreen(theme: t)))),
                   ]),
                   Row(children: [
-                    Expanded(child: _QuickAction(theme: t,
-                      icon: Icons.verified_outlined,
-                      iconColor: const Color(0xFF10B981),
-                      label: 'Certifications',
-                      subtitle: 'Courses & certs',
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        Navigator.push(context, MaterialPageRoute(
-                          builder: (_) => CertificationScreen(theme: t)));
-                      })),
+                    Expanded(child: _Tile(theme: t,
+                      icon: Icons.payments_outlined,
+                      color: _growthGreen,
+                      label: 'Salary',
+                      onTap: () => _navTo(SalaryCalculatorScreen(theme: t)))),
                     const SizedBox(width: 10),
-                    Expanded(child: _QuickAction(theme: t,
-                      icon: Icons.trending_up_rounded,
-                      iconColor: const Color(0xFFF59E0B),
-                      label: 'Forecast',
-                      subtitle: 'Market trends',
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        Navigator.push(context, MaterialPageRoute(
-                          builder: (_) => ForecastScreen(theme: t)));
-                      })),
+                    Expanded(child: _Tile(theme: t,
+                      icon: Icons.event_outlined,
+                      color: _actionBlue,
+                      label: 'Events',
+                      onTap: () => _navTo(EventsHubScreen(theme: t)))),
+                  ]),
+                  Row(children: [
+                    Expanded(child: _Tile(theme: t,
+                      icon: Icons.verified_outlined,
+                      color: _growthGreen,
+                      label: 'Certifications',
+                      onTap: () => _navTo(CertificationScreen(theme: t)))),
+                    const SizedBox(width: 10),
+                    Expanded(child: _Tile(theme: t,
+                      icon: Icons.business_center_outlined,
+                      color: _growthGreen,
+                      label: 'Job Tracker',
+                      onTap: () => _navTo(ApplicationTrackerScreen(theme: t)))),
                   ]),
                 ]),
               )),
 
-              // ── Trending Skills Heatmap ──
-              _sectionHeader(t, 'Trending Skills'),
+              // ── Trending skills ──
+              _sectionHeader(t, 'Trending skills'),
               SliverToBoxAdapter(child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-                child: Text('Most-requested AI/ML skills in current job postings',
-                  style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
-              )),
-              SliverToBoxAdapter(child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                 child: _trendingLoading
                   ? SizedBox(height: 80, child: Center(child:
                     CircularProgressIndicator(color: t.primary, strokeWidth: 1.5)))
                   : _SkillsHeatmap(skills: _trendingSkills, theme: t),
               )),
 
-              // ── Market Intel ──
-              _sectionHeader(t, 'Market Intel'),
-              SliverToBoxAdapter(child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _FeatureRow(theme: t,
-                  icon: Icons.show_chart_rounded,
-                  iconBg: const Color(0xFF8B5CF6),
-                  title: 'Investment Tracker',
-                  subtitle: 'AI funding, sectors & capital flow',
-                  badge: '\$97B+',
-                  badgeColor: const Color(0xFF8B5CF6),
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => InvestmentScreen(theme: t)));
-                  },
-                ),
-              )),
-
-              // ── Trending in AI ──
-              SliverToBoxAdapter(child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 28, 20, 4),
-                child: Row(children: [
-                  Expanded(child: Text('Trending in AI', style: GoogleFonts.sourceSerif4(
-                    fontSize: 18, fontWeight: FontWeight.w700, color: t.primary))),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFF0000).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(6)),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.play_circle_filled_rounded,
-                        color: Color(0xFFFF0000), size: 11),
-                      const SizedBox(width: 4),
-                      Text('This week', style: GoogleFonts.inter(
-                        fontSize: 10, color: const Color(0xFFFF0000),
-                        fontWeight: FontWeight.w600)),
-                    ]),
-                  ),
-                ]),
-              )),
-              SliverToBoxAdapter(child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 2, 20, 12),
-                child: Text('Top AI/ML videos with AI-generated summaries',
-                  style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
-              )),
-
+              // ── Trending in AI (videos) ──
+              _sectionHeader(t, 'Trending in AI'),
               if (_videosLoading)
                 SliverToBoxAdapter(child: SizedBox(height: 200,
                   child: ListView.separated(
@@ -471,6 +321,19 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   childCount: _videos.length,
                 )),
 
+              // ── Footer links (tertiary features) ──
+              SliverToBoxAdapter(child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 32, 20, 0),
+                child: Column(children: [
+                  _FooterLink(theme: t,
+                    label: 'AI Job Forecast',
+                    onTap: () => _navTo(ForecastScreen(theme: t))),
+                  _FooterLink(theme: t,
+                    label: 'Investment Tracker',
+                    onTap: () => _navTo(InvestmentScreen(theme: t))),
+                ]),
+              )),
+
               const SliverToBoxAdapter(child: SizedBox(height: 40)),
             ],
           ),
@@ -479,43 +342,53 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     );
   }
 
-  Widget _heroPill(AppTheme t, IconData icon, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: t.surface,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: t.divider)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 12, color: t.secondary),
-        const SizedBox(width: 4),
-        Text(label, style: GoogleFonts.inter(
-          fontSize: 11, fontWeight: FontWeight.w500, color: t.secondary)),
-      ]),
-    );
-  }
-
   Widget _sectionHeader(AppTheme t, String label) {
     return SliverToBoxAdapter(child: Padding(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 10),
+      padding: const EdgeInsets.fromLTRB(20, 30, 20, 6),
       child: Text(label, style: GoogleFonts.sourceSerif4(
-        fontSize: 18, fontWeight: FontWeight.w700, color: t.primary)),
+        fontSize: 18, fontWeight: FontWeight.w700,
+        color: t.primary, letterSpacing: -0.2)),
     ));
   }
 }
 
-// ── Quick Action Card (2×2 grid) ────────────────────────────────────────────
-class _QuickAction extends StatelessWidget {
+// ── Hero chip (streak / tracked) ─────────────────────────────────────────────
+class _HeroChip extends StatelessWidget {
+  final String emoji;
+  final String label;
+  final AppTheme theme;
+  const _HeroChip({required this.emoji, required this.label, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: t.surface.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: t.divider)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(emoji, style: const TextStyle(fontSize: 12)),
+        const SizedBox(width: 6),
+        Text(label, style: GoogleFonts.inter(
+          fontSize: 12, fontWeight: FontWeight.w600, color: t.primary)),
+      ]),
+    );
+  }
+}
+
+// ── Unified Tile (label only, no subtitle) ──────────────────────────────────
+class _Tile extends StatelessWidget {
   final AppTheme theme;
   final IconData icon;
-  final Color iconColor;
+  final Color color;
   final String label;
-  final String subtitle;
   final VoidCallback onTap;
 
-  const _QuickAction({
-    required this.theme, required this.icon, required this.iconColor,
-    required this.label, required this.onTap, this.subtitle = '',
+  const _Tile({
+    required this.theme, required this.icon, required this.color,
+    required this.label, required this.onTap,
   });
 
   @override
@@ -524,151 +397,57 @@ class _QuickAction extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(13),
         margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
         decoration: BoxDecoration(
           color: t.surface,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(13),
           border: Border.all(color: t.divider, width: 0.5)),
         child: Row(children: [
           Container(
             width: 36, height: 36,
             decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.12),
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, color: iconColor, size: 18),
+            child: Icon(icon, color: color, size: 18),
           ),
           const SizedBox(width: 12),
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: GoogleFonts.inter(
-                fontSize: 14, fontWeight: FontWeight.w600, color: t.primary)),
-              if (subtitle.isNotEmpty)
-                Text(subtitle, style: GoogleFonts.inter(
-                  fontSize: 11, color: t.muted)),
-            ],
-          )),
-          Icon(Icons.chevron_right_rounded, color: t.muted, size: 16),
+          Expanded(child: Text(label, style: GoogleFonts.inter(
+            fontSize: 14, fontWeight: FontWeight.w600, color: t.primary))),
         ]),
       ),
     );
   }
 }
 
-// ── Feature Row ─────────────────────────────────────────────────────────────
-class _FeatureRow extends StatelessWidget {
+// ── Footer link (tertiary features) ──────────────────────────────────────────
+class _FooterLink extends StatelessWidget {
   final AppTheme theme;
-  final IconData icon;
-  final Color iconBg;
-  final String title;
-  final String subtitle;
-  final String? badge;
-  final Color? badgeColor;
+  final String label;
   final VoidCallback onTap;
-
-  const _FeatureRow({
-    required this.theme, required this.icon, required this.iconBg,
-    required this.title, required this.subtitle, required this.onTap,
-    this.badge, this.badgeColor,
-  });
+  const _FooterLink({required this.theme, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final t = theme;
     return GestureDetector(
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: t.divider, width: 0.5))),
         child: Row(children: [
-          Container(
-            width: 38, height: 38,
-            decoration: BoxDecoration(
-              color: iconBg.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, color: iconBg, size: 18),
-          ),
-          const SizedBox(width: 14),
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Text(title, style: GoogleFonts.inter(
-                  fontSize: 15, fontWeight: FontWeight.w600, color: t.primary)),
-                if (badge != null) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: (badgeColor ?? t.accent).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(4)),
-                    child: Text(badge!, style: GoogleFonts.inter(
-                      fontSize: 10, fontWeight: FontWeight.w700,
-                      color: badgeColor ?? t.accent)),
-                  ),
-                ],
-              ]),
-              const SizedBox(height: 2),
-              Text(subtitle, style: GoogleFonts.inter(fontSize: 13, color: t.muted)),
-            ],
-          )),
-          Icon(Icons.chevron_right_rounded, color: t.muted, size: 18),
+          Expanded(child: Text(label, style: GoogleFonts.inter(
+            fontSize: 14, fontWeight: FontWeight.w400, color: t.secondary))),
+          Icon(Icons.chevron_right_rounded, size: 16, color: t.muted),
         ]),
       ),
     );
   }
 }
 
-// ── Mini Stat Card (streak / tracked) ───────────────────────────────────────
-class _MiniStatCard extends StatelessWidget {
-  final AppTheme theme;
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _MiniStatCard({
-    required this.theme, required this.icon, required this.label,
-    required this.value, required this.color, required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final t = theme;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: t.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: t.divider, width: 0.5)),
-        child: Row(children: [
-          Container(
-            width: 32, height: 32,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, color: color, size: 16),
-          ),
-          const SizedBox(width: 10),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label, style: GoogleFonts.inter(
-              fontSize: 11, color: t.muted, fontWeight: FontWeight.w500)),
-            const SizedBox(height: 2),
-            Text(value, style: GoogleFonts.inter(
-              fontSize: 14, fontWeight: FontWeight.w700, color: t.primary)),
-          ])),
-        ]),
-      ),
-    );
-  }
-}
-
-// ── Skills Heatmap ──────────────────────────────────────────────────────────
+// ── Skills Heatmap (simplified: no micro-counts) ────────────────────────────
 class _SkillsHeatmap extends StatelessWidget {
   final List<({String skill, int count})> skills;
   final AppTheme theme;
@@ -691,32 +470,26 @@ class _SkillsHeatmap extends StatelessWidget {
         border: Border.all(color: t.divider, width: 0.5)),
       child: Wrap(spacing: 6, runSpacing: 8, children: skills.map((s) {
         final intensity = max == 0 ? 0.5 : (s.count / max);
-        final size = 11.0 + (intensity * 5); // 11 to 16pt
-        final opacity = 0.4 + (intensity * 0.6); // 0.4 to 1.0
+        final size = 11.5 + (intensity * 4); // 11.5 to 15.5pt
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
           decoration: BoxDecoration(
-            color: const Color(0xFFF59E0B).withValues(alpha: 0.05 + (intensity * 0.15)),
-            borderRadius: BorderRadius.circular(6),
+            color: t.primary.withValues(alpha: 0.03 + (intensity * 0.08)),
+            borderRadius: BorderRadius.circular(7),
             border: Border.all(
-              color: const Color(0xFFF59E0B).withValues(alpha: 0.2 + (intensity * 0.3))),
+              color: t.primary.withValues(alpha: 0.08 + (intensity * 0.15))),
           ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Text(s.skill, style: GoogleFonts.inter(
-              fontSize: size,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFFF59E0B).withValues(alpha: opacity))),
-            const SizedBox(width: 4),
-            Text('×${s.count}', style: GoogleFonts.inter(
-              fontSize: 10, color: t.muted)),
-          ]),
+          child: Text(s.skill, style: GoogleFonts.inter(
+            fontSize: size,
+            fontWeight: FontWeight.w600,
+            color: t.primary.withValues(alpha: 0.55 + (intensity * 0.45)))),
         );
       }).toList()),
     );
   }
 }
 
-// ── Compact Video Article ───────────────────────────────────────────────────
+// ── Compact Video Article (unchanged) ───────────────────────────────────────
 class _VideoArticleCompact extends StatelessWidget {
   final AppTheme theme;
   final YouTubeVideo video;
@@ -837,25 +610,44 @@ class _VideoArticleCompact extends StatelessWidget {
                       fontSize: 12, color: t.muted.withValues(alpha: 0.7))),
                 ]),
                 const SizedBox(height: 24),
-                Row(children: [
-                  Container(padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: t.accent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(7)),
-                    child: Icon(Icons.auto_awesome_rounded, size: 14, color: t.accent)),
-                  const SizedBox(width: 10),
-                  Text('AI Summary', style: GoogleFonts.inter(
-                    fontSize: 15, fontWeight: FontWeight.w700, color: t.primary)),
-                ]),
-                const SizedBox(height: 12),
-                if (loading)
-                  _SummaryShimmerInline(theme: t)
-                else if (summary != null)
-                  Text(summary!, style: GoogleFonts.inter(
-                    fontSize: 14, color: t.primary.withValues(alpha: 0.85), height: 1.6))
-                else
-                  Text('Summary unavailable', style: GoogleFonts.inter(
-                    fontSize: 13, color: t.muted, fontStyle: FontStyle.italic)),
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft, end: Alignment.bottomRight,
+                      colors: [
+                        t.accent.withValues(alpha: 0.08),
+                        t.surface,
+                      ]),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: t.accent.withValues(alpha: 0.22), width: 0.8)),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Container(padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: t.accent.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(7)),
+                        child: Icon(Icons.auto_awesome_rounded, size: 13, color: t.accent)),
+                      const SizedBox(width: 10),
+                      Text('AI Summary', style: GoogleFonts.inter(
+                        fontSize: 12, fontWeight: FontWeight.w700,
+                        color: t.primary, letterSpacing: 0.3)),
+                    ]),
+                    const SizedBox(height: 14),
+                    if (loading)
+                      _SummaryShimmerInline(theme: t)
+                    else if (summary != null)
+                      BulletSummary(
+                        text: summary!,
+                        theme: t,
+                        accent: t.accent,
+                        fontSize: 14)
+                    else
+                      Text('Summary unavailable', style: GoogleFonts.inter(
+                        fontSize: 13, color: t.muted, fontStyle: FontStyle.italic)),
+                  ]),
+                ),
                 const SizedBox(height: 28),
                 GestureDetector(
                   onTap: () async {

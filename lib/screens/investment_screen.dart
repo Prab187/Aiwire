@@ -1,10 +1,15 @@
+import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:xml/xml.dart';
 import '../theme/app_theme.dart';
+import '../services/claude_cache.dart';
+import '../services/claude_error.dart';
+import '../widgets/bullet_summary.dart';
 
 class InvestmentScreen extends StatelessWidget {
   final AppTheme theme;
@@ -103,11 +108,11 @@ class InvestmentScreen extends StatelessWidget {
             _QuarterlyChart(theme: t),
             const SizedBox(height: 28),
 
-            // Recent funding news
-            Text('Recent Funding News', style: GoogleFonts.inter(
+            // Investment News
+            Text('Investment News', style: GoogleFonts.inter(
               fontSize: 15, fontWeight: FontWeight.w600, color: t.primary)),
             const SizedBox(height: 2),
-            Text('Latest AI investment rounds', style: GoogleFonts.inter(
+            Text('Latest AI funding, M&A and capital moves', style: GoogleFonts.inter(
               fontSize: 12, color: t.muted)),
             const SizedBox(height: 14),
             _FundingNewsFeed(theme: t),
@@ -569,9 +574,24 @@ class _FundingNewsFeedState extends State<_FundingNewsFeed> {
   List<Map<String, String>> _items = [];
 
   static const _fallback = [
-    {'title': 'Anthropic raises \$2B at \$61.5B valuation', 'date': 'Jan 2026', 'url': 'https://techcrunch.com'},
-    {'title': 'CoreWeave secures \$1.5B in new debt financing', 'date': 'Feb 2026', 'url': 'https://techcrunch.com'},
-    {'title': 'ElevenLabs closes \$180M Series C round', 'date': 'Jan 2026', 'url': 'https://techcrunch.com'},
+    {
+      'title': 'Anthropic raises \$2B at \$61.5B valuation',
+      'description': 'Anthropic, the AI safety company behind Claude, announced a fresh \$2 billion funding round led by Google, pushing its valuation to \$61.5 billion.',
+      'date': 'Jan 2026',
+      'url': 'https://techcrunch.com',
+    },
+    {
+      'title': 'CoreWeave secures \$1.5B in new debt financing',
+      'description': 'Cloud infrastructure provider CoreWeave closed a \$1.5 billion debt facility to expand its GPU capacity for AI workloads.',
+      'date': 'Feb 2026',
+      'url': 'https://techcrunch.com',
+    },
+    {
+      'title': 'ElevenLabs closes \$180M Series C round',
+      'description': 'Voice AI startup ElevenLabs raised \$180 million in Series C funding, valuing the company at over \$3 billion.',
+      'date': 'Jan 2026',
+      'url': 'https://techcrunch.com',
+    },
   ];
 
   @override
@@ -590,11 +610,12 @@ class _FundingNewsFeedState extends State<_FundingNewsFeed> {
       if (response.statusCode == 200) {
         final document = XmlDocument.parse(response.body);
         final items = document.findAllElements('item');
-        final keywords = ['fund', 'raise', 'invest', 'million', 'billion'];
+        final keywords = ['fund', 'raise', 'invest', 'million', 'billion',
+          'series', 'valuation', 'acquires', 'acquisition', 'ipo'];
 
         final filtered = <Map<String, String>>[];
         for (final item in items) {
-          if (filtered.length >= 5) break;
+          if (filtered.length >= 6) break;
           final title = item.findElements('title').firstOrNull?.innerText ?? '';
           final titleLower = title.toLowerCase();
           final hasKeyword = keywords.any((k) => titleLower.contains(k));
@@ -604,24 +625,46 @@ class _FundingNewsFeedState extends State<_FundingNewsFeed> {
               item.findElements('guid').firstOrNull?.innerText ?? '';
           final pubDate = item.findElements('pubDate').firstOrNull?.innerText ?? '';
 
-          // Parse date
+          // Description (strip HTML)
+          final rawDesc = item.findElements('description').firstOrNull?.innerText ?? '';
+          final cleanDesc = rawDesc
+              .replaceAll(RegExp(r'<[^>]*>'), '')
+              .replaceAll(RegExp(r'\s+'), ' ')
+              .trim();
+          final description = cleanDesc.length > 300
+              ? '${cleanDesc.substring(0, 300)}…'
+              : cleanDesc;
+
           String dateDisplay = pubDate;
           try {
             final d = DateTime.parse(pubDate);
             const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
             dateDisplay = '${months[d.month - 1]} ${d.year}';
           } catch (_) {
-            // Try RFC-822 format — just use raw
             if (pubDate.length > 10) {
               dateDisplay = pubDate.substring(0, pubDate.length > 16 ? 16 : pubDate.length);
             }
           }
 
-          filtered.add({'title': title, 'date': dateDisplay, 'url': link});
+          filtered.add({
+            'title': title,
+            'description': description,
+            'date': dateDisplay,
+            'url': link,
+          });
+        }
+
+        // Guarantee a minimum of 3 items: top up from fallback if needed
+        final combined = <Map<String, String>>[...filtered];
+        for (final f in _fallback) {
+          if (combined.length >= 3) break;
+          if (!combined.any((x) => x['title'] == f['title'])) {
+            combined.add(f);
+          }
         }
 
         setState(() {
-          _items = filtered.isEmpty ? _fallback : filtered;
+          _items = combined.isEmpty ? _fallback : combined;
           _loading = false;
         });
       } else {
@@ -637,6 +680,18 @@ class _FundingNewsFeedState extends State<_FundingNewsFeed> {
       _items = _fallback;
       _loading = false;
     });
+  }
+
+  void _showSummary(Map<String, String> item) {
+    HapticFeedback.lightImpact();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _InvestmentArticleSheet(
+        article: item,
+        theme: widget.theme),
+    );
   }
 
   @override
@@ -666,15 +721,7 @@ class _FundingNewsFeedState extends State<_FundingNewsFeed> {
             children: [
               if (i > 0) Divider(height: 1, color: t.divider),
               InkWell(
-                onTap: () async {
-                  final url = item['url'] ?? '';
-                  if (url.isNotEmpty) {
-                    final uri = Uri.parse(url);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    }
-                  }
-                },
+                onTap: () => _showSummary(item),
                 borderRadius: i == 0
                     ? const BorderRadius.vertical(top: Radius.circular(12))
                     : i == _items.length - 1
@@ -682,26 +729,49 @@ class _FundingNewsFeedState extends State<_FundingNewsFeed> {
                         : BorderRadius.zero,
                 child: Padding(
                   padding: const EdgeInsets.all(14),
-                  child: Row(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(item['title'] ?? '',
-                              style: GoogleFonts.inter(
-                                fontSize: 13, fontWeight: FontWeight.w500,
-                                color: t.primary, height: 1.4),
-                              maxLines: 2, overflow: TextOverflow.ellipsis),
-                            const SizedBox(height: 4),
-                            Text(item['date'] ?? '',
-                              style: GoogleFonts.inter(fontSize: 11, color: t.muted)),
-                          ],
-                        ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(item['title'] ?? '',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13, fontWeight: FontWeight.w600,
+                                    color: t.primary, height: 1.4),
+                                  maxLines: 2, overflow: TextOverflow.ellipsis),
+                                const SizedBox(height: 4),
+                                Text(item['date'] ?? '',
+                                  style: GoogleFonts.inter(fontSize: 11, color: t.muted)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(Icons.chevron_right_rounded, size: 16, color: t.muted),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Icon(Icons.open_in_new_rounded, size: 14, color: t.muted),
+                      const SizedBox(height: 10),
+                      // AI Summary CTA pill
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: const Color(0xFF6366F1).withValues(alpha: 0.25))),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.auto_awesome_rounded,
+                            size: 10, color: Color(0xFF6366F1)),
+                          const SizedBox(width: 4),
+                          Text('AI Summary', style: GoogleFonts.inter(
+                            fontSize: 10, fontWeight: FontWeight.w700,
+                            color: const Color(0xFF6366F1))),
+                        ]),
+                      ),
                     ],
                   ),
                 ),
@@ -709,6 +779,211 @@ class _FundingNewsFeedState extends State<_FundingNewsFeed> {
             ],
           );
         }).toList(),
+      ),
+    );
+  }
+}
+
+// ── Investment Article Bottom Sheet (AI Summary + Read) ────────────────────
+class _InvestmentArticleSheet extends StatefulWidget {
+  final Map<String, String> article;
+  final AppTheme theme;
+  const _InvestmentArticleSheet({required this.article, required this.theme});
+
+  @override
+  State<_InvestmentArticleSheet> createState() => _InvestmentArticleSheetState();
+}
+
+class _InvestmentArticleSheetState extends State<_InvestmentArticleSheet> {
+  bool _loading = true;
+  String? _summary;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchSummary();
+  }
+
+  Future<void> _fetchSummary() async {
+    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    if (apiKey.isEmpty) {
+      if (mounted) setState(() {
+        _loading = false;
+        _error = 'API key not configured';
+      });
+      return;
+    }
+
+    final title = widget.article['title'] ?? '';
+    final description = widget.article['description'] ?? '';
+    final cacheKey = ClaudeCache.keyFrom([title]);
+
+    // Check cache (30 days)
+    final cached = await ClaudeCache.get('inv_news', cacheKey,
+        ttl: const Duration(days: 30));
+    if (cached != null) {
+      if (mounted) setState(() {
+        _summary = cached;
+        _loading = false;
+      });
+      return;
+    }
+
+    final prompt = '''Summarize this AI investment / funding news in exactly 4 concise bullet points. Each bullet starts with "• " and is a single short sentence. Cover: what happened, who's involved, the financial details, and why it matters for the AI industry. No preamble, no headers, just 4 bullets.
+
+Title: $title
+
+${description.isNotEmpty ? description : "(no extended description available — infer from title)"}''';
+
+    try {
+      final response = await http.post(
+        Uri.parse('https://api.anthropic.com/v1/messages'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: json.encode({
+          'model': 'claude-haiku-4-5',
+          'max_tokens': 320,
+          'messages': [{'role': 'user', 'content': prompt}],
+        }),
+      ).timeout(const Duration(seconds: 20));
+
+      if (response.statusCode != 200) {
+        throw Exception(claudeError(response.statusCode, response.body));
+      }
+      final data = json.decode(response.body);
+      final contentList = data['content'] as List?;
+      final text = (contentList != null && contentList.isNotEmpty)
+          ? (contentList[0]['text'] as String?) ?? ''
+          : '';
+      if (text.isNotEmpty) {
+        await ClaudeCache.set('inv_news', cacheKey, text);
+      }
+      if (mounted) setState(() {
+        _summary = text.isEmpty ? 'No summary available.' : text;
+        _loading = false;
+      });
+    } catch (e) {
+      if (mounted) setState(() {
+        _error = friendlyError(e.toString().replaceFirst('Exception: ', ''));
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.theme;
+    final title = widget.article['title'] ?? '';
+    final date = widget.article['date'] ?? '';
+    final url = widget.article['url'] ?? '';
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.55,
+      minChildSize: 0.35,
+      maxChildSize: 0.9,
+      builder: (_, ctrl) => Container(
+        decoration: BoxDecoration(
+          color: t.background,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
+        child: Column(children: [
+          Center(child: Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 8),
+            width: 36, height: 4,
+            decoration: BoxDecoration(
+              color: t.muted.withValues(alpha: 0.25),
+              borderRadius: BorderRadius.circular(2)))),
+          Expanded(child: SingleChildScrollView(
+            controller: ctrl,
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Container(width: 24, height: 1, color: const Color(0xFF6366F1)),
+                const SizedBox(width: 8),
+                Text('INVESTMENT NEWS · $date', style: GoogleFonts.inter(
+                  fontSize: 10, fontWeight: FontWeight.w700,
+                  color: const Color(0xFF6366F1), letterSpacing: 1.5)),
+              ]),
+              const SizedBox(height: 10),
+              Text(title, style: GoogleFonts.sourceSerif4(
+                fontSize: 20, fontWeight: FontWeight.w700,
+                color: t.primary, height: 1.3, letterSpacing: -0.3)),
+              const SizedBox(height: 22),
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft, end: Alignment.bottomRight,
+                    colors: [
+                      const Color(0xFF6366F1).withValues(alpha: 0.08),
+                      t.surface,
+                    ]),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.2), width: 0.8),
+                ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(7)),
+                      child: const Icon(Icons.auto_awesome_rounded,
+                        size: 13, color: Color(0xFF6366F1)),
+                    ),
+                    const SizedBox(width: 10),
+                    Text('AI Summary', style: GoogleFonts.inter(
+                      fontSize: 12, fontWeight: FontWeight.w700,
+                      color: t.primary, letterSpacing: 0.3)),
+                  ]),
+                  const SizedBox(height: 14),
+                  if (_loading)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Center(child: CircularProgressIndicator(
+                        color: t.primary, strokeWidth: 1.5)),
+                    )
+                  else if (_error != null)
+                    Text(_error!, style: GoogleFonts.inter(
+                      fontSize: 13, color: t.muted, fontStyle: FontStyle.italic))
+                  else
+                    BulletSummary(
+                      text: _summary ?? '',
+                      theme: t,
+                      accent: const Color(0xFF6366F1),
+                      fontSize: 14),
+                ]),
+              ),
+              const SizedBox(height: 24),
+              if (url.isNotEmpty)
+                GestureDetector(
+                  onTap: () async {
+                    final uri = Uri.parse(url);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: t.primary, borderRadius: BorderRadius.circular(12)),
+                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Icon(Icons.open_in_new_rounded, size: 16, color: t.background),
+                      const SizedBox(width: 8),
+                      Text('Read full article', style: GoogleFonts.inter(
+                        fontSize: 14, fontWeight: FontWeight.w700, color: t.background)),
+                    ]),
+                  ),
+                ),
+            ]),
+          )),
+        ]),
       ),
     );
   }

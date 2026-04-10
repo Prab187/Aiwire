@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
+import '../services/claude_cache.dart';
+import '../services/claude_error.dart';
 
 class SalaryCalculatorScreen extends StatefulWidget {
   final AppTheme theme;
@@ -63,6 +65,27 @@ class _SalaryCalculatorScreenState extends State<SalaryCalculatorScreen> {
       return;
     }
 
+    // Cache by role+level+location+years (30 days — salary doesn't change fast)
+    final cacheKey = ClaudeCache.keyFrom([_role, _level, _location, _years]);
+    final cachedRaw = await ClaudeCache.get('salary', cacheKey,
+        ttl: const Duration(days: 30));
+    if (cachedRaw != null) {
+      try {
+        final parsed = json.decode(cachedRaw) as Map<String, dynamic>;
+        setState(() {
+          _p25 = (parsed['p25'] as num).toInt();
+          _p50 = (parsed['p50'] as num).toInt();
+          _p75 = (parsed['p75'] as num).toInt();
+          _insights = parsed['insights'] as String?;
+          _negotiationScript = parsed['negotiation_script'] as String?;
+          _loading = false;
+        });
+        return;
+      } catch (_) {
+        // fall through to fresh fetch
+      }
+    }
+
     final prompt = '''Estimate the salary range for this AI/ML role based on current market data. Then provide a negotiation script.
 
 ROLE: $_level $_role
@@ -93,7 +116,9 @@ Respond with ONLY a JSON object, no markdown:
         }),
       ).timeout(const Duration(seconds: 30));
 
-      if (response.statusCode != 200) throw Exception('API ${response.statusCode}');
+      if (response.statusCode != 200) {
+        throw Exception(claudeError(response.statusCode, response.body));
+      }
 
       final data = json.decode(response.body);
       final raw = (data['content'][0]['text'] as String).trim();
@@ -102,6 +127,7 @@ Respond with ONLY a JSON object, no markdown:
           .replaceFirst(RegExp(r'^```\s*'), '')
           .replaceFirst(RegExp(r'\s*```$'), '');
       final parsed = json.decode(cleaned) as Map<String, dynamic>;
+      await ClaudeCache.set('salary', cacheKey, cleaned);
 
       setState(() {
         _p25 = (parsed['p25'] as num).toInt();
@@ -113,7 +139,7 @@ Respond with ONLY a JSON object, no markdown:
       });
     } catch (e) {
       setState(() {
-        _error = 'Could not calculate: ${e.toString().replaceFirst("Exception: ", "")}';
+        _error = friendlyError(e.toString().replaceFirst("Exception: ", ""));
         _loading = false;
       });
     }
