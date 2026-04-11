@@ -346,30 +346,79 @@ class JobService {
     }
   }
 
+  static const _euCodes = {'de', 'fr', 'nl', 'be', 'at', 'ch', 'es', 'it', 'pl', 'se', 'dk', 'fi', 'no', 'ie', 'pt'};
+
+  static const _countryNames = {
+    'us': 'United States', 'gb': 'United Kingdom', 'uk': 'United Kingdom',
+    'ca': 'Canada', 'au': 'Australia', 'de': 'Germany', 'fr': 'France',
+    'in': 'India', 'nl': 'Netherlands', 'sg': 'Singapore', 'br': 'Brazil',
+    'za': 'South Africa', 'jp': 'Japan', 'kr': 'South Korea',
+    'ae': 'United Arab Emirates', 'se': 'Sweden', 'ie': 'Ireland',
+    'nz': 'New Zealand', 'ch': 'Switzerland', 'es': 'Spain', 'it': 'Italy',
+    'pl': 'Poland', 'at': 'Austria', 'mx': 'Mexico', 'ng': 'Nigeria',
+  };
+
+  /// Filters a job list to prefer country-relevant + remote roles.
+  /// If the filter would leave < 5 results, returns the unfiltered list.
+  static List<Job> _filterByCountry(List<Job> jobs, String countryCode) {
+    final cc = countryCode.toLowerCase();
+    final name = (_countryNames[cc] ?? '').toLowerCase();
+    if (name.isEmpty) return jobs; // unknown country — don't filter
+
+    final filtered = jobs.where((j) {
+      final loc = j.location.toLowerCase();
+      // Keep if location mentions the country name
+      if (loc.contains(name)) return true;
+      // Keep remote / worldwide / anywhere
+      if (j.type == 'Remote') return true;
+      if (loc.contains('remote') || loc.contains('worldwide') || loc.contains('anywhere')) return true;
+      return false;
+    }).toList();
+
+    // Fallback: if too few results, return unfiltered
+    return filtered.length >= 5 ? filtered : jobs;
+  }
+
   // ── Resume-matched jobs: country-aware search ─────────────────────────────
   static Future<List<Job>> fetchJobsForResume({
     required List<String> skills,
     required String countryCode,
     required String jobTitle,
   }) async {
+    final cc = countryCode.toLowerCase();
     final query = '$jobTitle ${skills.take(3).join(' ')}';
-    final results = await Future.wait([
+
+    // Source pruning: only call region-specific APIs if user is in that region
+    final futures = <Future<List<Job>>>[
+      // Always: global remote
       _fetchRemotiveJobs(query: query).catchError((_) => <Job>[]),
       _fetchJobicyJobs(query: query).catchError((_) => <Job>[]),
-      _fetchTheMuseJobs(query: query).catchError((_) => <Job>[]),
-      _fetchArbeitnowJobs(query: query).catchError((_) => <Job>[]),
-      _fetchAdzunaJobs(query: query, country: countryCode).catchError((_) => <Job>[]),
-      _fetchReedJobs(query: query).catchError((_) => <Job>[]),
-    ]);
-
-    var jobs = [
-      ...results[0], ...results[1], ...results[2],
-      ...results[3], ...results[4], ...results[5],
+      // Always: Adzuna (supports country param)
+      _fetchAdzunaJobs(query: query, country: cc).catchError((_) => <Job>[]),
     ];
+    // US/CA: The Muse
+    if (cc == 'us' || cc == 'ca') {
+      futures.add(_fetchTheMuseJobs(query: query).catchError((_) => <Job>[]));
+    }
+    // EU: Arbeitnow
+    if (_euCodes.contains(cc)) {
+      futures.add(_fetchArbeitnowJobs(query: query).catchError((_) => <Job>[]));
+    }
+    // UK: Reed
+    if (cc == 'gb') {
+      futures.add(_fetchReedJobs(query: query).catchError((_) => <Job>[]));
+    }
+
+    final results = await Future.wait(futures);
+    var jobs = results.expand((list) => list).toList();
     if (jobs.isEmpty) jobs = List.from(_fallbackJobs);
 
+    // Deduplicate
     final seen = <String>{};
     jobs = jobs.where((j) => seen.add('${j.title}|${j.company}')).toList();
+
+    // Filter to prefer country-relevant + remote roles
+    jobs = _filterByCountry(jobs, cc);
 
     jobs.sort((a, b) {
       if (a.featured && !b.featured) return -1;

@@ -384,7 +384,7 @@ class EventsService {
   }
 
   // ── Public method ────────────────────────────────────────────────────────
-  static Future<List<AIEvent>> fetchEvents({String? type, String? format, bool upcomingOnly = true}) async {
+  static Future<List<AIEvent>> fetchEvents({String? type, String? format, bool upcomingOnly = true, String? country}) async {
     // Fetch from all sources in parallel
     final results = await Future.wait([
       _fetchRssEvents().catchError((_) => <AIEvent>[]),
@@ -418,7 +418,28 @@ class EventsService {
       events = events.where((e) => e.format == format).toList();
     }
 
-    events.sort((a, b) => a.date.compareTo(b.date));
+    // Country filter: keep virtual events everywhere; filter in-person by country
+    if (country != null && country.isNotEmpty) {
+      final cLower = country.toLowerCase();
+      events = events.where((e) {
+        // Virtual/Hybrid events are accessible from anywhere
+        if (e.format == 'Virtual' || e.format == 'Hybrid') return true;
+        // In-Person: only keep if event's location mentions the user's country
+        final loc = (e.location ?? '').toLowerCase();
+        return loc.contains(cLower);
+      }).toList();
+    }
+
+    // Sort: country in-person first, then virtual, then by date
+    events.sort((a, b) {
+      final aLocal = country != null && a.format != 'Virtual'
+          && (a.location ?? '').toLowerCase().contains(country.toLowerCase());
+      final bLocal = country != null && b.format != 'Virtual'
+          && (b.location ?? '').toLowerCase().contains(country.toLowerCase());
+      if (aLocal && !bLocal) return -1;
+      if (!aLocal && bLocal) return 1;
+      return a.date.compareTo(b.date);
+    });
     return events;
   }
 

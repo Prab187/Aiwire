@@ -37,7 +37,9 @@
       "Bash(export PATH=\"$HOME/.rbenv/versions/3.3.3/bin:$HOME/.rbenv/shims:$HOME/development/flutter/bin:$PATH\")",
       "Bash(grep -n \"closedCaptions\\\\|ClosedCaption\\\\|manifest\\\\|tracks\" /Users/apple/.pub-cache/hosted/pub.dev/youtube_explode_dart-3.0.5/lib/src/videos/closed_captions/*.dart)",
       "Bash(ls /Users/apple/development/aiwire/.claude/worktrees/intelligent-matsumoto/ios/Runner/Assets.xcassets/AppIcon.appiconset/*.jpg)",
-      "Bash(grep -n \"uploadDate\\\\|publishDate\\\\|SearchFilter\\\\|TypeFilters\\\\|UploadDate\" /Users/apple/.pub-cache/hosted/pub.dev/youtube_explode_dart-3.0.5/lib/src/search/*.dart)"
+      "Bash(grep -n \"uploadDate\\\\|publishDate\\\\|SearchFilter\\\\|TypeFilters\\\\|UploadDate\" /Users/apple/.pub-cache/hosted/pub.dev/youtube_explode_dart-3.0.5/lib/src/search/*.dart)",
+      "Bash(xcrun simctl:*)",
+      "Bash(open -a Simulator)"
     ]
   }
 }

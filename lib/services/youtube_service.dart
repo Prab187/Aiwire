@@ -111,20 +111,26 @@ class YouTubeService {
   static Future<List<YouTubeVideo>> fetchForProfile({
     required List<String> skills,
     required String jobTitle,
+    String? country,
     int maxResults = 5,
   }) async {
     final yt = YoutubeExplode();
     try {
       // Build queries. Job title is best, then top 2 skills as "skill tutorial"
+      // When country is known, bias 2 queries with country name
       final queries = <String>[];
+      final hasCountry = country != null && country.isNotEmpty;
       if (jobTitle.isNotEmpty) {
         queries.add('$jobTitle tutorial');
-        queries.add('$jobTitle explained');
+        if (hasCountry) {
+          queries.add('$jobTitle $country');
+        } else {
+          queries.add('$jobTitle explained');
+        }
       }
       for (final s in skills.take(2)) {
         if (s.isNotEmpty) queries.add('$s tutorial');
       }
-      // Ensure we always have something
       if (queries.isEmpty) {
         queries.addAll(['AI tutorial', 'machine learning tutorial']);
       }
@@ -134,7 +140,9 @@ class YouTubeService {
 
       for (final query in queries) {
         try {
-          final results = await yt.search.search(query);
+          // Filter to videos uploaded in the last month
+          final results = await yt.search.search(query,
+            filter: UploadDateFilter.lastMonth);
           for (final v in results.take(8)) {
             if (seen.contains(v.id.value)) continue;
             seen.add(v.id.value);

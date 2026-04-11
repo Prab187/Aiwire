@@ -116,11 +116,13 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
 
       final profile = await ResumeService.analyzeResume(file);
 
-      // Save skills for other screens
+      // Save skills + country for other screens
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList('user_skills', profile.skills);
       await prefs.setString('user_job_title', profile.jobTitle);
       await prefs.setString('user_level', profile.experienceLevel);
+      await prefs.setString('user_country', profile.country);
+      await prefs.setString('user_country_code', profile.countryCode);
 
       // Save full profile to multi-profile storage
       await ProfileStorageService.save(SavedProfile(
@@ -220,21 +222,32 @@ Average match score across top 10 jobs: $avgMatch%
 Top job matches:
 $matchScores
 
-Provide a structured recommendation using these EXACT headers:
+REGIONAL CONTEXT (CRITICAL):
+This candidate is based in ${p.country}. EVERY recommendation in this response
+MUST be specific to the ${p.country} market. Do NOT give generic global advice:
+- For salary figures, use ${p.country}'s local currency and current market rates
+- For certifications, prioritize providers and credentials recognized by ${p.country} employers
+- For networking and communities, mention ${p.country}-specific meetups, Slacks, and conferences
+- For job platforms, reference ones popular in ${p.country} (e.g. Naukri in India, StepStone in Germany, Seek in Australia)
+- For skills to add, reflect ${p.country}'s AI/ML hiring trends specifically
+- For the 90-day action plan, include at least 2 ${p.country}-specific concrete steps
+If you are unsure about something ${p.country}-specific, say so rather than substituting US data.
 
-CAREER PATH
-[Address them by first name. Reference their specific experience (${p.yearsOfExperience} years as ${p.jobTitle}) and projects. Describe 2-3 realistic next career moves. Mention which of their skills (name specific ones) make them competitive and which gaps hold them back.]
+Provide a structured recommendation using these EXACT headers. Be concise — no filler, every sentence must be actionable:
 
-90-DAY ACTION PLAN
-[4-5 numbered, specific action items. Each item should reference something from their profile. Example: "Since you have ${p.skills.isNotEmpty ? p.skills.first : 'Python'} but lack X, do Y". Include specific course names, platforms, or certifications to pursue.]
+WHAT TO DO NEXT
+[Address by first name. In 3-4 sentences, tell them the single most impactful next step for their career in ${p.country} based on their ${p.yearsOfExperience} years as ${p.jobTitle}. Don't name specific job titles. Focus on: what skill to deepen, what type of opportunity to pursue, and one concrete move they can make this week. Reference their actual skills and gaps.]
 
-SKILLS TO ADD
-[3 specific skills based on their gaps: ${p.gaps.join(', ')}. For each skill explain WHY it matters for their career level and how it connects to jobs they're matching with.]
+90-DAY PLAN
+[5 numbered action items. Each is one sentence, starts with a verb, and references something specific from their profile or ${p.country}'s market. Include: 1 skill to learn, 1 certification to start, 1 project to build, 1 community to join, 1 application to submit. All ${p.country}-specific.]
+
+SKILLS TO ACQUIRE
+[Exactly 2 skills from their gaps: ${p.gaps.join(', ')}. Format as "1. Start now: [Skill]" and "2. Learn next: [Skill]". For each write 2-3 COMPLETE sentences: what it is, why it matters in ${p.country}, and one specific resource. Do NOT truncate — finish every sentence.]
 
 JOB READINESS
-[Start with: "Based on your profile, you match $avgMatch% of AI/ML roles in ${p.country}." Then explain what's driving that score — which skills helped and which gaps hurt. End with one concrete action that would increase their match rate the most.]
+[Start with: "You match $avgMatch% of AI/ML roles in ${p.country}." Then 2 sentences: what's helping your score and what's hurting it. End with the single action that would move the needle most.]
 
-Be specific, reference their actual resume content, not generic advice. Address them by first name.''';
+Be direct, specific, and ${p.country}-focused. No generic advice. Address by first name.''';
     }
 
     try {
@@ -354,19 +367,19 @@ Keep it concise, direct, actionable. Address them by first name.''';
       final courses = <Certification>[];
       for (final c in pool) {
         if (_looksLikeCertification(c)) {
-          if (certs.length < 4) certs.add(c);
+          if (certs.length < 2) certs.add(c);
         } else {
-          if (courses.length < 4) courses.add(c);
+          if (courses.length < 2) courses.add(c);
         }
-        if (certs.length >= 4 && courses.length >= 4) break;
+        if (certs.length >= 2 && courses.length >= 2) break;
       }
 
       // Fallbacks so neither section is ever empty if data exists
       if (certs.isEmpty && pool.isNotEmpty) {
-        certs.addAll(pool.take(3));
+        certs.addAll(pool.take(2));
       }
       if (courses.isEmpty && pool.length > certs.length) {
-        courses.addAll(pool.skip(certs.length).take(3));
+        courses.addAll(pool.skip(certs.length).take(2));
       }
 
       if (mounted) {
@@ -385,7 +398,9 @@ Keep it concise, direct, actionable. Address them by first name.''';
     if (_profile == null) return;
     setState(() => _eventsLoading = true);
     try {
-      final all = await EventsService.fetchEvents();
+      // Pass country so the service returns virtual events + in-person events
+      // matching the user's country (filtered at the service layer)
+      final all = await EventsService.fetchEvents(country: _profile!.country);
       final p = _profile!;
       final keywords = <String>{
         ...p.skills.take(5).map((s) => s.toLowerCase()),
@@ -393,11 +408,7 @@ Keep it concise, direct, actionable. Address them by first name.''';
         p.jobTitle.toLowerCase(),
       }.where((k) => k.isNotEmpty).toList();
 
-      // Only online/virtual events — they're accessible from anywhere
-      final online = all.where((e) =>
-          e.format == 'Virtual' || e.format == 'Hybrid').toList();
-
-      final scored = online.map((e) {
+      final scored = all.map((e) {
         var score = 0;
         final text = '${e.title} ${e.description} ${e.topics.join(" ")}'.toLowerCase();
         for (final kw in keywords) {
@@ -411,12 +422,13 @@ Keep it concise, direct, actionable. Address them by first name.''';
       // Minimum 3 events guaranteed: top up from unscored online list
       final picks = <AIEvent>[];
       final seen = <String>{};
-      for (final r in scored.take(6)) {
+      for (final r in scored.take(5)) {
         if (r.score == 0) break;
+        if (picks.length >= 3) break;
         if (seen.add(r.event.id)) picks.add(r.event);
       }
-      for (final e in online) {
-        if (picks.length >= 4) break;
+      for (final e in all) {
+        if (picks.length >= 3) break;
         if (seen.add(e.id)) picks.add(e);
       }
 
@@ -441,7 +453,8 @@ Keep it concise, direct, actionable. Address them by first name.''';
       final videos = await YouTubeService.fetchForProfile(
         skills: p.skills,
         jobTitle: p.jobTitle,
-        maxResults: 5,
+        country: p.country,
+        maxResults: 3,
       );
       if (mounted) {
         setState(() {
@@ -466,12 +479,15 @@ Keep it concise, direct, actionable. Address them by first name.''';
         ...p.gaps.map((g) => g.toLowerCase()),
       }.where((k) => k.isNotEmpty).toList();
 
+      final countryLower = p.country.toLowerCase();
       final scored = all.map((a) {
         final text = '${a.title} ${a.description ?? ""}'.toLowerCase();
         var score = 0;
         for (final kw in keywords) {
           if (text.contains(kw)) score++;
         }
+        // Boost articles mentioning the user's country
+        if (countryLower.isNotEmpty && text.contains(countryLower)) score += 2;
         return (article: a, score: score);
       }).where((r) => r.score > 0).toList()
         ..sort((a, b) => b.score.compareTo(a.score));
@@ -479,12 +495,13 @@ Keep it concise, direct, actionable. Address them by first name.''';
       // Minimum 3 articles. If scoring yields fewer, top up from the unscored pool.
       final picks = <Article>[];
       final seen = <String>{};
-      for (final r in scored.take(5)) {
+      for (final r in scored.take(4)) {
+        if (picks.length >= 3) break;
         if (seen.add(r.article.url)) picks.add(r.article);
       }
-      // Top up to at least 3 from the general pool
+      // Top up to 3 from the general pool if needed
       for (final a in all) {
-        if (picks.length >= 5) break;
+        if (picks.length >= 3) break;
         if (seen.add(a.url)) picks.add(a);
       }
 
@@ -557,7 +574,7 @@ Keep it concise, direct, actionable. Address them by first name.''';
                     indicatorWeight: 1.5,
                     labelStyle: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
                     unselectedLabelStyle: GoogleFonts.inter(fontSize: 14),
-                    tabs: const [Tab(text: 'Recommendation'), Tab(text: 'All Jobs')],
+                    tabs: const [Tab(text: 'Recommendation'), Tab(text: 'Jobs for You')],
                   ),
                   Divider(height: 1, color: t.divider),
                 ]))
@@ -1002,12 +1019,22 @@ Keep it concise, direct, actionable. Address them by first name.''';
       key: const ValueKey('rec'),
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Editorial header
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+        // Header card with ATS score inline
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF6366F1).withValues(alpha: 0.12),
+                t.surface,
+              ]),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: const Color(0xFF6366F1).withValues(alpha: 0.2))),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Container(width: 24, height: 1, color: const Color(0xFF6366F1)),
+              Container(width: 20, height: 1, color: const Color(0xFF6366F1)),
               const SizedBox(width: 8),
               Text('YOUR CAREER REPORT', style: GoogleFonts.inter(
                 fontSize: 10, fontWeight: FontWeight.w700,
@@ -1019,26 +1046,95 @@ Keep it concise, direct, actionable. Address them by first name.''';
                 ? 'Career Plan for ${_profile!.name!.split(" ").first}'
                 : 'Your Career Plan',
               style: GoogleFonts.sourceSerif4(
-                fontSize: 26, fontWeight: FontWeight.w700,
-                color: t.primary, letterSpacing: -0.6, height: 1.15)),
+                fontSize: 24, fontWeight: FontWeight.w700,
+                color: t.primary, letterSpacing: -0.5, height: 1.15)),
             const SizedBox(height: 6),
             Text('AI-generated, based on your resume analysis',
               style: GoogleFonts.inter(
                 fontSize: 12, color: t.muted, letterSpacing: 0.1)),
+            // ATS Score inline
+            if (_profile != null && _profile!.atsScore > 0) ...[
+              const SizedBox(height: 16),
+              Row(children: [
+                // Circular gauge (small)
+                SizedBox(
+                  width: 44, height: 44,
+                  child: Stack(alignment: Alignment.center, children: [
+                    SizedBox(width: 44, height: 44,
+                      child: CircularProgressIndicator(
+                        value: _profile!.atsScore / 100.0,
+                        strokeWidth: 4,
+                        backgroundColor: t.divider,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          _profile!.atsScore >= 70
+                              ? const Color(0xFF10B981)
+                              : _profile!.atsScore >= 50
+                                  ? const Color(0xFFF59E0B)
+                                  : const Color(0xFFEF4444)))),
+                    Text('${_profile!.atsScore}', style: GoogleFonts.inter(
+                      fontSize: 13, fontWeight: FontWeight.w800,
+                      color: t.primary)),
+                  ]),
+                ),
+                const SizedBox(width: 14),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('ATS Score', style: GoogleFonts.inter(
+                    fontSize: 13, fontWeight: FontWeight.w700, color: t.primary)),
+                  const SizedBox(height: 2),
+                  Text(
+                    _profile!.atsScore >= 70 ? 'Strong — your resume passes most scanners'
+                      : _profile!.atsScore >= 50 ? 'Decent — a few improvements will help'
+                      : 'Needs work — expand below for fixes',
+                    style: GoogleFonts.inter(fontSize: 11, color: t.muted)),
+                ])),
+                // Expand arrow for details
+                GestureDetector(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => DraggableScrollableSheet(
+                        expand: false,
+                        initialChildSize: 0.5,
+                        minChildSize: 0.3,
+                        maxChildSize: 0.8,
+                        builder: (_, ctrl) => Container(
+                          decoration: BoxDecoration(
+                            color: t.background,
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(20))),
+                          child: Column(children: [
+                            Center(child: Container(
+                              margin: const EdgeInsets.only(top: 12, bottom: 8),
+                              width: 36, height: 4,
+                              decoration: BoxDecoration(
+                                color: t.muted.withValues(alpha: 0.25),
+                                borderRadius: BorderRadius.circular(2)))),
+                            Expanded(child: SingleChildScrollView(
+                              controller: ctrl,
+                              padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+                              child: _AtsScoreCard(
+                                score: _profile!.atsScore,
+                                issues: _profile!.atsIssues,
+                                theme: t),
+                            )),
+                          ]),
+                        ),
+                      ),
+                    );
+                  },
+                  child: Icon(Icons.chevron_right_rounded,
+                    size: 18, color: t.muted),
+                ),
+              ]),
+            ],
           ]),
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 8),
 
-        // ATS Score gauge
-        if (_profile != null && _profile!.atsScore > 0) ...[
-          _AtsScoreCard(
-            score: _profile!.atsScore,
-            issues: _profile!.atsIssues,
-            theme: t),
-          const SizedBox(height: 18),
-        ],
-
-        // AI recommendation sections
+        // ── GROUP 2: YOUR PLAN ───────────────────────────────────────────
         if (_recLoading)
           Center(child: Padding(
             padding: const EdgeInsets.all(40),
@@ -1049,249 +1145,186 @@ Keep it concise, direct, actionable. Address them by first name.''';
                 fontSize: 13, color: t.muted)),
             ]),
           ))
-        else if (_recommendation != null)
-          _RecommendationContent(text: _recommendation!, theme: t)
-        else
+        else if (_recommendation != null) ...[
+          _groupHeader(t, 'YOUR PLAN'),
+          _RecommendationContent(text: _recommendation!, theme: t, collapsible: true),
+        ] else if (!_recLoading)
           Center(child: Text('No recommendation available', style: GoogleFonts.inter(
             fontSize: 13, color: t.muted))),
 
-        // No qualified matches yet
-        if (top.isEmpty && !_recLoading && _profile != null) ...[
-          const SizedBox(height: 32),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: t.surface, borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: t.divider, width: 0.5)),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Icon(Icons.lightbulb_outline_rounded, size: 16, color: t.accent),
-                const SizedBox(width: 8),
-                Text('No strong job matches yet',
-                  style: GoogleFonts.sourceSerif4(
-                    fontSize: 16, fontWeight: FontWeight.w700, color: t.primary)),
-              ]),
-              const SizedBox(height: 8),
-              Text(
-                'We only show roles with ${_kMinMatchPct}%+ skill overlap. '
-                'Add the recommended skills above to unlock matches.',
-                style: GoogleFonts.inter(
-                  fontSize: 13, color: t.muted, height: 1.5)),
-            ]),
-          ),
-        ],
-
-        // ── Recommended Certifications (replaces old "Start Applying") ──
-        if (_profile != null && (_certsLoading || _recommendedCerts.isNotEmpty)) ...[
-          const SizedBox(height: 32),
+        // No qualified matches note
+        if (top.isEmpty && !_recLoading && _profile != null)
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Container(width: 24, height: 1, color: const Color(0xFFF59E0B)),
-                const SizedBox(width: 8),
-                Text('UPSKILL', style: GoogleFonts.inter(
-                  fontSize: 10, fontWeight: FontWeight.w700,
-                  color: const Color(0xFFF59E0B), letterSpacing: 1.5)),
+            padding: const EdgeInsets.only(top: 10),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: t.surface, borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: t.divider, width: 0.5)),
+              child: Row(children: [
+                Icon(Icons.info_outline_rounded, size: 14, color: t.muted),
+                const SizedBox(width: 10),
+                Expanded(child: Text(
+                  'Jobs shown only for ${_kMinMatchPct}%+ skill overlap',
+                  style: GoogleFonts.inter(fontSize: 12, color: t.muted))),
               ]),
-              const SizedBox(height: 8),
-              Text('Recommended certifications', style: GoogleFonts.sourceSerif4(
-                fontSize: 22, fontWeight: FontWeight.w700,
-                color: t.primary, letterSpacing: -0.4)),
-              const SizedBox(height: 4),
-              Text('Matched to your skill gaps',
-                style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
-            ]),
+            ),
           ),
-          const SizedBox(height: 16),
-          if (_certsLoading)
-            Center(child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: CircularProgressIndicator(color: t.primary, strokeWidth: 1.5)))
-          else
-            ..._recommendedCerts.map((c) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _RecCertCard(cert: c, theme: t),
-            )),
-        ],
 
-        // ── Recommended Courses (standalone learning paths) ────────────────
-        if (_profile != null && _recommendedCourses.isNotEmpty) ...[
-          const SizedBox(height: 32),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Container(width: 24, height: 1, color: const Color(0xFF10B981)),
-                const SizedBox(width: 8),
-                Text('LEARN', style: GoogleFonts.inter(
-                  fontSize: 10, fontWeight: FontWeight.w700,
-                  color: const Color(0xFF10B981), letterSpacing: 1.5)),
-              ]),
-              const SizedBox(height: 8),
-              Text('Recommended courses', style: GoogleFonts.sourceSerif4(
-                fontSize: 22, fontWeight: FontWeight.w700,
-                color: t.primary, letterSpacing: -0.4)),
-              const SizedBox(height: 4),
-              Text('Bite-sized learning paths to build your skills',
-                style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
-            ]),
-          ),
-          const SizedBox(height: 16),
-          ..._recommendedCourses.map((c) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _RecCertCard(cert: c, theme: t),
-          )),
-        ],
+        // ── GROUP 3: YOUR RESOURCES (ordered by engagement priority) ─────
+        if (_profile != null && !_recLoading) ...[
+          _groupHeader(t, 'YOUR RESOURCES'),
 
-        // ── Recommended Online Events ──────────────────────────────────────
-        if (_profile != null && (_eventsLoading || _recommendedEvents.isNotEmpty)) ...[
-          const SizedBox(height: 32),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Container(width: 24, height: 1, color: const Color(0xFFEC4899)),
-                const SizedBox(width: 8),
-                Text('ATTEND', style: GoogleFonts.inter(
-                  fontSize: 10, fontWeight: FontWeight.w700,
-                  color: const Color(0xFFEC4899), letterSpacing: 1.5)),
-              ]),
-              const SizedBox(height: 8),
-              Text('Recommended online events', style: GoogleFonts.sourceSerif4(
-                fontSize: 22, fontWeight: FontWeight.w700,
-                color: t.primary, letterSpacing: -0.4)),
-              const SizedBox(height: 4),
-              Text('Virtual webinars, meetups & conferences you can join',
-                style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
-            ]),
-          ),
-          const SizedBox(height: 16),
-          if (_eventsLoading)
-            Center(child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: CircularProgressIndicator(color: t.primary, strokeWidth: 1.5)))
-          else
-            ..._recommendedEvents.map((e) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _RecEventCard(event: e, theme: t),
-            )),
-        ],
+          // 1. Mock Interview (highest engagement)
+          if (top.isNotEmpty)
+            _CollapsibleRow(
+              theme: t,
+              icon: Icons.psychology_rounded,
+              color: const Color(0xFF8B5CF6),
+              title: 'Mock interview',
+              count: 0,
+              children: [
+                ...top.map((m) =>
+                  _MockInterviewJobCard(job: m.job, score: m.score, theme: t)),
+                GestureDetector(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    _tabCtrl.animateTo(1);
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: t.divider),
+                      borderRadius: BorderRadius.circular(8)),
+                    child: Center(child: Text(
+                      'See all ${_qualifiedMatches.length} matched jobs',
+                      style: GoogleFonts.inter(
+                        fontSize: 12, fontWeight: FontWeight.w600, color: t.primary))),
+                  ),
+                ),
+              ],
+            ),
 
-        // ── Mock Interview (practice for matched roles) ──────────────────
-        if (top.isNotEmpty && !_recLoading) ...[
-          const SizedBox(height: 32),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Container(width: 24, height: 1, color: const Color(0xFF8B5CF6)),
-                const SizedBox(width: 8),
-                Text('PRACTICE', style: GoogleFonts.inter(
-                  fontSize: 10, fontWeight: FontWeight.w700,
-                  color: const Color(0xFF8B5CF6), letterSpacing: 1.5)),
-              ]),
-              const SizedBox(height: 8),
-              Text('Mock interview', style: GoogleFonts.sourceSerif4(
-                fontSize: 22, fontWeight: FontWeight.w700,
-                color: t.primary, letterSpacing: -0.4)),
-              const SizedBox(height: 4),
-              Text('Prep for the roles you match',
-                style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
-            ]),
-          ),
-          const SizedBox(height: 16),
-          ...top.map((m) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _MockInterviewJobCard(
-              job: m.job, score: m.score, theme: t),
-          )),
-          const SizedBox(height: 8),
+          // 2. Courses (directly maps to skill gaps)
+          if (_recommendedCourses.isNotEmpty)
+            _CollapsibleRow(
+              theme: t,
+              icon: Icons.school_outlined,
+              color: const Color(0xFF10B981),
+              title: 'Courses',
+              count: 0,
+              children: _recommendedCourses.asMap().entries.map((e) =>
+                _RecCertCard(cert: e.value, theme: t,
+                  sequenceLabel: e.key == 0 ? 'Start with this' : 'Take next'),
+              ).toList(),
+            ),
+
+          // 3. Certifications (longer commitment)
+          if (_certsLoading || _recommendedCerts.isNotEmpty)
+            _CollapsibleRow(
+              theme: t,
+              icon: Icons.verified_outlined,
+              color: const Color(0xFFF59E0B),
+              title: 'Certifications',
+              count: 0,
+              loading: _certsLoading,
+              children: _recommendedCerts.asMap().entries.map((e) =>
+                _RecCertCard(cert: e.value, theme: t,
+                  sequenceLabel: e.key == 0 ? 'Start with this' : 'Take next'),
+              ).toList(),
+            ),
+
+          // 4. Online events (networking)
+          if (_eventsLoading || _recommendedEvents.isNotEmpty)
+            _CollapsibleRow(
+              theme: t,
+              icon: Icons.event_outlined,
+              color: const Color(0xFFEC4899),
+              title: 'Online events',
+              count: 0,
+              loading: _eventsLoading,
+              children: _recommendedEvents.map((e) =>
+                _RecEventCard(event: e, theme: t)).toList(),
+            ),
+
+          // 5. News (awareness)
+          if (_newsLoading || _recommendedNews.isNotEmpty)
+            _CollapsibleRow(
+              theme: t,
+              icon: Icons.article_outlined,
+              color: const Color(0xFF3B82F6),
+              title: 'News for you',
+              count: 0,
+              loading: _newsLoading,
+              children: _recommendedNews.map((a) =>
+                _RecNewsCard(article: a, theme: t)).toList(),
+            ),
+
+          // 6. Videos (passive learning)
+          if (_videosLoading || _recommendedVideos.isNotEmpty)
+            _CollapsibleRow(
+              theme: t,
+              icon: Icons.smart_display_outlined,
+              color: const Color(0xFFFF0000),
+              title: 'Videos to watch',
+              count: 0,
+              loading: _videosLoading,
+              children: _recommendedVideos.map((v) =>
+                _RecVideoCard(video: v, theme: t)).toList(),
+            ),
+
+          // ── Quick Start CTA ──
+          const SizedBox(height: 24),
           GestureDetector(
             onTap: () {
               HapticFeedback.lightImpact();
-              _tabCtrl.animateTo(1);
+              // Open the first course if available, else mock interview
+              if (_recommendedCourses.isNotEmpty && _recommendedCourses.first.url != null) {
+                final uri = Uri.parse(_recommendedCourses.first.url!);
+                canLaunchUrl(uri).then((ok) {
+                  if (ok) launchUrl(uri, mode: LaunchMode.externalApplication);
+                });
+              } else if (top.isNotEmpty) {
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => MockInterviewScreen(theme: t)));
+              }
             },
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(vertical: 16),
               decoration: BoxDecoration(
-                border: Border.all(color: t.divider),
-                borderRadius: BorderRadius.circular(10)),
-              child: Center(child: Text('See all ${_qualifiedMatches.length} matched jobs',
+                color: t.primary,
+                borderRadius: BorderRadius.circular(12)),
+              child: Center(child: Text('Take your first step',
                 style: GoogleFonts.inter(
-                  fontSize: 13, fontWeight: FontWeight.w600, color: t.primary))),
+                  fontSize: 15, fontWeight: FontWeight.w700, color: t.background))),
             ),
           ),
+          const SizedBox(height: 6),
+          Center(child: Text(
+            _recommendedCourses.isNotEmpty
+                ? 'Opens your first recommended course'
+                : 'Starts a mock interview for your top match',
+            style: GoogleFonts.inter(fontSize: 11, color: t.muted))),
         ],
+      ]),
+    );
+  }
 
-        // ── Read Up On This (news articles) ─────────────────────────────────
-        if (_profile != null && (_newsLoading || _recommendedNews.isNotEmpty)) ...[
-          const SizedBox(height: 32),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Container(width: 24, height: 1, color: const Color(0xFF3B82F6)),
-                const SizedBox(width: 8),
-                Text('STAY CURRENT', style: GoogleFonts.inter(
-                  fontSize: 10, fontWeight: FontWeight.w700,
-                  color: const Color(0xFF3B82F6), letterSpacing: 1.5)),
-              ]),
-              const SizedBox(height: 8),
-              Text('Read up on this', style: GoogleFonts.sourceSerif4(
-                fontSize: 22, fontWeight: FontWeight.w700,
-                color: t.primary, letterSpacing: -0.4)),
-              const SizedBox(height: 4),
-              Text('News relevant to your profile',
-                style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
-            ]),
-          ),
-          const SizedBox(height: 16),
-          if (_newsLoading)
-            Center(child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: CircularProgressIndicator(color: t.primary, strokeWidth: 1.5)))
-          else
-            ..._recommendedNews.map((a) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _RecNewsCard(article: a, theme: t),
-            )),
-        ],
-
-        // ── Recommended Videos (LAST section) ─────────────────────────────
-        if (_profile != null && (_videosLoading || _recommendedVideos.isNotEmpty)) ...[
-          const SizedBox(height: 32),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Container(width: 24, height: 1, color: const Color(0xFFFF0000)),
-                const SizedBox(width: 8),
-                Text('WATCH', style: GoogleFonts.inter(
-                  fontSize: 10, fontWeight: FontWeight.w700,
-                  color: const Color(0xFFFF0000), letterSpacing: 1.5)),
-              ]),
-              const SizedBox(height: 8),
-              Text('Recommended videos', style: GoogleFonts.sourceSerif4(
-                fontSize: 22, fontWeight: FontWeight.w700,
-                color: t.primary, letterSpacing: -0.4)),
-              const SizedBox(height: 4),
-              Text('YouTube tutorials matched to your role & skills',
-                style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
-            ]),
-          ),
-          const SizedBox(height: 16),
-          if (_videosLoading)
-            Center(child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: CircularProgressIndicator(color: t.primary, strokeWidth: 1.5)))
-          else
-            ..._recommendedVideos.map((v) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _RecVideoCard(video: v, theme: t),
-            )),
-        ],
+  Widget _groupHeader(AppTheme t, String label) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 24, 4, 10),
+      child: Row(children: [
+        Container(width: 20, height: 1, color: t.muted.withValues(alpha: 0.5)),
+        const SizedBox(width: 8),
+        Text(label, style: GoogleFonts.inter(
+          fontSize: 10, fontWeight: FontWeight.w700,
+          color: t.muted, letterSpacing: 1.5)),
+        const SizedBox(width: 8),
+        Expanded(child: Container(height: 1,
+          color: t.muted.withValues(alpha: 0.15))),
       ]),
     );
   }
@@ -1423,7 +1456,9 @@ class _MockInterviewJobCard extends StatelessWidget {
 class _RecommendationContent extends StatelessWidget {
   final String text;
   final AppTheme theme;
-  const _RecommendationContent({required this.text, required this.theme});
+  final bool collapsible;
+  const _RecommendationContent({
+    required this.text, required this.theme, this.collapsible = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1434,33 +1469,40 @@ class _RecommendationContent extends StatelessWidget {
     String currentTitle = '';
     final buffer = StringBuffer();
 
+    // Map of all recognized headers → display title. Handles both old
+    // (single career path) and new (2 paths with individual plans) formats.
+    final headerMap = <String, String>{
+      'WHAT TO DO NEXT': 'What to Do Next',
+      'CAREER PATH 1': 'Career Path 1',
+      'CAREER PATH 2': 'Career Path 2',
+      'CAREER PATH': 'Career Path',
+      '90-DAY PLAN FOR PATH 1': '90-Day Plan — Path 1',
+      '90-DAY PLAN FOR PATH 2': '90-Day Plan — Path 2',
+      '90-DAY PLAN': '90-Day Plan',
+      '90-DAY ACTION PLAN': '90-Day Action Plan',
+      'SKILLS TO ADD': 'Skills to Acquire',
+      'SKILLS TO ACQUIRE': 'Skills to Acquire',
+      'JOB READINESS': 'Job Readiness',
+    };
+
     for (final line in lines) {
       final trimmed = line.trim();
       if (trimmed.isEmpty) continue;
 
-      if (trimmed == 'CAREER PATH' || trimmed == '**CAREER PATH**') {
+      final upper = trimmed.replaceAll('*', '').replaceAll('#', '').trim();
+      String? matchedTitle;
+      for (final entry in headerMap.entries) {
+        if (upper == entry.key) {
+          matchedTitle = entry.value;
+          break;
+        }
+      }
+
+      if (matchedTitle != null) {
         if (currentTitle.isNotEmpty) {
           sections.add(_makeSection(currentTitle, buffer.toString().trim()));
         }
-        currentTitle = 'Career Path';
-        buffer.clear();
-      } else if (trimmed == '90-DAY ACTION PLAN' || trimmed == '**90-DAY ACTION PLAN**') {
-        if (currentTitle.isNotEmpty) {
-          sections.add(_makeSection(currentTitle, buffer.toString().trim()));
-        }
-        currentTitle = '90-Day Action Plan';
-        buffer.clear();
-      } else if (trimmed == 'SKILLS TO ADD' || trimmed == '**SKILLS TO ADD**') {
-        if (currentTitle.isNotEmpty) {
-          sections.add(_makeSection(currentTitle, buffer.toString().trim()));
-        }
-        currentTitle = 'Skills to Add';
-        buffer.clear();
-      } else if (trimmed == 'JOB READINESS' || trimmed == '**JOB READINESS**') {
-        if (currentTitle.isNotEmpty) {
-          sections.add(_makeSection(currentTitle, buffer.toString().trim()));
-        }
-        currentTitle = 'Job Readiness';
+        currentTitle = matchedTitle;
         buffer.clear();
       } else {
         buffer.writeln(trimmed);
@@ -1476,22 +1518,44 @@ class _RecommendationContent extends StatelessWidget {
         fontSize: 14, color: t.primary, height: 1.6));
     }
 
+    if (!collapsible) {
+      return Column(children: [
+        for (var i = 0; i < sections.length; i++)
+          Padding(
+            padding: EdgeInsets.only(bottom: i == sections.length - 1 ? 0 : 14),
+            child: _SectionCard(section: sections[i], index: i, theme: t),
+          ),
+      ]);
+    }
+
+    // Collapsible mode — each AI section is a compact expandable row
     return Column(children: [
       for (var i = 0; i < sections.length; i++)
-        Padding(
-          padding: EdgeInsets.only(bottom: i == sections.length - 1 ? 0 : 14),
-          child: _SectionCard(section: sections[i], index: i, theme: t),
+        _CollapsibleRow(
+          theme: t,
+          icon: sections[i].icon,
+          color: sections[i].color,
+          title: sections[i].title,
+          count: 0, // no count for AI sections
+          children: [_SectionCard(
+            section: sections[i], index: i, theme: t)],
         ),
     ]);
   }
 
   ({String title, String body, IconData icon, Color color}) _makeSection(String title, String body) {
+    if (title == 'What to Do Next') {
+      return (title: title, body: body, icon: Icons.arrow_forward_rounded, color: const Color(0xFF3B82F6));
+    }
+    if (title.startsWith('Career Path')) {
+      return (title: title, body: body, icon: Icons.route_rounded, color: const Color(0xFF3B82F6));
+    }
+    if (title.startsWith('90-Day')) {
+      return (title: title, body: body, icon: Icons.checklist_rounded, color: const Color(0xFF10B981));
+    }
     switch (title) {
-      case 'Career Path':
-        return (title: title, body: body, icon: Icons.route_rounded, color: const Color(0xFF3B82F6));
-      case '90-Day Action Plan':
-        return (title: title, body: body, icon: Icons.checklist_rounded, color: const Color(0xFF10B981));
       case 'Skills to Add':
+      case 'Skills to Acquire':
         return (title: title, body: body, icon: Icons.school_outlined, color: const Color(0xFFF59E0B));
       case 'Job Readiness':
         return (title: title, body: body, icon: Icons.rocket_launch_outlined, color: const Color(0xFF8B5CF6));
@@ -1569,10 +1633,12 @@ class _SectionCard extends StatelessWidget {
 
   Widget _buildBody(AppTheme t) {
     final s = section;
+    // Both the old "90-Day Action Plan" and new "90-Day Plan — Path 1/2"
+    // use the numbered list renderer
+    if (s.title.startsWith('90-Day')) return _buildActionPlan(t);
     switch (s.title) {
-      case '90-Day Action Plan':
-        return _buildActionPlan(t);
       case 'Skills to Add':
+      case 'Skills to Acquire':
         return _buildSkillsToAdd(t);
       case 'Job Readiness':
         return _buildJobReadiness(t);
@@ -1853,6 +1919,107 @@ class _ResumeJobCard extends StatelessWidget {
   );
 }
 
+// ── Collapsible Row (compact expandable section) ────────────────────────────
+class _CollapsibleRow extends StatefulWidget {
+  final AppTheme theme;
+  final IconData icon;
+  final Color color;
+  final String title;
+  final int count;
+  final bool loading;
+  final List<Widget> children;
+
+  const _CollapsibleRow({
+    required this.theme, required this.icon, required this.color,
+    required this.title, required this.count, required this.children,
+    this.loading = false,
+  });
+
+  @override
+  State<_CollapsibleRow> createState() => _CollapsibleRowState();
+}
+
+class _CollapsibleRowState extends State<_CollapsibleRow> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.theme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      decoration: BoxDecoration(
+        color: t.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: t.divider, width: 0.5)),
+      child: Column(children: [
+        // Header — always visible, tap to toggle
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            HapticFeedback.selectionClick();
+            setState(() => _expanded = !_expanded);
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            child: Row(children: [
+              Container(
+                width: 30, height: 30,
+                decoration: BoxDecoration(
+                  color: widget.color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8)),
+                child: Icon(widget.icon, size: 15, color: widget.color),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Text(widget.title, style: GoogleFonts.inter(
+                fontSize: 14, fontWeight: FontWeight.w600, color: t.primary))),
+              if (widget.loading)
+                SizedBox(width: 16, height: 16,
+                  child: CircularProgressIndicator(
+                    color: t.muted, strokeWidth: 1.5))
+              else ...[
+                if (widget.count > 0) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: t.primary.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(10)),
+                    child: Text('${widget.count}', style: GoogleFonts.inter(
+                      fontSize: 11, fontWeight: FontWeight.w700, color: t.muted)),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                AnimatedRotation(
+                  turns: _expanded ? 0.25 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Icon(Icons.chevron_right_rounded,
+                    size: 18, color: t.muted),
+                ),
+              ],
+            ]),
+          ),
+        ),
+        // Content — collapsible
+        AnimatedCrossFade(
+          duration: const Duration(milliseconds: 250),
+          crossFadeState: _expanded
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
+          firstChild: const SizedBox(width: double.infinity, height: 0),
+          secondChild: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+            child: Column(
+              children: widget.children.map((c) => Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: c,
+              )).toList(),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
 // ── ATS Score Card ──────────────────────────────────────────────────────────
 class _AtsScoreCard extends StatelessWidget {
   final int score;
@@ -1949,7 +2116,8 @@ class _AtsScoreCard extends StatelessWidget {
 class _RecCertCard extends StatelessWidget {
   final Certification cert;
   final AppTheme theme;
-  const _RecCertCard({required this.cert, required this.theme});
+  final String? sequenceLabel;
+  const _RecCertCard({required this.cert, required this.theme, this.sequenceLabel});
 
   IconData get _icon {
     switch (cert.providerType) {
@@ -1969,65 +2137,90 @@ class _RecCertCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: t.surface, borderRadius: BorderRadius.circular(12),
         border: Border.all(color: t.divider, width: 0.5)),
-      child: Row(children: [
-        Container(
-          width: 36, height: 36,
-          decoration: BoxDecoration(
-            color: accent.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8)),
-          child: Icon(_icon, size: 18, color: accent),
-        ),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(cert.name, style: GoogleFonts.inter(
-            fontSize: 14, fontWeight: FontWeight.w600, color: t.primary),
-            maxLines: 2, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 2),
-          Text(cert.provider, style: GoogleFonts.inter(fontSize: 12, color: t.secondary)),
-          const SizedBox(height: 4),
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(4)),
-              child: Text(cert.level, style: GoogleFonts.inter(
-                fontSize: 10, fontWeight: FontWeight.w700, color: accent)),
-            ),
-            if (cert.duration != null) ...[
-              const SizedBox(width: 6),
-              Icon(Icons.schedule_rounded, size: 11, color: t.muted),
-              const SizedBox(width: 3),
-              Flexible(child: Text(cert.duration!, style: GoogleFonts.inter(
-                fontSize: 11, color: t.muted), overflow: TextOverflow.ellipsis)),
-            ],
-            if (cert.rating != null) ...[
-              const SizedBox(width: 6),
-              Icon(Icons.star_rounded, size: 11, color: t.muted),
-              const SizedBox(width: 2),
-              Text(cert.rating!.toStringAsFixed(1), style: GoogleFonts.inter(
-                fontSize: 11, color: t.secondary, fontWeight: FontWeight.w500)),
-            ],
-          ]),
-        ])),
-        const SizedBox(width: 10),
-        if (cert.url != null && cert.url!.isNotEmpty)
-          GestureDetector(
-            onTap: () async {
-              HapticFeedback.lightImpact();
-              final uri = Uri.parse(cert.url!);
-              if (await canLaunchUrl(uri)) {
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              }
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: t.primary, borderRadius: BorderRadius.circular(8)),
-              child: Text('Enroll', style: GoogleFonts.inter(
-                fontSize: 13, fontWeight: FontWeight.w600, color: t.background)),
-            ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Sequence label
+        if (sequenceLabel != null) ...[
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: sequenceLabel == 'Start with this'
+                  ? accent.withValues(alpha: 0.12)
+                  : t.primary.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(5)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(
+                sequenceLabel == 'Start with this'
+                    ? Icons.play_arrow_rounded
+                    : Icons.skip_next_rounded,
+                size: 12,
+                color: sequenceLabel == 'Start with this' ? accent : t.muted),
+              const SizedBox(width: 4),
+              Text(sequenceLabel!, style: GoogleFonts.inter(
+                fontSize: 10, fontWeight: FontWeight.w700,
+                color: sequenceLabel == 'Start with this' ? accent : t.muted)),
+            ]),
           ),
+        ],
+        Row(children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8)),
+            child: Icon(_icon, size: 18, color: accent),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(cert.name, style: GoogleFonts.inter(
+              fontSize: 14, fontWeight: FontWeight.w600, color: t.primary),
+              maxLines: 2, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 2),
+            Text(cert.provider, style: GoogleFonts.inter(fontSize: 12, color: t.secondary)),
+          ])),
+        ]),
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(4)),
+            child: Text(cert.level, style: GoogleFonts.inter(
+              fontSize: 10, fontWeight: FontWeight.w700, color: accent)),
+          ),
+          if (cert.duration != null) ...[
+            const SizedBox(width: 6),
+            Icon(Icons.schedule_rounded, size: 11, color: t.muted),
+            const SizedBox(width: 3),
+            Flexible(child: Text(cert.duration!, style: GoogleFonts.inter(
+              fontSize: 11, color: t.muted), overflow: TextOverflow.ellipsis)),
+          ],
+          if (cert.rating != null) ...[
+            const SizedBox(width: 6),
+            Icon(Icons.star_rounded, size: 11, color: t.muted),
+            const SizedBox(width: 2),
+            Text(cert.rating!.toStringAsFixed(1), style: GoogleFonts.inter(
+              fontSize: 11, color: t.secondary, fontWeight: FontWeight.w500)),
+          ],
+          const Spacer(),
+          if (cert.url != null && cert.url!.isNotEmpty)
+            GestureDetector(
+              onTap: () async {
+                HapticFeedback.lightImpact();
+                final uri = Uri.parse(cert.url!);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: t.primary, borderRadius: BorderRadius.circular(8)),
+                child: Text('Enroll', style: GoogleFonts.inter(
+                  fontSize: 13, fontWeight: FontWeight.w600, color: t.background)),
+              ),
+            ),
+        ]),
       ]),
     );
   }

@@ -34,11 +34,13 @@ class _SalaryCalculatorScreenState extends State<SalaryCalculatorScreen> {
 
   static const _roles = ['ML Engineer', 'Data Scientist', 'AI Researcher', 'MLOps Engineer', 'AI Product Manager', 'NLP Engineer', 'Computer Vision Engineer'];
   static const _levels = ['Junior', 'Mid', 'Senior', 'Lead', 'Principal'];
-  static const _locations = ['United States', 'United Kingdom', 'Canada', 'Germany', 'Singapore', 'India', 'Australia', 'Remote'];
+  static final _defaultLocations = ['United States', 'United Kingdom', 'Canada', 'Germany', 'Singapore', 'India', 'Australia', 'Remote'];
+  late List<String> _locations;
 
   @override
   void initState() {
     super.initState();
+    _locations = List.from(_defaultLocations);
     _loadDefaults();
   }
 
@@ -46,8 +48,19 @@ class _SalaryCalculatorScreenState extends State<SalaryCalculatorScreen> {
     final prefs = await SharedPreferences.getInstance();
     final title = prefs.getString('user_job_title');
     final level = prefs.getString('user_level');
+    final country = prefs.getString('user_country');
     if (title != null && _roles.contains(title)) _role = title;
     if (level != null && _levels.contains(level)) _level = level;
+    // Pre-populate location from resume's detected country
+    if (country != null && country.isNotEmpty) {
+      if (_locations.contains(country)) {
+        _location = country;
+      } else {
+        // Country not in the default list — add it dynamically
+        _locations.insert(_locations.length - 1, country); // before "Remote"
+        _location = country;
+      }
+    }
     if (mounted) setState(() {});
   }
 

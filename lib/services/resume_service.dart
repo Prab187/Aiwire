@@ -103,7 +103,7 @@ class ResumeService {
   "experience_level": "Junior|Mid|Senior|Lead|Principal",
   "years_of_experience": 0,
   "country": "full country name",
-  "country_code": "2-letter lowercase code — us gb au ca de fr in nl sg br za pl es it at be ch nz mx — use us if unsure",
+  "country_code": "2-letter lowercase ISO 3166-1 code (e.g. us, gb, in, ae, jp, ng, br, de, sg, au, ca, fr, nl, za, kr, se, etc). Default to 'us' ONLY if absolutely no location signal. Extract aggressively from: address, phone country code (+91=in, +44=gb, +1=us/ca, +61=au, +49=de, +971=ae, +81=jp), city names, timezone, language.",
   "job_title": "best matching job title (e.g. ML Engineer, Data Scientist)",
   "summary": "2-3 sentence professional summary highlighting their strongest qualifications",
   "projects": ["up to 4 notable projects or work achievements mentioned — short 1-line each"],
