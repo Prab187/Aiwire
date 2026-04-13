@@ -68,7 +68,7 @@ class _EventsHubScreenState extends State<EventsHubScreen> {
         if (d.isBefore(DateTime(now.year, now.month, now.day))) return false;
         if (_dateFilter == 'This Week' && d.difference(now).inDays > 7) return false;
         if (_dateFilter == 'This Month' && d.difference(now).inDays > 30) return false;
-      } catch (_) {}
+      } catch (e) { debugPrint("AIWire: $e"); }
       return true;
     }).toList();
   }
@@ -438,7 +438,7 @@ class _EventCard extends StatelessWidget {
       final d = DateTime.parse(event.date);
       const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       dateDisplay = '${m[d.month - 1]} ${d.day}';
-    } catch (_) {}
+    } catch (e) { debugPrint("AIWire: $e"); }
 
     return GestureDetector(
       onTap: () async {

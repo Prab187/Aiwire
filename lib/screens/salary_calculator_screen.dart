@@ -7,6 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../services/claude_cache.dart';
 import '../services/claude_error.dart';
+// Premium gate disabled during testing
+// import '../services/ai_quota_guard.dart';
+// import '../widgets/quota_paywall.dart';
 
 class SalaryCalculatorScreen extends StatefulWidget {
   final AppTheme theme;
@@ -66,6 +69,8 @@ class _SalaryCalculatorScreenState extends State<SalaryCalculatorScreen> {
 
   Future<void> _calculate() async {
     HapticFeedback.lightImpact();
+    // Premium gate disabled during testing
+    // if (!await checkAiQuotaOrShowPaywall(context, t)) return;
     setState(() {
       _loading = true; _error = null;
       _p25 = null; _p50 = null; _p75 = null;
@@ -134,13 +139,18 @@ Respond with ONLY a JSON object, no markdown:
       }
 
       final data = json.decode(response.body);
-      final raw = (data['content'][0]['text'] as String).trim();
+      final contentList = data['content'] as List?;
+      if (contentList == null || contentList.isEmpty) {
+        throw Exception('Empty response from AI');
+      }
+      final raw = (contentList[0]['text'] as String? ?? '').trim();
       final cleaned = raw
           .replaceFirst(RegExp(r'^```json\s*'), '')
           .replaceFirst(RegExp(r'^```\s*'), '')
           .replaceFirst(RegExp(r'\s*```$'), '');
       final parsed = json.decode(cleaned) as Map<String, dynamic>;
       await ClaudeCache.set('salary', cacheKey, cleaned);
+      // await AiQuotaGuard.record();
 
       setState(() {
         _p25 = (parsed['p25'] as num).toInt();

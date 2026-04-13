@@ -1,11 +1,19 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'screens/splash_screen.dart';
 import 'services/subscription_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase — non-blocking, app works without it
+  try {
+    await Firebase.initializeApp()
+        .timeout(const Duration(seconds: 5));
+  } catch (_) {}
+
   unawaited(SubscriptionService.initialize());
   unawaited(SubscriptionService.validateSubscription());
   GoogleFonts.config.allowRuntimeFetching = true;

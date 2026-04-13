@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
@@ -60,7 +61,7 @@ class NewsService {
       try {
         final newsApiArticles = await _fetchNewsApi();
         allArticles.addAll(newsApiArticles);
-      } catch (_) {}
+      } catch (e) { debugPrint("AIWire: $e"); }
     }
 
     // Deduplicate by URL
@@ -156,7 +157,7 @@ class NewsService {
           final text = el.innerText.trim();
           if (text.isNotEmpty) return text;
         }
-      } catch (_) {}
+      } catch (e) { debugPrint("AIWire: $e"); }
     }
     return null;
   }
@@ -242,7 +243,7 @@ class NewsService {
     // 1. ISO 8601 — try directly
     try {
       return DateTime.parse(raw.trim()).toIso8601String();
-    } catch (_) {}
+    } catch (e) { debugPrint("AIWire: $e"); }
 
     // 2. RFC 822 — e.g. "Mon, 25 Mar 2026 10:30:00 +0000"
     try {
@@ -272,7 +273,7 @@ class NewsService {
       if (day > 0 && month > 0 && year > 0) {
         return DateTime.utc(year, month, day, hour, minute, second).toIso8601String();
       }
-    } catch (_) {}
+    } catch (e) { debugPrint("AIWire: $e"); }
 
     // 3. Give up — return null so article still shows without a timestamp
     return null;
@@ -304,7 +305,7 @@ class NewsService {
           else if (age < 12) score += 3;
           else if (age < 24) score += 2;
           else if (age < 48) score += 1;
-        } catch (_) {}
+        } catch (e) { debugPrint("AIWire: $e"); }
       }
 
       scores[article] = score;

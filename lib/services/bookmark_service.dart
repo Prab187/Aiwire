@@ -8,7 +8,15 @@ class BookmarkService {
   static Future<List<Article>> getBookmarks() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getStringList(_key) ?? [];
-    return raw.map((s) => Article.fromJson(json.decode(s))).toList();
+    final List<Article> result = [];
+    for (final s in raw) {
+      try {
+        result.add(Article.fromJson(json.decode(s)));
+      } catch (_) {
+        // skip corrupted entries
+      }
+    }
+    return result;
   }
 
   static Future<void> save(Article article) async {
@@ -23,7 +31,11 @@ class BookmarkService {
       'source': {'name': article.source},
       'content': article.content,
     };
-    if (!raw.any((s) => json.decode(s)['url'] == article.url)) {
+    final isDuplicate = raw.any((s) {
+      try { return json.decode(s)['url'] == article.url; }
+      catch (_) { return false; }
+    });
+    if (!isDuplicate) {
       raw.add(json.encode(map));
       await prefs.setStringList(_key, raw);
     }
@@ -32,13 +44,19 @@ class BookmarkService {
   static Future<void> remove(Article article) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getStringList(_key) ?? [];
-    raw.removeWhere((s) => json.decode(s)['url'] == article.url);
+    raw.removeWhere((s) {
+      try { return json.decode(s)['url'] == article.url; }
+      catch (_) { return false; }
+    });
     await prefs.setStringList(_key, raw);
   }
 
   static Future<bool> isBookmarked(String url) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getStringList(_key) ?? [];
-    return raw.any((s) => json.decode(s)['url'] == url);
+    return raw.any((s) {
+      try { return json.decode(s)['url'] == url; }
+      catch (_) { return false; }
+    });
   }
 }

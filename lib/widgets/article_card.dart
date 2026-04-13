@@ -251,7 +251,10 @@ class _ArticleCardState extends State<ArticleCard> with TickerProviderStateMixin
                   tag: 'img_${widget.article.url}',
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: CachedNetworkImage(
+                    child: Semantics(
+                      label: 'Article thumbnail for ${widget.article.title}',
+                      image: true,
+                      child: CachedNetworkImage(
                       imageUrl: widget.article.urlToImage!,
                       width: 80, height: 80, fit: BoxFit.cover,
                       fadeInDuration: const Duration(milliseconds: 200),
@@ -260,7 +263,7 @@ class _ArticleCardState extends State<ArticleCard> with TickerProviderStateMixin
                         width: 80, height: 80, color: t.surface,
                         child: Icon(Icons.image_outlined, color: t.muted, size: 20),
                       ),
-                    ),
+                    )),
                   ),
                 ),
               ],

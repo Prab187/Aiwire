@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shimmer/shimmer.dart';
 import '../theme/app_theme.dart';
 import '../models/resume_profile.dart';
 import '../models/job.dart';
@@ -20,10 +22,15 @@ import '../services/events_service.dart';
 import '../services/news_service.dart';
 import '../services/youtube_service.dart';
 import '../services/profile_storage_service.dart';
+import '../services/application_tracker_service.dart';
 import '../services/claude_cache.dart';
 import '../services/claude_error.dart';
 import '../widgets/bullet_summary.dart';
+// Premium gate disabled during testing — re-enable before App Store launch
+// import '../widgets/quota_paywall.dart';
+// import '../services/ai_quota_guard.dart';
 import 'mock_interview_screen.dart';
+import '../services/analytics_service.dart';
 
 enum _ScanState { idle, analyzing, results, error }
 
@@ -99,6 +106,9 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
   }
 
   Future<void> _pickAndScan({bool useSample = false}) async {
+    // Premium gate disabled during testing
+    // if (!await checkAiQuotaOrShowPaywall(context, t)) return;
+
     final file = useSample
         ? ResumeService.sampleResumeFile()
         : await ResumeService.pickResumeFile();
@@ -138,13 +148,25 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
         skills: profile.skills,
         countryCode: profile.countryCode,
         jobTitle: profile.jobTitle,
+        country: profile.country,
       );
+
+      // Premium gate disabled during testing
+      // await AiQuotaGuard.record();
+      // await AiQuotaGuard.record();
 
       setState(() {
         _profile = profile;
         _jobs = jobs;
         _state = _ScanState.results;
       });
+
+      // Track in analytics
+      if (useSample) {
+        AnalyticsService.sampleResumeUsed();
+      } else {
+        AnalyticsService.resumeScanned(country: profile.country);
+      }
 
       _generateRecommendation();
       _loadRecommendedCerts();
@@ -190,17 +212,44 @@ Get yours: aiwire.app''';
       prompt = manualContext;
     } else {
       final p = _profile!;
-      final pLower = p.skills.map((s) => s.toLowerCase()).toSet();
-      final matchScores = _jobs.take(5).map((j) {
-        final matched = j.skills.where((s) => pLower.contains(s.toLowerCase())).length;
-        final pct = j.skills.isEmpty ? 0 : ((matched / j.skills.length) * 100).round();
-        return '${j.title} at ${j.company}: $pct% match';
-      }).join('\n');
+      // Use qualified matches (fuzzy, ≥10%) for both the prompt and avg score
+      final qualified = _qualifiedMatches;
+      debugPrint('AIWire DEBUG: _jobs.length=${_jobs.length}, qualified.length=${qualified.length}');
+      for (final m in qualified.take(5)) {
+        debugPrint('AIWire DEBUG: ${m.job.title} @ ${m.job.company} = ${m.score}% | skills: ${m.job.skills.join(", ")}');
+      }
+      debugPrint('AIWire DEBUG: user skills = ${_profile!.skills.join(", ")}');
 
-      final avgMatch = _jobs.isEmpty ? 0 : _jobs.take(10).map((j) {
-        final matched = j.skills.where((s) => pLower.contains(s.toLowerCase())).length;
-        return j.skills.isEmpty ? 0 : ((matched / j.skills.length) * 100).round();
-      }).reduce((a, b) => a + b) ~/ _jobs.take(10).length;
+      final matchScores = qualified.take(5).map((m) =>
+        '${m.job.title} at ${m.job.company}: ${m.score}% match'
+      ).join('\n');
+
+      int avgMatch;
+      if (qualified.isNotEmpty) {
+        avgMatch = qualified.take(10).map((m) => m.score).reduce((a, b) => a + b) ~/ qualified.take(10).length;
+      } else if (_jobs.isNotEmpty) {
+        // Jobs exist but none met the 10% threshold — compute raw average across all jobs
+        final allScores = _jobs.map((j) {
+          if (j.skills.isEmpty) return 0;
+          final pLower = p.skills.map((s) => s.toLowerCase()).toList();
+          final jobText = '${j.title} ${j.description} ${j.skills.join(" ")}'.toLowerCase();
+          var matched = 0;
+          for (final s in pLower) {
+            if (s.isEmpty) continue;
+            if (j.skills.any((js) => js.toLowerCase().contains(s) || s.contains(js.toLowerCase()))) {
+              matched++;
+            } else if (jobText.contains(s)) {
+              matched++;
+            }
+          }
+          return pLower.isEmpty ? 0 : ((matched / pLower.length) * 100).round();
+        }).toList();
+        avgMatch = allScores.isEmpty ? 15 : (allScores.reduce((a, b) => a + b) ~/ allScores.length).clamp(5, 100);
+      } else {
+        // No jobs at all — estimate based on profile strength
+        avgMatch = p.skills.length >= 6 ? 35 : (p.skills.length >= 3 ? 20 : 10);
+      }
+      debugPrint('AIWire DEBUG: avgMatch=$avgMatch');
 
       prompt = '''You are a senior AI/ML career advisor. Analyze this resume profile in depth and give a highly personalized recommendation. Reference SPECIFIC items from their resume to show the advice is tailored.
 
@@ -233,21 +282,39 @@ MUST be specific to the ${p.country} market. Do NOT give generic global advice:
 - For the 90-day action plan, include at least 2 ${p.country}-specific concrete steps
 If you are unsure about something ${p.country}-specific, say so rather than substituting US data.
 
-Provide a structured recommendation using these EXACT headers. Be concise — no filler, every sentence must be actionable:
-
-WHAT TO DO NEXT
-[Address by first name. In 3-4 sentences, tell them the single most impactful next step for their career in ${p.country} based on their ${p.yearsOfExperience} years as ${p.jobTitle}. Don't name specific job titles. Focus on: what skill to deepen, what type of opportunity to pursue, and one concrete move they can make this week. Reference their actual skills and gaps.]
-
-90-DAY PLAN
-[5 numbered action items. Each is one sentence, starts with a verb, and references something specific from their profile or ${p.country}'s market. Include: 1 skill to learn, 1 certification to start, 1 project to build, 1 community to join, 1 application to submit. All ${p.country}-specific.]
-
-SKILLS TO ACQUIRE
-[Exactly 2 skills from their gaps: ${p.gaps.join(', ')}. Format as "1. Start now: [Skill]" and "2. Learn next: [Skill]". For each write 2-3 COMPLETE sentences: what it is, why it matters in ${p.country}, and one specific resource. Do NOT truncate — finish every sentence.]
+Provide a structured recommendation using these EXACT headers IN THIS EXACT ORDER.
+CRITICAL FORMATTING RULES:
+- Every section MUST have EXACTLY 4 numbered points (1. 2. 3. 4.)
+- Each point is ONE concise sentence — no paragraphs
+- Start each point with a verb or key insight
+- In SKILLS TO ACQUIRE, write the FULL skill name clearly (e.g. "1. Large Language Model Fine-Tuning (LoRA/QLoRA): ...")
+- Do NOT use bullet dashes or bullet dots — ONLY use "1." "2." "3." "4." numbering
 
 JOB READINESS
-[Start with: "You match $avgMatch% of AI/ML roles in ${p.country}." Then 2 sentences: what's helping your score and what's hurting it. End with the single action that would move the needle most.]
+1. [Start with: "You match $avgMatch% of AI/ML roles in ${p.country}."]
+2. [What's helping their score — reference specific strong skills]
+3. [What's hurting their score — reference specific missing skills]
+4. [The single most impactful action to improve their readiness]
 
-Be direct, specific, and ${p.country}-focused. No generic advice. Address by first name.''';
+GAP ANALYSIS
+1. [Biggest gap: what ${p.country}'s market demands that they lack — name the skill]
+2. [Second gap: another missing competency vs top job requirements]
+3. [Experience gap: what level/type of project experience is missing]
+4. [Industry gap: what domain knowledge or certification would close the gap]
+
+SKILLS TO ACQUIRE
+1. [Start now: FULL SKILL NAME — one sentence explaining why it matters in ${p.country}]
+2. [Start now: FULL SKILL NAME — one sentence with a specific resource to learn it]
+3. [Learn next: FULL SKILL NAME — one sentence explaining why it matters in ${p.country}]
+4. [Learn next: FULL SKILL NAME — one sentence with a specific resource to learn it]
+
+90-DAY PLAN
+1. [Month 1 action: specific skill to learn or certification to start, ${p.country}-specific]
+2. [Month 1-2 action: specific project to build referencing their profile]
+3. [Month 2-3 action: community/event in ${p.country} to join or attend]
+4. [Month 3 action: specific application target or portfolio milestone]
+
+Be direct, specific, and ${p.country}-focused. No generic advice. Address by first name. Each point must be a COMPLETE sentence with no truncation.''';
     }
 
     try {
@@ -260,10 +327,10 @@ Be direct, specific, and ${p.country}-focused. No generic advice. Address by fir
         },
         body: json.encode({
           'model': 'claude-haiku-4-5',
-          'max_tokens': 1000,
+          'max_tokens': 1600,
           'messages': [{'role': 'user', 'content': prompt}],
         }),
-      ).timeout(const Duration(seconds: 30));
+      ).timeout(const Duration(seconds: 60));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -279,6 +346,8 @@ Be direct, specific, and ${p.country}-focused. No generic advice. Address by fir
           _recLoading = false;
         });
       }
+    } on TimeoutException {
+      if (mounted) setState(() { _recommendation = 'Request timed out. Please try again.'; _recLoading = false; });
     } catch (e) {
       if (mounted) setState(() { _recommendation = 'Error: ${e.toString().replaceFirst("Exception: ", "")}'; _recLoading = false; });
     }
@@ -295,21 +364,34 @@ Primary Skill: $_manualSkill
 Years of Experience: $_manualYears
 Certifications/Projects: ${_manualCerts.isNotEmpty ? _manualCerts : 'None mentioned'}
 
-Provide a structured recommendation in this exact format (use these exact headers):
-
-CAREER PATH
-[2-3 sentences on their ideal career trajectory]
-
-90-DAY ACTION PLAN
-[3-4 numbered action items for the next 90 days]
-
-SKILLS TO ADD
-[2-3 specific skills they should learn next]
+Provide a structured recommendation using these EXACT headers IN THIS EXACT ORDER.
+CRITICAL: Every section MUST have EXACTLY 4 numbered points (1. 2. 3. 4.). Each point is ONE complete sentence. In SKILLS TO ACQUIRE, write the FULL skill name clearly.
 
 JOB READINESS
-[1 sentence: estimate what % of AI/ML roles they could apply for, then 1 sentence of advice]
+1. [Estimate what % of AI/ML roles they could apply for]
+2. [What's helping their profile]
+3. [What's holding them back]
+4. [Single most impactful action to improve]
 
-Keep it concise, direct, actionable. Address them by first name.''';
+GAP ANALYSIS
+1. [Biggest missing skill vs market demands]
+2. [Second gap in their profile]
+3. [Experience or project gap]
+4. [Certification or domain knowledge gap]
+
+SKILLS TO ACQUIRE
+1. [Start now: FULL SKILL NAME — why it matters]
+2. [Start now: FULL SKILL NAME — specific resource to learn]
+3. [Learn next: FULL SKILL NAME — why it matters]
+4. [Learn next: FULL SKILL NAME — specific resource to learn]
+
+90-DAY PLAN
+1. [Month 1: skill or certification to start]
+2. [Month 1-2: project to build]
+3. [Month 2-3: community or event to join]
+4. [Month 3: application or portfolio milestone]
+
+Be concise, direct, actionable. Address them by first name.''';
 
     _generateRecommendation(manualContext: prompt);
   }
@@ -574,7 +656,7 @@ Keep it concise, direct, actionable. Address them by first name.''';
                     indicatorWeight: 1.5,
                     labelStyle: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
                     unselectedLabelStyle: GoogleFonts.inter(fontSize: 14),
-                    tabs: const [Tab(text: 'Recommendation'), Tab(text: 'Jobs for You')],
+                    tabs: const [Tab(text: 'AI Roadmap'), Tab(text: 'Jobs for You')],
                   ),
                   Divider(height: 1, color: t.divider),
                 ]))
@@ -603,195 +685,163 @@ Keep it concise, direct, actionable. Address them by first name.''';
       key: const ValueKey('idle'),
       padding: const EdgeInsets.all(24),
       child: Column(children: [
+        const SizedBox(height: 8),
+
+        // ── PRIMARY: Quick Career Check (low friction) ──
+        Text('Get Your AI Career Plan', style: GoogleFonts.sourceSerif4(
+          fontSize: 24, fontWeight: FontWeight.w700,
+          color: t.primary, letterSpacing: -0.4)),
+        const SizedBox(height: 4),
+        Text('Answer 3 questions — takes 30 seconds',
+          style: GoogleFonts.inter(fontSize: 13, color: t.muted)),
         const SizedBox(height: 20),
-        // Upload section
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(28),
-          decoration: BoxDecoration(
-            color: t.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: t.divider, width: 0.5)),
-          child: Column(children: [
-            Container(
-              width: 64, height: 64,
+
+        // Name
+        TextField(
+          controller: _nameCtrl,
+          style: GoogleFonts.inter(color: t.primary, fontSize: 14),
+          decoration: _inputDecor('Your name'),
+          onChanged: (v) => _manualName = v,
+        ),
+        const SizedBox(height: 12),
+
+        // Skill picker
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text('Primary skill', style: GoogleFonts.inter(
+            fontSize: 12, color: t.muted, fontWeight: FontWeight.w500)),
+        ),
+        const SizedBox(height: 8),
+        Wrap(spacing: 6, runSpacing: 6, children: _skillOptions.map((s) =>
+          GestureDetector(
+            onTap: () { HapticFeedback.selectionClick(); setState(() => _manualSkill = s); },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: t.primary.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(16)),
-              child: Icon(Icons.upload_file_rounded, size: 30, color: t.primary),
+                color: _manualSkill == s ? t.primary.withValues(alpha: 0.1) : t.surface,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: _manualSkill == s ? t.primary.withValues(alpha: 0.3) : t.divider)),
+              child: Text(s, style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: _manualSkill == s ? FontWeight.w600 : FontWeight.w400,
+                color: _manualSkill == s ? t.primary : t.secondary)),
             ),
-            const SizedBox(height: 20),
-            Text('Scan Your Resume', style: GoogleFonts.sourceSerif4(
-              fontSize: 22, fontWeight: FontWeight.w700, color: t.primary)),
-            const SizedBox(height: 8),
-            Text('Get matched jobs + career recommendation', textAlign: TextAlign.center,
-              style: GoogleFonts.inter(fontSize: 14, color: t.muted, height: 1.4)),
-            const SizedBox(height: 4),
-            Text('PDF, TXT, DOC, DOCX',
-              style: GoogleFonts.inter(fontSize: 12, color: t.muted.withValues(alpha: 0.6))),
-            const SizedBox(height: 24),
-            GestureDetector(
-              onTap: () => _pickAndScan(),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: t.primary, borderRadius: BorderRadius.circular(10)),
-                child: Center(child: Text('Upload Resume', style: GoogleFonts.inter(
-                  fontSize: 15, fontWeight: FontWeight.w600, color: t.background))),
-              ),
+          ),
+        ).toList()),
+        const SizedBox(height: 14),
+
+        // Years
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text('Years of experience', style: GoogleFonts.inter(
+            fontSize: 12, color: t.muted, fontWeight: FontWeight.w500)),
+        ),
+        const SizedBox(height: 8),
+        Row(children: ['0-1', '1-2', '2-4', '5+'].map((y) => Expanded(child: Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: GestureDetector(
+            onTap: () { HapticFeedback.selectionClick(); setState(() => _manualYears = y); },
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: _manualYears == y ? t.primary.withValues(alpha: 0.1) : t.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _manualYears == y ? t.primary.withValues(alpha: 0.3) : t.divider)),
+              child: Center(child: Text('$y yr', style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: _manualYears == y ? FontWeight.w700 : FontWeight.w400,
+                color: _manualYears == y ? t.primary : t.secondary))),
             ),
-            const SizedBox(height: 10),
-            GestureDetector(
-              onTap: () => _pickAndScan(useSample: true),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: t.divider),
-                  borderRadius: BorderRadius.circular(10)),
-                child: Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.science_outlined, size: 14, color: t.secondary),
-                  const SizedBox(width: 6),
-                  Text('Try with sample resume', style: GoogleFonts.inter(
-                    fontSize: 13, fontWeight: FontWeight.w500, color: t.secondary)),
-                ])),
-              ),
-            ),
-          ]),
+          ),
+        ))).toList()),
+        const SizedBox(height: 12),
+
+        // Certs/projects
+        TextField(
+          controller: _certCtrl,
+          style: GoogleFonts.inter(color: t.primary, fontSize: 14),
+          decoration: _inputDecor('Certifications or projects (optional)'),
+          onChanged: (v) => _manualCerts = v,
+        ),
+        const SizedBox(height: 18),
+
+        // Get Recommendation button
+        GestureDetector(
+          onTap: (_manualName.isNotEmpty && _manualSkill.isNotEmpty)
+              ? _generateManualRecommendation
+              : null,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: BoxDecoration(
+              color: (_manualName.isNotEmpty && _manualSkill.isNotEmpty)
+                  ? t.primary : t.muted.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(12)),
+            child: Center(child: _recLoading
+              ? SizedBox(width: 18, height: 18,
+                child: CircularProgressIndicator(color: t.background, strokeWidth: 2))
+              : Text('Get AI Career Plan', style: GoogleFonts.inter(
+                fontSize: 15, fontWeight: FontWeight.w700,
+                color: (_manualName.isNotEmpty && _manualSkill.isNotEmpty)
+                    ? t.background : t.muted))),
+          ),
         ),
 
-        const SizedBox(height: 24),
+        // Inline recommendation result
+        if (_recommendation != null && _profile == null) ...[
+          const SizedBox(height: 20),
+          _RecommendationContent(text: _recommendation!, theme: t),
+        ],
 
-        // OR divider
+        const SizedBox(height: 28),
+
+        // ── SECONDARY: Have a resume? ──
         Row(children: [
           Expanded(child: Divider(color: t.divider)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text('or get recommendations without a resume',
+            child: Text('or upload your resume for a deeper analysis',
               style: GoogleFonts.inter(fontSize: 11, color: t.muted)),
           ),
           Expanded(child: Divider(color: t.divider)),
         ]),
+        const SizedBox(height: 16),
 
-        const SizedBox(height: 24),
-
-        // Manual input
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: t.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: t.divider, width: 0.5)),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Container(
-                width: 32, height: 32,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF6366F1).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.auto_awesome_rounded, size: 16, color: Color(0xFF6366F1)),
-              ),
-              const SizedBox(width: 10),
-              Text('Quick Career Check', style: GoogleFonts.inter(
-                fontSize: 15, fontWeight: FontWeight.w700, color: t.primary)),
-            ]),
-            const SizedBox(height: 16),
-
-            // Name
-            TextField(
-              controller: _nameCtrl,
-              style: GoogleFonts.inter(color: t.primary, fontSize: 14),
-              decoration: _inputDecor('Your name'),
-              onChanged: (v) => _manualName = v,
+        Row(children: [
+          Expanded(child: GestureDetector(
+            onTap: () => _pickAndScan(),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                border: Border.all(color: t.divider),
+                borderRadius: BorderRadius.circular(10)),
+              child: Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.upload_file_rounded, size: 16, color: t.primary),
+                const SizedBox(width: 8),
+                Text('Upload CV', style: GoogleFonts.inter(
+                  fontSize: 13, fontWeight: FontWeight.w600, color: t.primary)),
+              ])),
             ),
-            const SizedBox(height: 12),
-
-            // Skill picker
-            Text('Primary skill', style: GoogleFonts.inter(
-              fontSize: 12, color: t.muted, fontWeight: FontWeight.w500)),
-            const SizedBox(height: 8),
-            Wrap(spacing: 6, runSpacing: 6, children: _skillOptions.map((s) =>
-              GestureDetector(
-                onTap: () { HapticFeedback.selectionClick(); setState(() => _manualSkill = s); },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: _manualSkill == s ? t.primary.withValues(alpha: 0.1) : t.background,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: _manualSkill == s ? t.primary.withValues(alpha: 0.3) : t.divider)),
-                  child: Text(s, style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: _manualSkill == s ? FontWeight.w600 : FontWeight.w400,
-                    color: _manualSkill == s ? t.primary : t.secondary)),
-                ),
-              ),
-            ).toList()),
-            const SizedBox(height: 14),
-
-            // Years
-            Text('Years of experience', style: GoogleFonts.inter(
-              fontSize: 12, color: t.muted, fontWeight: FontWeight.w500)),
-            const SizedBox(height: 8),
-            Row(children: ['0-1', '1-2', '2-4', '5+'].map((y) => Expanded(child: Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: GestureDetector(
-                onTap: () { HapticFeedback.selectionClick(); setState(() => _manualYears = y); },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    color: _manualYears == y ? t.primary.withValues(alpha: 0.1) : t.background,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: _manualYears == y ? t.primary.withValues(alpha: 0.3) : t.divider)),
-                  child: Center(child: Text('$y yr', style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: _manualYears == y ? FontWeight.w700 : FontWeight.w400,
-                    color: _manualYears == y ? t.primary : t.secondary))),
-                ),
-              ),
-            ))).toList()),
-            const SizedBox(height: 12),
-
-            // Certs/projects
-            TextField(
-              controller: _certCtrl,
-              style: GoogleFonts.inter(color: t.primary, fontSize: 14),
-              decoration: _inputDecor('Certifications or projects (optional)'),
-              onChanged: (v) => _manualCerts = v,
+          )),
+          const SizedBox(width: 10),
+          Expanded(child: GestureDetector(
+            onTap: () => _pickAndScan(useSample: true),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                border: Border.all(color: t.divider),
+                borderRadius: BorderRadius.circular(10)),
+              child: Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.science_outlined, size: 14, color: t.secondary),
+                const SizedBox(width: 6),
+                Text('Try sample', style: GoogleFonts.inter(
+                  fontSize: 13, fontWeight: FontWeight.w500, color: t.secondary)),
+              ])),
             ),
-            const SizedBox(height: 16),
-
-            GestureDetector(
-              onTap: (_manualName.isNotEmpty && _manualSkill.isNotEmpty)
-                  ? _generateManualRecommendation
-                  : null,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: (_manualName.isNotEmpty && _manualSkill.isNotEmpty)
-                      ? t.primary : t.muted.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(10)),
-                child: Center(child: _recLoading
-                  ? SizedBox(width: 18, height: 18,
-                    child: CircularProgressIndicator(color: t.background, strokeWidth: 2))
-                  : Text('Get Recommendation', style: GoogleFonts.inter(
-                    fontSize: 15, fontWeight: FontWeight.w600,
-                    color: (_manualName.isNotEmpty && _manualSkill.isNotEmpty)
-                        ? t.background : t.muted))),
-              ),
-            ),
-
-            // Show recommendation inline if generated from manual input
-            if (_recommendation != null && _profile == null) ...[
-              const SizedBox(height: 20),
-              _RecommendationContent(text: _recommendation!, theme: t),
-            ],
-          ]),
-        ),
+          )),
+        ]),
         const SizedBox(height: 40),
       ]),
     );
@@ -998,13 +1048,42 @@ Keep it concise, direct, actionable. Address them by first name.''';
   static const int _kMinMatchPct = 10;
 
   /// All matched jobs scoring at least _kMinMatchPct, sorted high to low.
+  /// Uses fuzzy matching: checks if user skill appears anywhere in job skill
+  /// text (substring match), not just exact equality. This handles cases like
+  /// user has "Python" and job lists "Python/Django" or "Machine Learning"
+  /// matching user's "ML".
   List<({Job job, int score})> get _qualifiedMatches {
     if (_profile == null) return [];
     final p = _profile!;
-    final pLower = p.skills.map((s) => s.toLowerCase()).toSet();
+    final pLower = p.skills.map((s) => s.toLowerCase()).where((s) => s.isNotEmpty).toList();
+    if (pLower.isEmpty) return [];
+
     return _jobs.map((j) {
-      final matched = j.skills.where((s) => pLower.contains(s.toLowerCase())).length;
-      final pct = j.skills.isEmpty ? 0 : ((matched / j.skills.length) * 100).round();
+      if (j.skills.isEmpty) {
+        // No skills listed — check title/description for user's skills
+        final jobText = '${j.title} ${j.description}'.toLowerCase();
+        final found = pLower.where((s) => jobText.contains(s)).length;
+        final pct = ((found / pLower.length) * 100).round();
+        return (job: j, score: pct);
+      }
+
+      final jobText = '${j.title} ${j.description} ${j.skills.join(" ")}'.toLowerCase();
+      var matched = 0;
+      for (final skill in pLower) {
+        // Check if any job skill contains this user skill (or vice versa)
+        if (j.skills.any((js) {
+          final jl = js.toLowerCase();
+          return jl.contains(skill) || skill.contains(jl);
+        })) {
+          matched++;
+        } else if (jobText.contains(skill)) {
+          // Broader: skill mentioned anywhere in title/description
+          matched++;
+        }
+      }
+      // Use the smaller set as denominator — measures overlap from user's perspective
+      final denominator = pLower.length;
+      final pct = ((matched / denominator) * 100).round();
       return (job: j, score: pct);
     }).where((r) => r.score >= _kMinMatchPct).toList()
       ..sort((a, b) => b.score.compareTo(a.score));
@@ -1036,15 +1115,15 @@ Keep it concise, direct, actionable. Address them by first name.''';
             Row(children: [
               Container(width: 20, height: 1, color: const Color(0xFF6366F1)),
               const SizedBox(width: 8),
-              Text('YOUR CAREER REPORT', style: GoogleFonts.inter(
+              Text('YOUR AI CAREER REPORT', style: GoogleFonts.inter(
                 fontSize: 10, fontWeight: FontWeight.w700,
                 color: const Color(0xFF6366F1), letterSpacing: 1.5)),
             ]),
             const SizedBox(height: 10),
             Text(
               _profile?.name != null
-                ? 'Career Plan for ${_profile!.name!.split(" ").first}'
-                : 'Your Career Plan',
+                ? 'AI Career Plan for ${_profile!.name!.split(" ").first}'
+                : 'Your AI Career Plan',
               style: GoogleFonts.sourceSerif4(
                 fontSize: 24, fontWeight: FontWeight.w700,
                 color: t.primary, letterSpacing: -0.5, height: 1.15)),
@@ -1135,18 +1214,23 @@ Keep it concise, direct, actionable. Address them by first name.''';
         const SizedBox(height: 8),
 
         // ── GROUP 2: YOUR PLAN ───────────────────────────────────────────
-        if (_recLoading)
-          Center(child: Padding(
-            padding: const EdgeInsets.all(40),
-            child: Column(children: [
-              CircularProgressIndicator(color: t.primary, strokeWidth: 1.5),
-              const SizedBox(height: 16),
-              Text('Analyzing your profile...', style: GoogleFonts.inter(
-                fontSize: 13, color: t.muted)),
-            ]),
-          ))
+        if (_recLoading) ...[
+          _groupHeader(t, 'YOUR AI ROADMAP'),
+          // Shimmer skeleton — mimics 4 collapsed rows
+          ...List.generate(4, (i) => Shimmer.fromColors(
+            baseColor: t.surface,
+            highlightColor: t.divider,
+            child: Container(
+              height: 56,
+              margin: const EdgeInsets.only(bottom: 6),
+              decoration: BoxDecoration(
+                color: t.surface,
+                borderRadius: BorderRadius.circular(12)),
+            ),
+          )),
+        ]
         else if (_recommendation != null) ...[
-          _groupHeader(t, 'YOUR PLAN'),
+          _groupHeader(t, 'YOUR AI ROADMAP'),
           _RecommendationContent(text: _recommendation!, theme: t, collapsible: true),
         ] else if (!_recLoading)
           Center(child: Text('No recommendation available', style: GoogleFonts.inter(
@@ -1173,7 +1257,7 @@ Keep it concise, direct, actionable. Address them by first name.''';
 
         // ── GROUP 3: YOUR RESOURCES (ordered by engagement priority) ─────
         if (_profile != null && !_recLoading) ...[
-          _groupHeader(t, 'YOUR RESOURCES'),
+          _groupHeader(t, 'YOUR AI TOOLKIT'),
 
           // 1. Mock Interview (highest engagement)
           if (top.isNotEmpty)
@@ -1181,7 +1265,7 @@ Keep it concise, direct, actionable. Address them by first name.''';
               theme: t,
               icon: Icons.psychology_rounded,
               color: const Color(0xFF8B5CF6),
-              title: 'Mock interview',
+              title: 'AI Interview Prep',
               count: 0,
               children: [
                 ...top.map((m) =>
@@ -1213,7 +1297,7 @@ Keep it concise, direct, actionable. Address them by first name.''';
               theme: t,
               icon: Icons.school_outlined,
               color: const Color(0xFF10B981),
-              title: 'Courses',
+              title: 'AI Courses',
               count: 0,
               children: _recommendedCourses.asMap().entries.map((e) =>
                 _RecCertCard(cert: e.value, theme: t,
@@ -1227,7 +1311,7 @@ Keep it concise, direct, actionable. Address them by first name.''';
               theme: t,
               icon: Icons.verified_outlined,
               color: const Color(0xFFF59E0B),
-              title: 'Certifications',
+              title: 'AI Certifications',
               count: 0,
               loading: _certsLoading,
               children: _recommendedCerts.asMap().entries.map((e) =>
@@ -1242,7 +1326,7 @@ Keep it concise, direct, actionable. Address them by first name.''';
               theme: t,
               icon: Icons.event_outlined,
               color: const Color(0xFFEC4899),
-              title: 'Online events',
+              title: 'AI Events',
               count: 0,
               loading: _eventsLoading,
               children: _recommendedEvents.map((e) =>
@@ -1255,7 +1339,7 @@ Keep it concise, direct, actionable. Address them by first name.''';
               theme: t,
               icon: Icons.article_outlined,
               color: const Color(0xFF3B82F6),
-              title: 'News for you',
+              title: 'AI News for You',
               count: 0,
               loading: _newsLoading,
               children: _recommendedNews.map((a) =>
@@ -1268,7 +1352,7 @@ Keep it concise, direct, actionable. Address them by first name.''';
               theme: t,
               icon: Icons.smart_display_outlined,
               color: const Color(0xFFFF0000),
-              title: 'Videos to watch',
+              title: 'AI Videos',
               count: 0,
               loading: _videosLoading,
               children: _recommendedVideos.map((v) =>
@@ -1472,7 +1556,8 @@ class _RecommendationContent extends StatelessWidget {
     // Map of all recognized headers → display title. Handles both old
     // (single career path) and new (2 paths with individual plans) formats.
     final headerMap = <String, String>{
-      'WHAT TO DO NEXT': 'What to Do Next',
+      'GAP ANALYSIS': 'GAP Analysis',
+      'WHAT TO DO NEXT': 'GAP Analysis',
       'CAREER PATH 1': 'Career Path 1',
       'CAREER PATH 2': 'Career Path 2',
       'CAREER PATH': 'Career Path',
@@ -1544,8 +1629,8 @@ class _RecommendationContent extends StatelessWidget {
   }
 
   ({String title, String body, IconData icon, Color color}) _makeSection(String title, String body) {
-    if (title == 'What to Do Next') {
-      return (title: title, body: body, icon: Icons.arrow_forward_rounded, color: const Color(0xFF3B82F6));
+    if (title == 'GAP Analysis' || title == 'What to Do Next') {
+      return (title: title, body: body, icon: Icons.analytics_outlined, color: const Color(0xFFEF4444));
     }
     if (title.startsWith('Career Path')) {
       return (title: title, body: body, icon: Icons.route_rounded, color: const Color(0xFF3B82F6));
@@ -1642,8 +1727,11 @@ class _SectionCard extends StatelessWidget {
         return _buildSkillsToAdd(t);
       case 'Job Readiness':
         return _buildJobReadiness(t);
+      case 'GAP Analysis':
+      case 'Gap Analysis':
+        return _buildNumberedSection(t);
       default:
-        return _buildProse(t);
+        return _buildNumberedSection(t);
     }
   }
 
@@ -1686,16 +1774,23 @@ class _SectionCard extends StatelessWidget {
     final items = _parseListItems(section.body);
     if (items.isEmpty) return _buildProse(t);
 
-    // Try to extract skill names from each item: usually the first 2-3 words
-    // before a colon, dash, or period
+    // Extract the actual skill name from items like:
+    //   "Start now: LLM Fine-Tuning and Deployment (LoRA/QLoRA...)"
+    //   "Learn next: A/B testing rigor"
+    //   "Cloud Infrastructure (AWS/GCP): ..."
     final chips = <String>[];
     for (final item in items) {
-      final m = RegExp(r'^([A-Z][\w\+\#\.\-/ ]{1,30}?)(?:[:\-—]|\s\(|\.\s)').firstMatch(item);
+      // Strip "Start now:", "Learn next:", or similar prefixes first
+      var cleaned = item.replaceFirst(RegExp(r'^(?:start now|learn next|add|acquire)\s*:\s*', caseSensitive: false), '');
+
+      // Now extract the skill name — text before the first colon, dash, period, or parenthesis
+      final m = RegExp(r'^([A-Za-z][\w\+\#\.\-/ ]{1,40}?)(?:\s*[:\-—(.]|\.\s)').firstMatch(cleaned);
       if (m != null) {
         chips.add(m.group(1)!.trim());
       } else {
-        final words = item.split(' ').take(3).join(' ');
-        if (words.length < 30) chips.add(words);
+        // Fallback: take up to first sentence or 5 words
+        final words = cleaned.split(' ').take(5).join(' ');
+        if (words.length <= 40) chips.add(words);
       }
     }
 
@@ -1731,10 +1826,11 @@ class _SectionCard extends StatelessWidget {
     ]);
   }
 
-  /// Big readiness percentage gauge + body prose
+  /// Big readiness percentage gauge + numbered points
   Widget _buildJobReadiness(AppTheme t) {
     final match = RegExp(r'(\d{1,3})\s*%').firstMatch(section.body);
     final pct = match != null ? int.tryParse(match.group(1)!) : null;
+    final items = _parseListItems(section.body);
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       if (pct != null) ...[
@@ -1766,16 +1862,67 @@ class _SectionCard extends StatelessWidget {
         Divider(height: 1, color: t.divider.withValues(alpha: 0.6)),
         const SizedBox(height: 16),
       ],
-      Text(section.body, style: GoogleFonts.sourceSerif4(
-        fontSize: 14, color: t.primary.withValues(alpha: 0.88),
-        height: 1.65, letterSpacing: 0.05)),
+      if (items.isNotEmpty)
+        ...items.asMap().entries.map((e) => Padding(
+          padding: EdgeInsets.only(bottom: e.key == items.length - 1 ? 0 : 14),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              width: 24, height: 24,
+              decoration: BoxDecoration(
+                color: section.color.withValues(alpha: 0.12),
+                shape: BoxShape.circle),
+              child: Center(child: Text('${e.key + 1}', style: GoogleFonts.inter(
+                fontSize: 11, fontWeight: FontWeight.w800, color: section.color))),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(e.value, style: GoogleFonts.sourceSerif4(
+              fontSize: 14, color: t.primary.withValues(alpha: 0.88),
+              height: 1.55, letterSpacing: 0.05))),
+          ]),
+        ))
+      else
+        Text(section.body, style: GoogleFonts.sourceSerif4(
+          fontSize: 14, color: t.primary.withValues(alpha: 0.88),
+          height: 1.65, letterSpacing: 0.05)),
     ]);
+  }
+
+  /// Generic numbered section — parses list items and renders numbered circles
+  Widget _buildNumberedSection(AppTheme t) {
+    final items = _parseListItems(section.body);
+    if (items.isEmpty) return _buildProse(t);
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      for (var i = 0; i < items.length; i++)
+        Padding(
+          padding: EdgeInsets.only(bottom: i == items.length - 1 ? 0 : 14),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              width: 24, height: 24,
+              decoration: BoxDecoration(
+                color: section.color.withValues(alpha: 0.12),
+                shape: BoxShape.circle),
+              child: Center(child: Text('${i + 1}', style: GoogleFonts.inter(
+                fontSize: 11, fontWeight: FontWeight.w800, color: section.color))),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(items[i], style: GoogleFonts.sourceSerif4(
+              fontSize: 14, color: t.primary.withValues(alpha: 0.88),
+              height: 1.55, letterSpacing: 0.05))),
+          ]),
+        ),
+    ]);
+  }
+
+  /// Strips markdown bold/italic markers and leading/trailing whitespace
+  static String _stripMarkdown(String s) {
+    return s.replaceAll(RegExp(r'\*{1,3}'), '').replaceAll(RegExp(r'_{1,3}'), '').trim();
   }
 
   /// Splits a body string into list items based on common patterns:
   /// "1. ...", "1) ...", "- ...", "• ..."
   List<String> _parseListItems(String body) {
-    final lines = body.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+    final lines = body.split('\n').map((l) => _stripMarkdown(l)).where((l) => l.isNotEmpty).toList();
     final items = <String>[];
     StringBuffer? current;
 
@@ -1822,77 +1969,161 @@ class _ResumeJobCard extends StatelessWidget {
   const _ResumeJobCard({required this.job, required this.theme, required this.profile});
 
   int _matchScore() {
-    if (job.skills.isEmpty) return 0;
-    final profileSkillsLower = profile.skills.map((s) => s.toLowerCase()).toSet();
-    final matched = job.skills.where((s) => profileSkillsLower.contains(s.toLowerCase())).length;
-    return ((matched / job.skills.length) * 100).round();
+    final pLower = profile.skills.map((s) => s.toLowerCase()).where((s) => s.isNotEmpty).toList();
+    if (pLower.isEmpty) return 0;
+    final jobText = '${job.title} ${job.description} ${job.skills.join(" ")}'.toLowerCase();
+    var matched = 0;
+    for (final skill in pLower) {
+      if (job.skills.any((js) {
+        final jl = js.toLowerCase();
+        return jl.contains(skill) || skill.contains(jl);
+      })) {
+        matched++;
+      } else if (jobText.contains(skill)) {
+        matched++;
+      }
+    }
+    return ((matched / pLower.length) * 100).round();
   }
 
   @override
   Widget build(BuildContext context) {
     final t = theme;
     final score = _matchScore();
-    final scoreColor = score >= 70
-        ? const Color(0xFF22C55E) : score >= 40
+    final scoreColor = score >= 60
+        ? const Color(0xFF22C55E) : score >= 30
         ? const Color(0xFFF59E0B) : t.muted;
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: t.surface, borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: t.divider, width: 0.5)),
+        color: t.surface, borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: t.divider, width: 0.5),
+        boxShadow: [BoxShadow(
+          color: t.primary.withValues(alpha: 0.02),
+          blurRadius: 6, offset: const Offset(0, 2))]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
+        // Row 1: Logo + Title + Score badge
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           _buildLogo(t),
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(job.title, style: GoogleFonts.inter(
-              fontSize: 14, fontWeight: FontWeight.w600, color: t.primary),
-              maxLines: 1, overflow: TextOverflow.ellipsis),
-            Text(job.company, style: GoogleFonts.inter(fontSize: 12, color: t.secondary)),
+              fontSize: 15, fontWeight: FontWeight.w700, color: t.primary, height: 1.2),
+              maxLines: 2, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 3),
+            Text(job.company, style: GoogleFonts.inter(
+              fontSize: 13, fontWeight: FontWeight.w500, color: t.secondary)),
           ])),
+          const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
               color: scoreColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20)),
-            child: Text('$score%', style: GoogleFonts.inter(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: scoreColor.withValues(alpha: 0.3))),
+            child: Text('$score% match', style: GoogleFonts.inter(
               fontSize: 11, fontWeight: FontWeight.w700, color: scoreColor)),
           ),
         ]),
-        const SizedBox(height: 8),
-        Wrap(spacing: 5, runSpacing: 5, children: job.skills.take(4).map((s) => Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-          decoration: BoxDecoration(
-            color: t.background, borderRadius: BorderRadius.circular(4)),
-          child: Text(s, style: GoogleFonts.inter(
-            fontSize: 10, color: t.secondary, fontWeight: FontWeight.w500)),
-        )).toList()),
-        const SizedBox(height: 8),
+
+        const SizedBox(height: 12),
+
+        // Row 2: Location + Type + Salary
         Row(children: [
-          Text(job.location, style: GoogleFonts.inter(fontSize: 11, color: t.muted),
-            overflow: TextOverflow.ellipsis),
+          Icon(Icons.location_on_outlined, size: 13, color: t.muted),
+          const SizedBox(width: 3),
+          Flexible(child: Text(job.location, style: GoogleFonts.inter(fontSize: 12, color: t.muted),
+            maxLines: 1, overflow: TextOverflow.ellipsis)),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: t.primary.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(4)),
+            child: Text(job.type, style: GoogleFonts.inter(
+              fontSize: 10, fontWeight: FontWeight.w600, color: t.secondary)),
+          ),
           const Spacer(),
           Text(job.salaryRange, style: GoogleFonts.inter(
-            fontSize: 12, fontWeight: FontWeight.w600, color: t.primary)),
+            fontSize: 12, fontWeight: FontWeight.w700, color: t.primary)),
         ]),
-        if (job.applyUrl.isNotEmpty) ...[
-          const SizedBox(height: 10),
+
+        const SizedBox(height: 10),
+
+        // Row 3: Skill chips
+        Wrap(spacing: 6, runSpacing: 6, children: job.skills.take(5).map((s) {
+          final isMatch = profile.skills.any((ps) {
+            final psl = ps.toLowerCase();
+            final sl = s.toLowerCase();
+            return sl.contains(psl) || psl.contains(sl);
+          });
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: isMatch
+                  ? const Color(0xFF22C55E).withValues(alpha: 0.08)
+                  : t.background,
+              borderRadius: BorderRadius.circular(6),
+              border: isMatch
+                  ? Border.all(color: const Color(0xFF22C55E).withValues(alpha: 0.3))
+                  : null),
+            child: Text(s, style: GoogleFonts.inter(
+              fontSize: 11, fontWeight: FontWeight.w500,
+              color: isMatch ? const Color(0xFF22C55E) : t.secondary)),
+          );
+        }).toList()),
+
+        // Row 4: Apply + Save
+        const SizedBox(height: 12),
+        Row(children: [
+          if (job.applyUrl.isNotEmpty)
+            Expanded(child: GestureDetector(
+              onTap: () async {
+                final uri = Uri.parse(job.applyUrl);
+                if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: t.primary,
+                  borderRadius: BorderRadius.circular(8)),
+                child: Center(child: Text('Apply Now', style: GoogleFonts.inter(
+                  fontSize: 13, fontWeight: FontWeight.w600, color: t.background))),
+              ),
+            )),
+          const SizedBox(width: 10),
           GestureDetector(
             onTap: () async {
-              final uri = Uri.parse(job.applyUrl);
-              if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+              HapticFeedback.lightImpact();
+              await ApplicationTrackerService.add(TrackedApplication(
+                id: job.id,
+                jobTitle: job.title,
+                company: job.company,
+                location: job.location,
+                salaryRange: job.salaryRange,
+                applyUrl: job.applyUrl,
+                companyLogo: job.companyLogo,
+                status: AppStatus.saved,
+                savedAt: DateTime.now().toIso8601String(),
+              ));
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text('Saved to Job Tracker',
+                    style: GoogleFonts.inter(fontSize: 13)),
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 2)));
+              }
             },
             child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 10),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                border: Border.all(color: t.primary), borderRadius: BorderRadius.circular(8)),
-              child: Center(child: Text('Apply Now', style: GoogleFonts.inter(
-                fontSize: 13, fontWeight: FontWeight.w600, color: t.primary))),
+                border: Border.all(color: t.divider),
+                borderRadius: BorderRadius.circular(8)),
+              child: Icon(Icons.bookmark_add_outlined, size: 18, color: t.muted),
             ),
           ),
-        ],
+        ]),
       ]),
     );
   }
@@ -1902,7 +2133,7 @@ class _ResumeJobCard extends StatelessWidget {
       return ClipRRect(
         borderRadius: BorderRadius.circular(10),
         child: CachedNetworkImage(
-          imageUrl: job.companyLogo!, width: 36, height: 36, fit: BoxFit.cover,
+          imageUrl: job.companyLogo!, width: 40, height: 40, fit: BoxFit.cover,
           errorWidget: (_, __, ___) => _letterAvatar(t)),
       );
     }
@@ -1910,12 +2141,12 @@ class _ResumeJobCard extends StatelessWidget {
   }
 
   Widget _letterAvatar(AppTheme t) => Container(
-    width: 36, height: 36,
+    width: 40, height: 40,
     decoration: BoxDecoration(
       color: t.primary.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(10)),
     child: Center(child: Text(
       job.company.isNotEmpty ? job.company[0] : '?',
-      style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: t.primary))),
+      style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w700, color: t.primary))),
   );
 }
 

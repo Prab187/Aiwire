@@ -91,7 +91,9 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                 ),
               );
             },
-            child: Column(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Logo mark
@@ -150,7 +152,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                   ),
                 ),
               ],
-            ),
+            )),
           ),
         ),
       ),

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -27,10 +28,11 @@ class _PaywallScreenState extends State<PaywallScreen> {
         widget.onSubscribed?.call();
         Navigator.pop(context);
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('AIWire purchase error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Purchase failed. Try again.',
+          content: Text('Purchase failed. ${e.toString().contains('cancel') ? 'Cancelled.' : 'Try again.'}',
               style: GoogleFonts.inter(fontSize: 13)),
           backgroundColor: widget.theme.primary,
           behavior: SnackBarBehavior.floating,

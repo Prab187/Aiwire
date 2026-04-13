@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
@@ -43,6 +44,16 @@ class YouTubeService {
   static const _minViews = 10000;
 
   static Future<List<YouTubeVideo>> fetchTrendingAI({int maxResults = 5}) async {
+    try {
+      return await _fetchTrendingAIInternal(maxResults: maxResults)
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      debugPrint('AIWire YouTube: $e');
+      return [];
+    }
+  }
+
+  static Future<List<YouTubeVideo>> _fetchTrendingAIInternal({int maxResults = 5}) async {
     final yt = YoutubeExplode();
     try {
       final candidates = <YouTubeVideo>[];
@@ -91,7 +102,7 @@ class YouTubeService {
               description: v.description,
             ));
           }
-        } catch (_) {}
+        } catch (e) { debugPrint("AIWire: $e"); }
       }
 
       // Sort by highest views first
@@ -109,6 +120,22 @@ class YouTubeService {
   /// high-view videos, and returns the best matches sorted by views.
   /// Metadata only — NO Claude calls at all, fast + free.
   static Future<List<YouTubeVideo>> fetchForProfile({
+    required List<String> skills,
+    required String jobTitle,
+    String? country,
+    int maxResults = 5,
+  }) async {
+    try {
+      return await _fetchForProfileInternal(
+        skills: skills, jobTitle: jobTitle, country: country, maxResults: maxResults,
+      ).timeout(const Duration(seconds: 15));
+    } catch (e) {
+      debugPrint('AIWire YouTube: $e');
+      return [];
+    }
+  }
+
+  static Future<List<YouTubeVideo>> _fetchForProfileInternal({
     required List<String> skills,
     required String jobTitle,
     String? country,
@@ -177,7 +204,7 @@ class YouTubeService {
               description: v.description,
             ));
           }
-        } catch (_) {}
+        } catch (e) { debugPrint("AIWire: $e"); }
         if (candidates.length >= maxResults * 2) break;
       }
 
@@ -245,7 +272,7 @@ class YouTubeService {
     String transcript = '';
     try {
       transcript = await _fetchTranscript(video.id);
-    } catch (_) {}
+    } catch (e) { debugPrint("AIWire: $e"); }
 
     String context;
     if (transcript.length > 100) {

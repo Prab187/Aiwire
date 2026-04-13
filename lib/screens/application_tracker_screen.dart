@@ -183,7 +183,7 @@ class _ApplicationTrackerScreenState extends State<ApplicationTrackerScreen>
           ),
         );
       }),
-    );
+    ).whenComplete(() => notesCtrl.dispose());
   }
 
   @override

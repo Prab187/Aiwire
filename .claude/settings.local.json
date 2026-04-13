@@ -39,7 +39,24 @@
       "Bash(ls /Users/apple/development/aiwire/.claude/worktrees/intelligent-matsumoto/ios/Runner/Assets.xcassets/AppIcon.appiconset/*.jpg)",
       "Bash(grep -n \"uploadDate\\\\|publishDate\\\\|SearchFilter\\\\|TypeFilters\\\\|UploadDate\" /Users/apple/.pub-cache/hosted/pub.dev/youtube_explode_dart-3.0.5/lib/src/search/*.dart)",
       "Bash(xcrun simctl:*)",
-      "Bash(open -a Simulator)"
+      "Bash(open -a Simulator)",
+      "Bash(node -e \"const today = new Date\\('2026-04-11'\\); const dates = ['2026-04-02', '2026-04-10', '2026-04-25', '2026-05-15', '2026-05-20', '2026-06-08', '2026-07-20', '2026-09-15', '2026-11-30', '2026-12-06']; dates.forEach\\(d => { const date = new Date\\(d\\); console.log\\(d + ' is ' + \\(date >= today ? 'FUTURE' : 'PAST'\\)\\); }\\);\")",
+      "Bash(grep -n \"totalJobs\\\\|totalEvents\\\\|totalCerts\" /Users/apple/development/aiwire/.claude/worktrees/intelligent-matsumoto/lib/services/*.dart)",
+      "Bash(wc -l /Users/apple/development/aiwire/.claude/worktrees/intelligent-matsumoto/lib/screens/*.dart)",
+      "Bash(ls -la ~/Downloads/GoogleService-Info*)",
+      "Read(//private/tmp/career-ops/**)",
+      "Bash(ls /tmp/career-ops/modes/*.md)",
+      "Bash(xargs -I{} basename {})",
+      "Bash(flutter test:*)",
+      "Bash(ls lib/screens/*.dart)",
+      "Bash(ls lib/services/*.dart)",
+      "Bash(ls lib/widgets/*.dart)",
+      "Bash(flutter devices:*)",
+      "Bash(ios-deploy --bundle build/ios/iphoneos/Runner.app --id 00008110-001505D91E12801E)",
+      "Bash(grep -r \"ANTHROPIC\" /Users/apple/development/aiwire/*.json)",
+      "Bash(cat /Users/apple/development/aiwire/.dart_define*)",
+      "Bash(pkill -f \"flutter.*run.*profile\")",
+      "Bash(pkill -f \"flutter.*run.*00008\")"
     ]
   }
 }

@@ -321,8 +321,8 @@ class _StickyLabelDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
   const _StickyLabelDelegate({required this.child});
 
-  @override double get minExtent => 40;
-  @override double get maxExtent => 40;
+  @override double get minExtent => 44;
+  @override double get maxExtent => 44;
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => child;

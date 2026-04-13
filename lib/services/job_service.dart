@@ -10,7 +10,7 @@ class JobService {
       'https://remotive.com/api/remote-jobs?category=software-dev&search=${Uri.encodeComponent(search)}&limit=20'
     );
 
-    final response = await http.get(url);
+    final response = await http.get(url).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) return [];
 
     final data = json.decode(response.body);
@@ -234,7 +234,7 @@ class JobService {
           postedAt: (j['pubDate'] as String? ?? '').split('T').first,
           companyLogo: j['companyLogo'] as String?,
           applyUrl: j['url'] ?? '',
-          featured: salaryMin != null && (salaryMin as num) > 150000,
+          featured: salaryMin != null && (num.tryParse(salaryMin.toString()) ?? 0) > 150000,
         );
       }).toList();
     } catch (_) {
@@ -309,7 +309,7 @@ class JobService {
     );
 
     try {
-      final response = await http.get(url);
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) return [];
 
       final data = json.decode(response.body);
@@ -346,6 +346,178 @@ class JobService {
     }
   }
 
+  // ── Greenhouse Boards API (free, no key) ─────────────────────────────────
+  // Top AI companies using Greenhouse
+  static const _greenhouseBoards = [
+    'openai', 'figma', 'ramp', 'databricks', 'nvidiacorporation',
+    'airbnb', 'doordash', 'instacart', 'coinbase', 'duolingo',
+  ];
+
+  static Future<List<Job>> _fetchGreenhouseJobs({String? query}) async {
+    final searchLower = (query ?? 'ai ml machine learning').toLowerCase();
+    final aiFilter = RegExp(
+      r'(machine.?learn|data.?scien|deep.?learn|nlp|llm|computer.?vision|'
+      r'\bai\b|\bml\b|artificial.?intelligence|mlops|neural|python|pytorch)',
+      caseSensitive: false,
+    );
+
+    final allJobs = <Job>[];
+    // Query top 3 boards in parallel for speed
+    final boards = _greenhouseBoards.take(5).toList();
+    final futures = boards.map((board) async {
+      try {
+        final url = Uri.parse('https://boards-api.greenhouse.io/v1/boards/$board/jobs?content=true');
+        final resp = await http.get(url).timeout(const Duration(seconds: 8));
+        if (resp.statusCode != 200) return <Job>[];
+
+        final data = json.decode(resp.body);
+        final jobs = data['jobs'] as List? ?? [];
+        return jobs.where((j) {
+          final title = (j['title'] as String? ?? '').toLowerCase();
+          return aiFilter.hasMatch(title) || title.contains(searchLower.split(' ').first);
+        }).take(5).map((j) {
+          final loc = j['location']?['name'] as String? ?? 'Remote';
+          return Job(
+            id: 'gh_${board}_${j['id']}',
+            title: j['title'] ?? '',
+            company: board[0].toUpperCase() + board.substring(1),
+            location: loc,
+            type: loc.toLowerCase().contains('remote') ? 'Remote' : 'On-site',
+            level: _inferLevel(j['title'] ?? ''),
+            description: _stripHtml(j['content'] ?? '', 300),
+            skills: _extractSkills(j['content'] ?? ''),
+            salaryRange: 'Not disclosed',
+            postedAt: (j['updated_at'] as String? ?? '').split('T').first,
+            applyUrl: j['absolute_url'] ?? '',
+            featured: true,
+          );
+        }).toList();
+      } catch (_) {
+        return <Job>[];
+      }
+    });
+
+    final results = await Future.wait(futures);
+    for (final list in results) {
+      allJobs.addAll(list);
+    }
+    return allJobs;
+  }
+
+  // ── Ashby Job Board API (free, no key) ──────────────────────────────────
+  // Top AI companies using Ashby
+  static const _ashbyBoards = [
+    'anthropic', 'ramp', 'notion', 'vercel', 'dbt-labs',
+  ];
+
+  static Future<List<Job>> _fetchAshbyJobs({String? query}) async {
+    final aiFilter = RegExp(
+      r'(machine.?learn|data.?scien|deep.?learn|nlp|llm|computer.?vision|'
+      r'\bai\b|\bml\b|artificial.?intelligence|mlops|neural|research)',
+      caseSensitive: false,
+    );
+
+    final allJobs = <Job>[];
+    final futures = _ashbyBoards.map((board) async {
+      try {
+        final url = Uri.parse('https://api.ashbyhq.com/posting-api/job-board/$board');
+        final resp = await http.get(url).timeout(const Duration(seconds: 8));
+        if (resp.statusCode != 200) return <Job>[];
+
+        final data = json.decode(resp.body);
+        final jobs = data['jobs'] as List? ?? [];
+        return jobs.where((j) {
+          final title = (j['title'] as String? ?? '').toLowerCase();
+          return aiFilter.hasMatch(title);
+        }).take(5).map((j) {
+          final loc = j['location'] as String? ?? 'Remote';
+          final dept = j['department'] as String? ?? '';
+          return Job(
+            id: 'ash_${board}_${j['id'] ?? j.hashCode}',
+            title: j['title'] ?? '',
+            company: board[0].toUpperCase() + board.substring(1),
+            location: loc,
+            type: loc.toLowerCase().contains('remote') ? 'Remote' : 'On-site',
+            level: _inferLevel(j['title'] ?? ''),
+            description: dept.isNotEmpty ? 'Department: $dept' : 'See job posting for details.',
+            skills: _extractSkills('${j['title']} $dept'),
+            salaryRange: 'Not disclosed',
+            postedAt: (j['publishedDate'] as String? ?? '').split('T').first,
+            applyUrl: j['jobUrl'] ?? j['applyUrl'] ?? '',
+            featured: true,
+          );
+        }).toList();
+      } catch (_) {
+        return <Job>[];
+      }
+    });
+
+    final results = await Future.wait(futures);
+    for (final list in results) {
+      allJobs.addAll(list);
+    }
+    return allJobs;
+  }
+
+  // ── Lever Postings API (free, no key) ───────────────────────────────────
+  // Top AI companies using Lever
+  static const _leverBoards = [
+    'stripe', 'netflix', 'shopify', 'twitch', 'github',
+  ];
+
+  static Future<List<Job>> _fetchLeverJobs({String? query}) async {
+    final aiFilter = RegExp(
+      r'(machine.?learn|data.?scien|deep.?learn|nlp|llm|computer.?vision|'
+      r'\bai\b|\bml\b|artificial.?intelligence|mlops|neural|platform)',
+      caseSensitive: false,
+    );
+
+    final allJobs = <Job>[];
+    final futures = _leverBoards.map((board) async {
+      try {
+        final url = Uri.parse('https://api.lever.co/v0/postings/$board?mode=json');
+        final resp = await http.get(url).timeout(const Duration(seconds: 8));
+        if (resp.statusCode != 200) return <Job>[];
+
+        final data = json.decode(resp.body) as List? ?? [];
+        return data.where((j) {
+          final title = (j['text'] as String? ?? '').toLowerCase();
+          return aiFilter.hasMatch(title);
+        }).take(5).map((j) {
+          final cats = j['categories'] as Map? ?? {};
+          final loc = cats['location'] as String? ?? 'Remote';
+          final commitment = cats['commitment'] as String? ?? '';
+          return Job(
+            id: 'lever_${board}_${j['id'] ?? j.hashCode}',
+            title: j['text'] ?? '',
+            company: board[0].toUpperCase() + board.substring(1),
+            location: loc,
+            type: loc.toLowerCase().contains('remote') ? 'Remote'
+                : commitment.toLowerCase().contains('remote') ? 'Remote' : 'On-site',
+            level: _inferLevel(j['text'] ?? ''),
+            description: _stripHtml(j['descriptionPlain'] ?? j['description'] ?? '', 300),
+            skills: _extractSkills(j['descriptionPlain'] ?? j['description'] ?? ''),
+            salaryRange: 'Not disclosed',
+            postedAt: j['createdAt'] != null
+                ? DateTime.fromMillisecondsSinceEpoch(j['createdAt'] as int)
+                    .toIso8601String().split('T').first
+                : '',
+            applyUrl: j['hostedUrl'] ?? j['applyUrl'] ?? '',
+            featured: true,
+          );
+        }).toList();
+      } catch (_) {
+        return <Job>[];
+      }
+    });
+
+    final results = await Future.wait(futures);
+    for (final list in results) {
+      allJobs.addAll(list);
+    }
+    return allJobs;
+  }
+
   static const _euCodes = {'de', 'fr', 'nl', 'be', 'at', 'ch', 'es', 'it', 'pl', 'se', 'dk', 'fi', 'no', 'ie', 'pt'};
 
   static const _countryNames = {
@@ -358,25 +530,38 @@ class JobService {
     'pl': 'Poland', 'at': 'Austria', 'mx': 'Mexico', 'ng': 'Nigeria',
   };
 
-  /// Filters a job list to prefer country-relevant + remote roles.
-  /// If the filter would leave < 5 results, returns the unfiltered list.
+  /// Filters a job list to only keep jobs in the user's country or
+  /// genuinely location-agnostic remote roles.
   static List<Job> _filterByCountry(List<Job> jobs, String countryCode) {
     final cc = countryCode.toLowerCase();
     final name = (_countryNames[cc] ?? '').toLowerCase();
     if (name.isEmpty) return jobs; // unknown country — don't filter
 
-    final filtered = jobs.where((j) {
+    // Build a set of all known foreign country names to reject against
+    final foreignNames = <String>{};
+    for (final entry in _countryNames.entries) {
+      if (entry.key != cc) foreignNames.add(entry.value.toLowerCase());
+    }
+
+    return jobs.where((j) {
       final loc = j.location.toLowerCase();
-      // Keep if location mentions the country name
+
+      // Keep if location explicitly mentions user's country
       if (loc.contains(name)) return true;
-      // Keep remote / worldwide / anywhere
-      if (j.type == 'Remote') return true;
-      if (loc.contains('remote') || loc.contains('worldwide') || loc.contains('anywhere')) return true;
+
+      // Keep only truly global remote jobs — reject remote jobs
+      // that mention a specific foreign country
+      if (loc.contains('worldwide') || loc.contains('anywhere') ||
+          loc.contains('global') || loc == 'remote' || loc.isEmpty) {
+        return true;
+      }
+
+      // Reject if location mentions any other known country
+      if (foreignNames.any((f) => loc.contains(f))) return false;
+
+      // Reject unknown locations — strict filtering
       return false;
     }).toList();
-
-    // Fallback: if too few results, return unfiltered
-    return filtered.length >= 5 ? filtered : jobs;
   }
 
   // ── Resume-matched jobs: country-aware search ─────────────────────────────
@@ -384,6 +569,7 @@ class JobService {
     required List<String> skills,
     required String countryCode,
     required String jobTitle,
+    String country = '',
   }) async {
     final cc = countryCode.toLowerCase();
     final query = '$jobTitle ${skills.take(3).join(' ')}';
@@ -395,6 +581,10 @@ class JobService {
       _fetchJobicyJobs(query: query).catchError((_) => <Job>[]),
       // Always: Adzuna (supports country param)
       _fetchAdzunaJobs(query: query, country: cc).catchError((_) => <Job>[]),
+      // Always: Direct ATS boards (Greenhouse, Ashby, Lever)
+      _fetchGreenhouseJobs(query: query).catchError((_) => <Job>[]),
+      _fetchAshbyJobs(query: query).catchError((_) => <Job>[]),
+      _fetchLeverJobs(query: query).catchError((_) => <Job>[]),
     ];
     // US/CA: The Muse
     if (cc == 'us' || cc == 'ca') {
@@ -437,12 +627,12 @@ class JobService {
       _fetchArbeitnowJobs(query: query).catchError((_) => <Job>[]),
       _fetchAdzunaJobs(query: query, country: country).catchError((_) => <Job>[]),
       _fetchReedJobs(query: query).catchError((_) => <Job>[]),
+      _fetchGreenhouseJobs(query: query).catchError((_) => <Job>[]),
+      _fetchAshbyJobs(query: query).catchError((_) => <Job>[]),
+      _fetchLeverJobs(query: query).catchError((_) => <Job>[]),
     ]);
 
-    var jobs = [
-      ...results[0], ...results[1], ...results[2],
-      ...results[3], ...results[4], ...results[5],
-    ];
+    var jobs = results.expand((list) => list).toList();
 
     // Deduplicate by title+company
     final seen = <String>{};
@@ -467,6 +657,8 @@ class JobService {
       return b.postedAt.compareTo(a.postedAt);
     });
 
+    _lastJobCount = jobs.length;
+    _lastFeaturedCount = jobs.where((j) => j.featured).length;
     return jobs;
   }
 
@@ -524,8 +716,11 @@ class JobService {
     return (val / 1000).round().toString();
   }
 
-  static int get totalJobs => 12;
-  static int get featuredJobs => 4;
+  // Dynamic counts — updated after each fetch
+  static int _lastJobCount = 0;
+  static int _lastFeaturedCount = 0;
+  static int get totalJobs => _lastJobCount > 0 ? _lastJobCount : 12;
+  static int get featuredJobs => _lastFeaturedCount > 0 ? _lastFeaturedCount : 4;
 
   // ── Fallback data if APIs are unreachable ────────────────────────────────
   static final List<Job> _fallbackJobs = [
@@ -533,7 +728,7 @@ class JobService {
       location: 'London, UK', type: 'Hybrid', level: 'Senior',
       description: 'Build and deploy large-scale machine learning models for next-gen AI products.',
       skills: ['Python', 'TensorFlow', 'PyTorch', 'Transformers', 'MLOps'],
-      salaryRange: '\$180K – \$280K', postedAt: '2026-03-19', applyUrl: '', featured: true),
+      salaryRange: '£140K – £220K', postedAt: '2026-03-19', applyUrl: '', featured: true),
     Job(id: 'f2', title: 'LLM Research Scientist', company: 'Anthropic',
       location: 'San Francisco, CA', type: 'Hybrid', level: 'Senior',
       description: 'Conduct foundational research on large language model alignment and safety.',
@@ -558,6 +753,6 @@ class JobService {
       location: 'Stockholm, Sweden', type: 'Remote', level: 'Mid',
       description: 'Design and maintain ML infrastructure for recommendation systems.',
       skills: ['Kubernetes', 'Docker', 'Python', 'MLflow', 'AWS'],
-      salaryRange: '\$130K – \$190K', postedAt: '2026-03-15', applyUrl: ''),
+      salaryRange: 'SEK 85K – 120K/mo', postedAt: '2026-03-15', applyUrl: ''),
   ];
 }

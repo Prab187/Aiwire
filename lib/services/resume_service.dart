@@ -76,20 +76,18 @@ class ResumeService {
     final cacheKey = ClaudeCache.keyFrom([
       file.extension,
       bytes.length,
-      // Sample first 128 + last 128 bytes as a lightweight hash surrogate
       bytes.take(128).join(','),
       bytes.skip(bytes.length - 128).take(128).join(','),
     ]);
-    final cached = await ClaudeCache.get('resume', cacheKey,
-        ttl: const Duration(days: 30));
-    if (cached != null) {
-      try {
-        final parsed = json.decode(cached) as Map<String, dynamic>;
-        return ResumeProfile.fromJson(parsed);
-      } catch (_) {
-        // fall through to fresh fetch
-      }
-    }
+    // Cache disabled temporarily to debug 0% job readiness issue
+    // final cached = await ClaudeCache.get('resume', cacheKey,
+    //     ttl: const Duration(days: 30));
+    // if (cached != null) {
+    //   try {
+    //     final parsed = json.decode(cached) as Map<String, dynamic>;
+    //     return ResumeProfile.fromJson(parsed);
+    //   } catch (_) {}
+    // }
 
     final isPdf = file.extension?.toLowerCase() == 'pdf';
     final content = isPdf
@@ -148,7 +146,12 @@ For gaps: identify what's missing compared to top AI/ML job requirements today (
     }
 
     final data = json.decode(response.body);
-    final text = (data['content'][0]['text'] as String).trim();
+    final contentList = data['content'] as List?;
+    if (contentList == null || contentList.isEmpty) {
+      throw Exception('Empty response from resume analysis');
+    }
+    final text = ((contentList[0]['text'] as String?) ?? '').trim();
+    if (text.isEmpty) throw Exception('Resume analysis returned empty text');
 
     // Strip markdown code fences if present
     final jsonText = text
@@ -157,7 +160,13 @@ For gaps: identify what's missing compared to top AI/ML job requirements today (
         .replaceFirst(RegExp(r'\s*```$'), '')
         .trim();
 
-    final parsed = json.decode(jsonText) as Map<String, dynamic>;
+    final dynamic decoded;
+    try {
+      decoded = json.decode(jsonText);
+    } catch (_) {
+      throw Exception('AI returned invalid JSON. Please try again.');
+    }
+    final parsed = decoded as Map<String, dynamic>;
     // Store in cache for 30 days
     await ClaudeCache.set('resume', cacheKey, jsonText);
     return ResumeProfile.fromJson(parsed);

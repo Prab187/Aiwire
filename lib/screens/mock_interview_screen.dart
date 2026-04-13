@@ -6,17 +6,21 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import '../theme/app_theme.dart';
+import '../services/analytics_service.dart';
 import '../services/claude_cache.dart';
 import '../services/claude_error.dart';
+// Premium gate disabled during testing
+// import '../services/ai_quota_guard.dart';
+// import '../widgets/quota_paywall.dart';
 
 enum _IvState { setup, prepGuide, asking, feedback }
 
 class _Turn {
   final String question;
-  String answer;
+  String answer = '';
   String? feedback;
   int? score;
-  _Turn(this.question, {this.answer = '', this.feedback, this.score});
+  _Turn(this.question);
 }
 
 class MockInterviewScreen extends StatefulWidget {
@@ -141,6 +145,8 @@ class _MockInterviewScreenState extends State<MockInterviewScreen>
 
   Future<void> _startInterview() async {
     HapticFeedback.lightImpact();
+    // Premium gate disabled during testing
+    // if (!await checkAiQuotaOrShowPaywall(context, t)) return;
     setState(() { _loading = true; _error = null; });
 
     const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
@@ -178,7 +184,11 @@ Make questions realistic and challenging for the experience level. Mix open-ende
           throw Exception(claudeError(response.statusCode, response.body));
         }
         final data = json.decode(response.body);
-        final raw = (data['content'][0]['text'] as String).trim();
+        final contentList = data['content'] as List?;
+        if (contentList == null || contentList.isEmpty) {
+          throw Exception('Empty response from AI');
+        }
+        final raw = (contentList[0]['text'] as String? ?? '').trim();
         cleaned = raw
             .replaceFirst(RegExp(r'^```json\s*'), '')
             .replaceFirst(RegExp(r'^```\s*'), '')
@@ -186,12 +196,15 @@ Make questions realistic and challenging for the experience level. Mix open-ende
         await ClaudeCache.set('iv_q', cacheKey, cleaned);
       }
 
-      final questions = (json.decode(cleaned) as List).cast<String>();
+      final decoded = json.decode(cleaned);
+      final questions = (decoded is List ? decoded : <dynamic>[]).cast<String>();
 
       _turns.clear();
       for (final q in questions) {
         _turns.add(_Turn(q));
       }
+      // await AiQuotaGuard.record();
+      AnalyticsService.interviewStarted(role: _role, type: _type);
       setState(() {
         _state = _IvState.asking;
         _idx = 0;
@@ -284,7 +297,11 @@ Keep it concise, direct, and tailored. No fluff. No generic advice. Reference $_
         throw Exception(claudeError(response.statusCode, response.body));
       }
       final data = json.decode(response.body);
-      final text = (data['content'][0]['text'] as String).trim();
+      final contentList = data['content'] as List?;
+      if (contentList == null || contentList.isEmpty) {
+        throw Exception('Empty response from AI');
+      }
+      final text = (contentList[0]['text'] as String? ?? '').trim();
       await ClaudeCache.set('iv_prep', cacheKey, text);
       if (mounted) {
         setState(() {
@@ -346,7 +363,10 @@ FEEDBACK: <2-3 sentences>''';
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final text = (data['content'][0]['text'] as String).trim();
+        final contentList = data['content'] as List?;
+        final text = (contentList != null && contentList.isNotEmpty
+            ? (contentList[0]['text'] as String? ?? '')
+            : '').trim();
         final scoreMatch = RegExp(r'SCORE:\s*(\d+)').firstMatch(text);
         final feedbackMatch = RegExp(r'FEEDBACK:\s*(.+)', dotAll: true).firstMatch(text);
         _turns[_idx].score = scoreMatch != null ? int.tryParse(scoreMatch.group(1)!) : null;
@@ -1028,7 +1048,7 @@ class _PrepGuideContent extends StatelessWidget {
 
     void flush() {
       if (currentIdx != null) {
-        final h = _headers[currentIdx!];
+        final h = _headers[currentIdx];
         final body = buf.toString().trim();
         if (body.isNotEmpty) {
           result.add((title: h.$2, body: body, icon: h.$3, color: h.$4));

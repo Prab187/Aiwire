@@ -53,7 +53,7 @@ class InvestmentScreen extends StatelessWidget {
                 Text('\$97.8B', style: GoogleFonts.sourceSerif4(
                   fontSize: 36, fontWeight: FontWeight.w700, color: t.primary)),
                 const SizedBox(height: 4),
-                Text('Total AI investment in 2025', style: GoogleFonts.inter(
+                Text('Estimated AI investment in 2025', style: GoogleFonts.inter(
                   fontSize: 14, color: t.secondary)),
                 const SizedBox(height: 2),
                 Text('+62% from 2024', style: GoogleFonts.inter(

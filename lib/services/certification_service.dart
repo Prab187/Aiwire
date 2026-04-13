@@ -16,7 +16,7 @@ class CertificationService {
     try {
       final response = await http.get(url, headers: {
         'Accept': 'application/json',
-      });
+      }).timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) return [];
 
       final data = json.decode(response.body);
@@ -65,7 +65,7 @@ class CertificationService {
       try {
         final response = await http.get(url, headers: {
           'Accept': 'application/json',
-        });
+        }).timeout(const Duration(seconds: 10));
         if (response.statusCode != 200) continue;
 
         final data = json.decode(response.body);

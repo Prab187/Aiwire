@@ -66,13 +66,23 @@ class _PolicyBody extends StatelessWidget {
           'search queries you submit. This data is used to personalise your '
           'news feed and improve the service.',
         ),
-        _subSection('Article content sent to AI'),
+        _subSection('Content sent to AI'),
         _body(
-          'When you request an AI summary or interact with the AI assistant, '
-          'the text of the relevant article is transmitted to our AI '
-          'summarisation service (Anthropic Claude API). We do not store '
-          'article content on our servers beyond the time needed to deliver '
-          'your response.',
+          'When you use AI-powered features, certain content is transmitted '
+          'to our AI service (Anthropic Claude API) to generate responses. '
+          'This includes:',
+        ),
+        _bullets([
+          'Article text — when you request an AI summary of a news article.',
+          'Resume content — when you upload a resume for career analysis, ATS scoring, and job matching.',
+          'Mock interview answers — when you practice interviews, your spoken or typed responses are sent for AI scoring and feedback.',
+          'Career profile data — your skills, experience level, and job title are used to generate personalised career recommendations.',
+          'Video transcripts — YouTube video captions are sent for AI summarisation.',
+        ]),
+        _body(
+          'We do not store this content on our servers beyond the time needed '
+          'to deliver your response. Anthropic does not use your data to train '
+          'their models.',
         ),
         _subSection('Device and analytics data'),
         _body(
@@ -100,8 +110,10 @@ class _PolicyBody extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         _thirdPartyRow('Anthropic (Claude API)',
-            'Powers AI article summarisation. Article text is sent to '
-            'Anthropic servers to generate summaries. Anthropic does not '
+            'Powers all AI features: article summaries, resume analysis, '
+            'career recommendations, mock interview scoring, salary '
+            'estimates, and video summaries. Content is sent to Anthropic '
+            'servers to generate responses. Anthropic does not '
             'use API inputs to train its models without consent.'),
         _thirdPartyRow('Apple Sign In',
             'Provides authentication via your Apple ID. Governed by '

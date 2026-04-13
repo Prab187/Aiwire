@@ -226,7 +226,7 @@ class _ArticleScreenState extends State<ArticleScreen> {
         } else {
           publishedAt = timeago.format(published);
         }
-      } catch (_) {}
+      } catch (e) { debugPrint("AIWire: $e"); }
     }
 
     return Scaffold(
