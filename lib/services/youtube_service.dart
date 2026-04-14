@@ -56,64 +56,130 @@ class YouTubeService {
   static Future<List<YouTubeVideo>> _fetchTrendingAIInternal({int maxResults = 5}) async {
     final yt = YoutubeExplode();
     try {
-      final candidates = <YouTubeVideo>[];
-      final seen = <String>{};
+      // Try last week first, then fall back to last month
+      var candidates = await _searchWithFilter(yt, UploadDateFilter.lastWeek);
 
-      for (final query in _queries) {
-        try {
-          // Search last week, sorted by view count
-          final results = await yt.search.search(query,
-            filter: UploadDateFilter.lastWeek);
-
-          for (final v in results.take(10)) {
-            if (seen.contains(v.id.value)) continue;
-            seen.add(v.id.value);
-
-            final views = v.engagement.viewCount;
-
-            // Skip low-view videos
-            if (views < _minViews) continue;
-
-            // Skip live streams
-            if (v.isLive) continue;
-
-            final thumbUrl = v.thumbnails.highResUrl.isNotEmpty
-                ? v.thumbnails.highResUrl
-                : v.thumbnails.standardResUrl;
-
-            String? duration;
-            if (v.duration != null) {
-              final d = v.duration!;
-              if (d.inHours > 0) {
-                duration = '${d.inHours}:${(d.inMinutes % 60).toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
-              } else {
-                duration = '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
-              }
-            }
-
-            candidates.add(YouTubeVideo(
-              id: v.id.value,
-              title: v.title,
-              channelName: v.author,
-              thumbnailUrl: thumbUrl,
-              duration: duration,
-              viewCount: _formatViews(views),
-              rawViewCount: views,
-              description: v.description,
-            ));
-          }
-        } catch (e) { debugPrint("AIWire: $e"); }
+      if (candidates.isEmpty) {
+        debugPrint('AIWire: No videos from last week, trying last month');
+        candidates = await _searchWithFilter(yt, UploadDateFilter.lastMonth);
       }
 
       // Sort by highest views first
       candidates.sort((a, b) => b.rawViewCount.compareTo(a.rawViewCount));
 
-      // Return top N
-      return candidates.take(maxResults).toList();
+      final results = candidates.take(maxResults).toList();
+
+      // If live search returned nothing, use curated evergreen videos
+      if (results.isEmpty) {
+        debugPrint('AIWire: Using curated fallback videos');
+        return _curatedFallbackVideos.take(maxResults).toList();
+      }
+
+      return results;
     } finally {
       yt.close();
     }
   }
+
+  /// Searches YouTube with the given upload date filter and returns candidates.
+  static Future<List<YouTubeVideo>> _searchWithFilter(
+    YoutubeExplode yt, SearchFilter filter,
+  ) async {
+    final candidates = <YouTubeVideo>[];
+    final seen = <String>{};
+
+    for (final query in _queries) {
+      try {
+        final results = await yt.search.search(query, filter: filter);
+
+        for (final v in results.take(10)) {
+          if (seen.contains(v.id.value)) continue;
+          seen.add(v.id.value);
+
+          final views = v.engagement.viewCount;
+          if (views < _minViews) continue;
+          if (v.isLive) continue;
+
+          final thumbUrl = v.thumbnails.highResUrl.isNotEmpty
+              ? v.thumbnails.highResUrl
+              : v.thumbnails.standardResUrl;
+
+          String? duration;
+          if (v.duration != null) {
+            final d = v.duration!;
+            if (d.inHours > 0) {
+              duration = '${d.inHours}:${(d.inMinutes % 60).toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+            } else {
+              duration = '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+            }
+          }
+
+          candidates.add(YouTubeVideo(
+            id: v.id.value,
+            title: v.title,
+            channelName: v.author,
+            thumbnailUrl: thumbUrl,
+            duration: duration,
+            viewCount: _formatViews(views),
+            rawViewCount: views,
+            description: v.description,
+          ));
+        }
+      } catch (e) { debugPrint("AIWire: $e"); }
+    }
+
+    return candidates;
+  }
+
+  /// Curated evergreen AI videos — shown when live YouTube search fails.
+  /// These are popular, high-quality videos that stay relevant.
+  static const _curatedFallbackVideos = [
+    YouTubeVideo(
+      id: 'aircAruvnKk',
+      title: 'But what is a neural network? | Deep learning, chapter 1',
+      channelName: '3Blue1Brown',
+      thumbnailUrl: 'https://i.ytimg.com/vi/aircAruvnKk/hqdefault.jpg',
+      duration: '19:13',
+      viewCount: '17M views',
+      rawViewCount: 17000000,
+    ),
+    YouTubeVideo(
+      id: 'zjkBMFhNj_g',
+      title: 'How AI Could Empower Any Business | Andrew Ng | TED',
+      channelName: 'TED',
+      thumbnailUrl: 'https://i.ytimg.com/vi/zjkBMFhNj_g/hqdefault.jpg',
+      duration: '11:48',
+      viewCount: '3.3M views',
+      rawViewCount: 3300000,
+    ),
+    YouTubeVideo(
+      id: 'jGwO_UgTS7I',
+      title: 'ChatGPT Explained Completely',
+      channelName: 'Fireship',
+      thumbnailUrl: 'https://i.ytimg.com/vi/jGwO_UgTS7I/hqdefault.jpg',
+      duration: '5:31',
+      viewCount: '5.2M views',
+      rawViewCount: 5200000,
+    ),
+    YouTubeVideo(
+      id: 'KYS1PaKBR44',
+      title: 'What Is an AI Anyway? | Mustafa Suleyman | TED',
+      channelName: 'TED',
+      thumbnailUrl: 'https://i.ytimg.com/vi/KYS1PaKBR44/hqdefault.jpg',
+      duration: '15:24',
+      viewCount: '2.1M views',
+      rawViewCount: 2100000,
+    ),
+    YouTubeVideo(
+      id: 'WXuK6gekU1Y',
+      title: 'How Large Language Models Work',
+      channelName: '3Blue1Brown',
+      thumbnailUrl: 'https://i.ytimg.com/vi/WXuK6gekU1Y/hqdefault.jpg',
+      duration: '21:38',
+      viewCount: '8.5M views',
+      rawViewCount: 8500000,
+    ),
+  ];
 
   /// Fetches YouTube videos personalized to a user's profile.
   /// Builds queries from their top skills + job title, filters for

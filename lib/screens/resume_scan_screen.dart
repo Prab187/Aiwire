@@ -25,7 +25,13 @@ import '../services/profile_storage_service.dart';
 import '../services/application_tracker_service.dart';
 import '../services/claude_cache.dart';
 import '../services/claude_error.dart';
+import '../services/job_scoring_service.dart';
+import '../services/ghost_job_detector.dart';
+import '../models/job_grade.dart';
+import '../models/job_legitimacy.dart';
 import '../widgets/bullet_summary.dart';
+import '../widgets/beginner_starter_plan.dart';
+import 'company_research_sheet.dart';
 // Premium gate disabled during testing — re-enable before App Store launch
 // import '../widgets/quota_paywall.dart';
 // import '../services/ai_quota_guard.dart';
@@ -49,6 +55,7 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
   String? _errorMessage;
   ResumeProfile? _profile;
   List<Job> _jobs = [];
+  Map<String, JobLegitimacy> _legitimacyMap = {};
 
   late final AnimationController _pulseCtrl;
   late final Animation<double> _pulse;
@@ -71,16 +78,17 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
 
   // Manual input (no resume)
   String _manualName = '';
-  String _manualSkill = '';
-  String _manualYears = '0-1';
+  String _manualSkill = 'None';
+  String _manualYears = 'No exp';
   String _manualCerts = '';
+  bool _showBeginnerPlan = false;
   final _nameCtrl = TextEditingController();
   final _certCtrl = TextEditingController();
 
   AppTheme get t => widget.theme;
 
   static const _skillOptions = [
-    'Python', 'Machine Learning', 'Deep Learning', 'NLP',
+    'None', 'Python', 'Machine Learning', 'Deep Learning', 'NLP',
     'Computer Vision', 'Data Science', 'TensorFlow', 'PyTorch',
     'Cloud (AWS/GCP)', 'MLOps', 'LLM', 'Generative AI',
   ];
@@ -158,6 +166,7 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
       setState(() {
         _profile = profile;
         _jobs = jobs;
+        _legitimacyMap = GhostJobDetector.evaluateAll(jobs);
         _state = _ScanState.results;
       });
 
@@ -216,17 +225,17 @@ Get yours: aiwire.app''';
       final qualified = _qualifiedMatches;
       debugPrint('AIWire DEBUG: _jobs.length=${_jobs.length}, qualified.length=${qualified.length}');
       for (final m in qualified.take(5)) {
-        debugPrint('AIWire DEBUG: ${m.job.title} @ ${m.job.company} = ${m.score}% | skills: ${m.job.skills.join(", ")}');
+        debugPrint('AIWire DEBUG: ${m.job.title} @ ${m.job.company} = ${m.grade.letter} (${m.grade.composite}%) | skills: ${m.job.skills.join(", ")}');
       }
       debugPrint('AIWire DEBUG: user skills = ${_profile!.skills.join(", ")}');
 
       final matchScores = qualified.take(5).map((m) =>
-        '${m.job.title} at ${m.job.company}: ${m.score}% match'
+        '${m.job.title} at ${m.job.company}: Grade ${m.grade.letter} (${m.grade.composite}%)'
       ).join('\n');
 
       int avgMatch;
       if (qualified.isNotEmpty) {
-        avgMatch = qualified.take(10).map((m) => m.score).reduce((a, b) => a + b) ~/ qualified.take(10).length;
+        avgMatch = qualified.take(10).map((m) => m.grade.composite).reduce((a, b) => a + b) ~/ qualified.take(10).length;
       } else if (_jobs.isNotEmpty) {
         // Jobs exist but none met the 10% threshold — compute raw average across all jobs
         final allScores = _jobs.map((j) {
@@ -357,41 +366,76 @@ Be direct, specific, and ${p.country}-focused. No generic advice. Address by fir
     if (_manualName.isEmpty || _manualSkill.isEmpty) return;
     HapticFeedback.lightImpact();
 
+    final isNewbie = _manualYears == 'No exp';
+
+    // Pure beginners get the instant starter plan (no API call)
+    if (isNewbie && _manualSkill == 'None') {
+      setState(() {
+        _showBeginnerPlan = true;
+        _recommendation = null;
+      });
+      return;
+    }
+    final expLine = isNewbie
+        ? 'Experience: Complete beginner — no prior AI/ML work experience'
+        : 'Years of Experience: $_manualYears';
+    final newbieContext = isNewbie
+        ? '''
+IMPORTANT: This person has ZERO work experience in AI/ML. They are a complete beginner.
+- Do NOT assume they know industry jargon
+- Recommend FREE beginner-friendly resources only (YouTube tutorials, Coursera free courses, Kaggle)
+- Focus on building a portfolio from scratch — personal projects, Kaggle competitions, open-source contributions
+- Suggest entry-level roles: Junior Data Analyst, ML Intern, AI Annotator, Data Labeling, Research Assistant
+- The 90-day plan should be a realistic learning path from zero to first job application
+'''
+        : '';
+
+    final skillLine = _manualSkill == 'None'
+        ? 'Primary Skill: No specific AI/ML skill yet — complete beginner looking to break into AI'
+        : 'Primary Skill: $_manualSkill';
+
     final prompt = '''Give a personalized AI/ML career recommendation for this person.
 
 Name: $_manualName
-Primary Skill: $_manualSkill
-Years of Experience: $_manualYears
+$skillLine
+$expLine
 Certifications/Projects: ${_manualCerts.isNotEmpty ? _manualCerts : 'None mentioned'}
-
+$newbieContext
 Provide a structured recommendation using these EXACT headers IN THIS EXACT ORDER.
 CRITICAL: Every section MUST have EXACTLY 4 numbered points (1. 2. 3. 4.). Each point is ONE complete sentence. In SKILLS TO ACQUIRE, write the FULL skill name clearly.
 
 JOB READINESS
-1. [Estimate what % of AI/ML roles they could apply for]
-2. [What's helping their profile]
-3. [What's holding them back]
-4. [Single most impactful action to improve]
+1. [${isNewbie ? "Honestly assess their starting point — it's okay to be at 0-5%" : "Estimate what % of AI/ML roles they could apply for"}]
+2. [${isNewbie ? "What advantage their primary skill gives them as a foundation" : "What's helping their profile"}]
+3. [${isNewbie ? "What's the biggest thing they need to build first (portfolio/skills)" : "What's holding them back"}]
+4. [${isNewbie ? "The single best first step to start their AI career today" : "Single most impactful action to improve"}]
 
 GAP ANALYSIS
-1. [Biggest missing skill vs market demands]
-2. [Second gap in their profile]
-3. [Experience or project gap]
-4. [Certification or domain knowledge gap]
+1. [${isNewbie ? "Core technical skill they must learn first (e.g. Python for data science)" : "Biggest missing skill vs market demands"}]
+2. [${isNewbie ? "Practical experience gap — they need hands-on projects" : "Second gap in their profile"}]
+3. [${isNewbie ? "Portfolio gap — no GitHub/Kaggle/projects to show" : "Experience or project gap"}]
+4. [${isNewbie ? "Credential gap — free certifications that signal readiness" : "Certification or domain knowledge gap"}]
 
 SKILLS TO ACQUIRE
-1. [Start now: FULL SKILL NAME — why it matters]
-2. [Start now: FULL SKILL NAME — specific resource to learn]
-3. [Learn next: FULL SKILL NAME — why it matters]
-4. [Learn next: FULL SKILL NAME — specific resource to learn]
+1. [Start now: FULL SKILL NAME — ${isNewbie ? "best free beginner resource to learn it" : "why it matters"}]
+2. [Start now: FULL SKILL NAME — ${isNewbie ? "a specific free course or tutorial (link if possible)" : "specific resource to learn"}]
+3. [Learn next: FULL SKILL NAME — ${isNewbie ? "why employers look for this skill" : "why it matters"}]
+4. [Learn next: FULL SKILL NAME — ${isNewbie ? "a specific free course or tutorial" : "specific resource to learn"}]
 
 90-DAY PLAN
-1. [Month 1: skill or certification to start]
-2. [Month 1-2: project to build]
-3. [Month 2-3: community or event to join]
-4. [Month 3: application or portfolio milestone]
-
-Be concise, direct, actionable. Address them by first name.''';
+1. [Month 1: ${isNewbie ? "specific free course to complete + first small project to build" : "skill or certification to start"}]
+2. [Month 1-2: ${isNewbie ? "build a portfolio project on GitHub and enter a Kaggle competition" : "project to build"}]
+3. [Month 2-3: ${isNewbie ? "join a beginner AI community and attend a free event" : "community or event to join"}]
+4. [Month 3: ${isNewbie ? "apply to 5 entry-level roles (intern/junior/assistant)" : "application or portfolio milestone"}]
+${isNewbie ? '''
+MUST-WATCH TED TALKS
+Include EXACTLY 3 TED talks that are perfect for AI beginners. Use these EXACT talks with their real URLs:
+1. "The wonderful and terrifying implications of computers that can learn" by Jeremy Howard — https://www.ted.com/talks/jeremy_howard_the_wonderful_and_terrifying_implications_of_computers_that_can_learn
+2. "How AI could empower any business" by Andrew Ng — https://www.ted.com/talks/andrew_ng_how_ai_could_empower_any_business
+3. "Don't fear superintelligent AI" by Grady Booch — https://www.ted.com/talks/grady_booch_don_t_fear_superintelligent_ai
+For each talk, write ONE sentence explaining what the beginner will learn from it.
+''' : ''}
+Be concise, direct, actionable, and encouraging. Address them by first name.${isNewbie ? " Remember: they have ZERO experience — be realistic but motivating." : ""}''';
 
     _generateRecommendation(manualContext: prompt);
   }
@@ -701,7 +745,7 @@ Be concise, direct, actionable. Address them by first name.''';
           controller: _nameCtrl,
           style: GoogleFonts.inter(color: t.primary, fontSize: 14),
           decoration: _inputDecor('Your name'),
-          onChanged: (v) => _manualName = v,
+          onChanged: (v) => setState(() => _manualName = v),
         ),
         const SizedBox(height: 12),
 
@@ -722,7 +766,7 @@ Be concise, direct, actionable. Address them by first name.''';
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
                   color: _manualSkill == s ? t.primary.withValues(alpha: 0.3) : t.divider)),
-              child: Text(s, style: GoogleFonts.inter(
+              child: Text(s == 'None' ? 'Not sure yet' : s, style: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: _manualSkill == s ? FontWeight.w600 : FontWeight.w400,
                 color: _manualSkill == s ? t.primary : t.secondary)),
@@ -738,24 +782,21 @@ Be concise, direct, actionable. Address them by first name.''';
             fontSize: 12, color: t.muted, fontWeight: FontWeight.w500)),
         ),
         const SizedBox(height: 8),
-        Row(children: ['0-1', '1-2', '2-4', '5+'].map((y) => Expanded(child: Padding(
-          padding: const EdgeInsets.only(right: 6),
-          child: GestureDetector(
-            onTap: () { HapticFeedback.selectionClick(); setState(() => _manualYears = y); },
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              decoration: BoxDecoration(
-                color: _manualYears == y ? t.primary.withValues(alpha: 0.1) : t.surface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: _manualYears == y ? t.primary.withValues(alpha: 0.3) : t.divider)),
-              child: Center(child: Text('$y yr', style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: _manualYears == y ? FontWeight.w700 : FontWeight.w400,
-                color: _manualYears == y ? t.primary : t.secondary))),
-            ),
+        Wrap(spacing: 6, runSpacing: 6, children: ['No exp', '0-1', '1-2', '2-4', '5+'].map((y) => GestureDetector(
+          onTap: () { HapticFeedback.selectionClick(); setState(() => _manualYears = y); },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: _manualYears == y ? t.primary.withValues(alpha: 0.1) : t.surface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: _manualYears == y ? t.primary.withValues(alpha: 0.3) : t.divider)),
+            child: Text(y == 'No exp' ? 'No experience' : '$y yr', style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: _manualYears == y ? FontWeight.w700 : FontWeight.w400,
+              color: _manualYears == y ? t.primary : t.secondary)),
           ),
-        ))).toList()),
+        )).toList()),
         const SizedBox(height: 12),
 
         // Certs/projects
@@ -789,10 +830,28 @@ Be concise, direct, actionable. Address them by first name.''';
           ),
         ),
 
-        // Inline recommendation result
-        if (_recommendation != null && _profile == null) ...[
+        // Beginner starter plan (instant, no API call)
+        if (_showBeginnerPlan && _profile == null) ...[
           const SizedBox(height: 20),
-          _RecommendationContent(text: _recommendation!, theme: t),
+          BeginnerStarterPlan(
+            theme: t,
+            userName: _manualName,
+            onUnlock30Day: () {
+              // After 7 days, generate an AI career path based on their picked career
+              setState(() => _showBeginnerPlan = false);
+              _manualYears = '0-1';
+              SharedPreferences.getInstance().then((prefs) {
+                final career = prefs.getString('starter_career_pick');
+                if (career != null) _manualSkill = career;
+              }).then((_) => _generateManualRecommendation());
+            },
+          ),
+        ],
+
+        // AI-generated recommendation (for experienced users)
+        if (_recommendation != null && _profile == null && !_showBeginnerPlan) ...[
+          const SizedBox(height: 20),
+          _RecommendationContent(text: _recommendation!, theme: t, collapsible: true),
         ],
 
         const SizedBox(height: 28),
@@ -1035,9 +1094,13 @@ Be concise, direct, actionable. Address them by first name.''';
             ]),
           )
         else
-          ...qualifiedJobs.map((job) => Padding(
+          ...qualified.map((m) => Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: _ResumeJobCard(job: job, theme: t, profile: p),
+            child: _ResumeJobCard(
+              job: m.job, theme: t, profile: p,
+              grade: m.grade,
+              legitimacy: _legitimacyMap[m.job.id],
+            ),
           )),
       ],
     );
@@ -1047,49 +1110,19 @@ Be concise, direct, actionable. Address them by first name.''';
 
   static const int _kMinMatchPct = 10;
 
-  /// All matched jobs scoring at least _kMinMatchPct, sorted high to low.
-  /// Uses fuzzy matching: checks if user skill appears anywhere in job skill
-  /// text (substring match), not just exact equality. This handles cases like
-  /// user has "Python" and job lists "Python/Django" or "Machine Learning"
-  /// matching user's "ML".
-  List<({Job job, int score})> get _qualifiedMatches {
+  /// All matched jobs with A-F grades, filtered to composite >= _kMinMatchPct
+  List<({Job job, JobGrade grade})> get _qualifiedMatches {
     if (_profile == null) return [];
     final p = _profile!;
-    final pLower = p.skills.map((s) => s.toLowerCase()).where((s) => s.isNotEmpty).toList();
-    if (pLower.isEmpty) return [];
 
     return _jobs.map((j) {
-      if (j.skills.isEmpty) {
-        // No skills listed — check title/description for user's skills
-        final jobText = '${j.title} ${j.description}'.toLowerCase();
-        final found = pLower.where((s) => jobText.contains(s)).length;
-        final pct = ((found / pLower.length) * 100).round();
-        return (job: j, score: pct);
-      }
-
-      final jobText = '${j.title} ${j.description} ${j.skills.join(" ")}'.toLowerCase();
-      var matched = 0;
-      for (final skill in pLower) {
-        // Check if any job skill contains this user skill (or vice versa)
-        if (j.skills.any((js) {
-          final jl = js.toLowerCase();
-          return jl.contains(skill) || skill.contains(jl);
-        })) {
-          matched++;
-        } else if (jobText.contains(skill)) {
-          // Broader: skill mentioned anywhere in title/description
-          matched++;
-        }
-      }
-      // Use the smaller set as denominator — measures overlap from user's perspective
-      final denominator = pLower.length;
-      final pct = ((matched / denominator) * 100).round();
-      return (job: j, score: pct);
-    }).where((r) => r.score >= _kMinMatchPct).toList()
-      ..sort((a, b) => b.score.compareTo(a.score));
+      final grade = JobScoringService.grade(j, p);
+      return (job: j, grade: grade);
+    }).where((r) => r.grade.composite >= _kMinMatchPct).toList()
+      ..sort((a, b) => b.grade.composite.compareTo(a.grade.composite));
   }
 
-  List<({Job job, int score})> get _topMatches => _qualifiedMatches.take(3).toList();
+  List<({Job job, JobGrade grade})> get _topMatches => _qualifiedMatches.take(3).toList();
 
   Widget _buildRecommendation() {
     final top = _topMatches;
@@ -1269,7 +1302,7 @@ Be concise, direct, actionable. Address them by first name.''';
               count: 0,
               children: [
                 ...top.map((m) =>
-                  _MockInterviewJobCard(job: m.job, score: m.score, theme: t)),
+                  _MockInterviewJobCard(job: m.job, grade: m.grade, theme: t)),
                 GestureDetector(
                   onTap: () {
                     HapticFeedback.lightImpact();
@@ -1447,17 +1480,15 @@ Be concise, direct, actionable. Address them by first name.''';
 // ── Mock Interview Job Card (practice instead of apply) ────────────────────
 class _MockInterviewJobCard extends StatelessWidget {
   final Job job;
-  final int score;
+  final JobGrade grade;
   final AppTheme theme;
   const _MockInterviewJobCard({
-    required this.job, required this.score, required this.theme});
+    required this.job, required this.grade, required this.theme});
 
   @override
   Widget build(BuildContext context) {
     final t = theme;
-    final scoreColor = score >= 70
-        ? const Color(0xFF22C55E) : score >= 40
-        ? const Color(0xFFF59E0B) : t.muted;
+    final scoreColor = grade.color;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1487,7 +1518,7 @@ class _MockInterviewJobCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: scoreColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(4)),
-              child: Text('$score% match', style: GoogleFonts.inter(
+              child: Text('${grade.letter} · ${grade.composite}%', style: GoogleFonts.inter(
                 fontSize: 10, fontWeight: FontWeight.w700, color: scoreColor)),
             ),
             const SizedBox(width: 6),
@@ -1568,6 +1599,8 @@ class _RecommendationContent extends StatelessWidget {
       'SKILLS TO ADD': 'Skills to Acquire',
       'SKILLS TO ACQUIRE': 'Skills to Acquire',
       'JOB READINESS': 'Job Readiness',
+      'MUST-WATCH TED TALKS': 'Must-Watch TED Talks',
+      'TED TALKS': 'Must-Watch TED Talks',
     };
 
     for (final line in lines) {
@@ -1613,17 +1646,14 @@ class _RecommendationContent extends StatelessWidget {
       ]);
     }
 
-    // Collapsible mode — each AI section is a compact expandable row
+    // Collapsible mode — polished accordion, first section expanded
     return Column(children: [
       for (var i = 0; i < sections.length; i++)
-        _CollapsibleRow(
+        _AccordionSection(
           theme: t,
-          icon: sections[i].icon,
-          color: sections[i].color,
-          title: sections[i].title,
-          count: 0, // no count for AI sections
-          children: [_SectionCard(
-            section: sections[i], index: i, theme: t)],
+          section: sections[i],
+          index: i,
+          initiallyExpanded: i == 0,
         ),
     ]);
   }
@@ -1644,6 +1674,8 @@ class _RecommendationContent extends StatelessWidget {
         return (title: title, body: body, icon: Icons.school_outlined, color: const Color(0xFFF59E0B));
       case 'Job Readiness':
         return (title: title, body: body, icon: Icons.rocket_launch_outlined, color: const Color(0xFF8B5CF6));
+      case 'Must-Watch TED Talks':
+        return (title: title, body: body, icon: Icons.play_circle_outline_rounded, color: const Color(0xFFEF4444));
       default:
         return (title: title, body: body, icon: Icons.info_outline_rounded, color: const Color(0xFF6366F1));
     }
@@ -1655,13 +1687,22 @@ class _SectionCard extends StatelessWidget {
   final ({String title, String body, IconData icon, Color color}) section;
   final int index;
   final AppTheme theme;
+  final bool headerless;
 
-  const _SectionCard({required this.section, required this.index, required this.theme});
+  const _SectionCard({
+    required this.section, required this.index, required this.theme,
+    this.headerless = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final t = theme;
     final s = section;
+
+    // Headerless mode — just the body content, no card/border/header
+    if (headerless) {
+      return _buildBody(t);
+    }
 
     return Container(
       width: double.infinity,
@@ -1730,6 +1771,8 @@ class _SectionCard extends StatelessWidget {
       case 'GAP Analysis':
       case 'Gap Analysis':
         return _buildNumberedSection(t);
+      case 'Must-Watch TED Talks':
+        return _buildTedTalks(t);
       default:
         return _buildNumberedSection(t);
     }
@@ -1914,6 +1957,75 @@ class _SectionCard extends StatelessWidget {
     ]);
   }
 
+  /// TED Talks section — each item shows title, description, and a tappable link
+  Widget _buildTedTalks(AppTheme t) {
+    final items = _parseListItems(section.body);
+    if (items.isEmpty) return _buildProse(t);
+
+    final urlRegex = RegExp(r'(https?://\S+)');
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      for (var i = 0; i < items.length; i++)
+        Padding(
+          padding: EdgeInsets.only(bottom: i == items.length - 1 ? 0 : 16),
+          child: () {
+            final item = items[i];
+            final urlMatch = urlRegex.firstMatch(item);
+            final url = urlMatch?.group(1)?.replaceAll(RegExp(r'[),.\]]+$'), '');
+            final textWithoutUrl = item.replaceAll(urlRegex, '').replaceAll('—', '—').trim();
+            // Clean trailing punctuation/dashes from text
+            final cleanText = textWithoutUrl.replaceAll(RegExp(r'\s*[—\-]+\s*$'), '').trim();
+
+            return Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: section.color.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: section.color.withValues(alpha: 0.15))),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Container(
+                    width: 28, height: 28,
+                    decoration: BoxDecoration(
+                      color: section.color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(7)),
+                    child: Icon(Icons.play_arrow_rounded, size: 16, color: section.color),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(cleanText, style: GoogleFonts.sourceSerif4(
+                    fontSize: 14, color: t.primary.withValues(alpha: 0.88),
+                    height: 1.5))),
+                ]),
+                if (url != null) ...[
+                  const SizedBox(height: 10),
+                  GestureDetector(
+                    onTap: () async {
+                      final uri = Uri.parse(url);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: section.color.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(8)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.open_in_new_rounded, size: 13, color: section.color),
+                        const SizedBox(width: 6),
+                        Text('Watch on TED.com', style: GoogleFonts.inter(
+                          fontSize: 12, fontWeight: FontWeight.w600, color: section.color)),
+                      ]),
+                    ),
+                  ),
+                ],
+              ]),
+            );
+          }(),
+        ),
+    ]);
+  }
+
   /// Strips markdown bold/italic markers and leading/trailing whitespace
   static String _stripMarkdown(String s) {
     return s.replaceAll(RegExp(r'\*{1,3}'), '').replaceAll(RegExp(r'_{1,3}'), '').trim();
@@ -1966,33 +2078,16 @@ class _ResumeJobCard extends StatelessWidget {
   final Job job;
   final AppTheme theme;
   final ResumeProfile profile;
-  const _ResumeJobCard({required this.job, required this.theme, required this.profile});
-
-  int _matchScore() {
-    final pLower = profile.skills.map((s) => s.toLowerCase()).where((s) => s.isNotEmpty).toList();
-    if (pLower.isEmpty) return 0;
-    final jobText = '${job.title} ${job.description} ${job.skills.join(" ")}'.toLowerCase();
-    var matched = 0;
-    for (final skill in pLower) {
-      if (job.skills.any((js) {
-        final jl = js.toLowerCase();
-        return jl.contains(skill) || skill.contains(jl);
-      })) {
-        matched++;
-      } else if (jobText.contains(skill)) {
-        matched++;
-      }
-    }
-    return ((matched / pLower.length) * 100).round();
-  }
+  final JobGrade grade;
+  final JobLegitimacy? legitimacy;
+  const _ResumeJobCard({
+    required this.job, required this.theme, required this.profile,
+    required this.grade, this.legitimacy,
+  });
 
   @override
   Widget build(BuildContext context) {
     final t = theme;
-    final score = _matchScore();
-    final scoreColor = score >= 60
-        ? const Color(0xFF22C55E) : score >= 30
-        ? const Color(0xFFF59E0B) : t.muted;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -2016,18 +2111,43 @@ class _ResumeJobCard extends StatelessWidget {
               fontSize: 13, fontWeight: FontWeight.w500, color: t.secondary)),
           ])),
           const SizedBox(width: 8),
+          // A-F Grade badge
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            width: 36, height: 36,
             decoration: BoxDecoration(
-              color: scoreColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: scoreColor.withValues(alpha: 0.3))),
-            child: Text('$score% match', style: GoogleFonts.inter(
-              fontSize: 11, fontWeight: FontWeight.w700, color: scoreColor)),
+              color: grade.color.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+              border: Border.all(color: grade.color.withValues(alpha: 0.3))),
+            child: Center(child: Text(grade.letter, style: GoogleFonts.inter(
+              fontSize: 16, fontWeight: FontWeight.w800, color: grade.color))),
           ),
         ]),
 
-        const SizedBox(height: 12),
+        // Grade reason + Legitimacy badge
+        Padding(
+          padding: const EdgeInsets.only(top: 6, bottom: 4),
+          child: Row(children: [
+            Expanded(child: Text(grade.reason, style: GoogleFonts.inter(
+              fontSize: 11, color: t.muted, fontStyle: FontStyle.italic))),
+            if (legitimacy != null) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: legitimacy!.color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(legitimacy!.icon, size: 11, color: legitimacy!.color),
+                  const SizedBox(width: 3),
+                  Text(legitimacy!.label, style: GoogleFonts.inter(
+                    fontSize: 9, fontWeight: FontWeight.w700, color: legitimacy!.color)),
+                ]),
+              ),
+            ],
+          ]),
+        ),
+
+        const SizedBox(height: 6),
 
         // Row 2: Location + Type + Salary
         Row(children: [
@@ -2074,7 +2194,7 @@ class _ResumeJobCard extends StatelessWidget {
           );
         }).toList()),
 
-        // Row 4: Apply + Save
+        // Row 4: Apply + Research + Save
         const SizedBox(height: 12),
         Row(children: [
           if (job.applyUrl.isNotEmpty)
@@ -2088,11 +2208,41 @@ class _ResumeJobCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: t.primary,
                   borderRadius: BorderRadius.circular(8)),
-                child: Center(child: Text('Apply Now', style: GoogleFonts.inter(
+                child: Center(child: Text('Apply', style: GoogleFonts.inter(
                   fontSize: 13, fontWeight: FontWeight.w600, color: t.background))),
               ),
             )),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
+          // Research button
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => CompanyResearchSheet(
+                  company: job.company,
+                  jobTitle: job.title,
+                  profile: profile,
+                  theme: theme,
+                ),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                border: Border.all(color: t.accent.withValues(alpha: 0.4)),
+                borderRadius: BorderRadius.circular(8)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.business_outlined, size: 14, color: t.accent),
+                const SizedBox(width: 5),
+                Text('Research', style: GoogleFonts.inter(
+                  fontSize: 12, fontWeight: FontWeight.w600, color: t.accent)),
+              ]),
+            ),
+          ),
+          const SizedBox(width: 8),
           GestureDetector(
             onTap: () async {
               HapticFeedback.lightImpact();
@@ -2148,6 +2298,163 @@ class _ResumeJobCard extends StatelessWidget {
       job.company.isNotEmpty ? job.company[0] : '?',
       style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w700, color: t.primary))),
   );
+}
+
+// ── Accordion Section (polished expandable career plan card) ────────────────
+class _AccordionSection extends StatefulWidget {
+  final AppTheme theme;
+  final ({String title, String body, IconData icon, Color color}) section;
+  final int index;
+  final bool initiallyExpanded;
+
+  const _AccordionSection({
+    required this.theme,
+    required this.section,
+    required this.index,
+    this.initiallyExpanded = false,
+  });
+
+  @override
+  State<_AccordionSection> createState() => _AccordionSectionState();
+}
+
+class _AccordionSectionState extends State<_AccordionSection>
+    with SingleTickerProviderStateMixin {
+  late bool _expanded;
+  late AnimationController _animCtrl;
+  late Animation<double> _expandAnim;
+  late Animation<double> _rotateAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.initiallyExpanded;
+    _animCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+      value: _expanded ? 1.0 : 0.0,
+    );
+    _expandAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeInOut);
+    _rotateAnim = Tween<double>(begin: 0, end: 0.5).animate(_expandAnim);
+  }
+
+  @override
+  void dispose() {
+    _animCtrl.dispose();
+    super.dispose();
+  }
+
+  void _toggle() {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _expanded = !_expanded;
+      if (_expanded) {
+        _animCtrl.forward();
+      } else {
+        _animCtrl.reverse();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.theme;
+    final s = widget.section;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: t.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: _expanded ? s.color.withValues(alpha: 0.3) : t.divider,
+          width: _expanded ? 1 : 0.5,
+        ),
+        boxShadow: _expanded
+            ? [BoxShadow(
+                color: s.color.withValues(alpha: 0.06),
+                blurRadius: 12, offset: const Offset(0, 3))]
+            : null,
+      ),
+      child: Column(children: [
+        // ── Header row — always visible ──
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _toggle,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: _expanded
+                ? BoxDecoration(
+                    color: s.color.withValues(alpha: 0.04),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(13)),
+                  )
+                : null,
+            child: Row(children: [
+              // Icon badge
+              Container(
+                width: 34, height: 34,
+                decoration: BoxDecoration(
+                  color: s.color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(9)),
+                child: Icon(s.icon, size: 17, color: s.color),
+              ),
+              const SizedBox(width: 12),
+              // Title + subtitle
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(s.title, style: GoogleFonts.sourceSerif4(
+                    fontSize: 15, fontWeight: FontWeight.w700,
+                    color: t.primary, letterSpacing: -0.2)),
+                  if (!_expanded) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      _previewText(s.body),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 11, color: t.muted, height: 1.3)),
+                  ],
+                ],
+              )),
+              const SizedBox(width: 8),
+              // Chevron
+              RotationTransition(
+                turns: _rotateAnim,
+                child: Icon(Icons.keyboard_arrow_down_rounded,
+                  size: 22, color: _expanded ? s.color : t.muted),
+              ),
+            ]),
+          ),
+        ),
+
+        // ── Expandable body ──
+        SizeTransition(
+          sizeFactor: _expandAnim,
+          axisAlignment: -1,
+          child: Column(children: [
+            Divider(height: 1, color: t.divider.withValues(alpha: 0.6)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+              child: _SectionCard(
+                section: s, index: widget.index, theme: t,
+                headerless: true,
+              ),
+            ),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  String _previewText(String body) {
+    final first = body.split('\n').firstWhere(
+      (l) => l.trim().isNotEmpty,
+      orElse: () => body,
+    );
+    return first.replaceAll(RegExp(r'^[\d\.\)\-•\*]+\s*'), '').trim();
+  }
 }
 
 // ── Collapsible Row (compact expandable section) ────────────────────────────

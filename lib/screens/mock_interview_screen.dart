@@ -9,6 +9,8 @@ import '../theme/app_theme.dart';
 import '../services/analytics_service.dart';
 import '../services/claude_cache.dart';
 import '../services/claude_error.dart';
+import '../services/star_story_service.dart';
+import '../models/star_story.dart';
 // Premium gate disabled during testing
 // import '../services/ai_quota_guard.dart';
 // import '../widgets/quota_paywall.dart';
@@ -48,6 +50,10 @@ class _MockInterviewScreenState extends State<MockInterviewScreen>
   String? _prepGuide;
   bool _prepLoading = false;
   String? _prepError;
+
+  // Story Bank
+  List<StarStory> _savedStories = [];
+  int _newlySavedCount = 0;
 
   // Speech-to-text
   final SpeechToText _stt = SpeechToText();
@@ -132,7 +138,34 @@ class _MockInterviewScreenState extends State<MockInterviewScreen>
     final level = prefs.getString('user_level');
     if (title != null && _roles.contains(title)) _role = title;
     if (level != null && _levels.contains(level)) _level = level;
+    // Load saved stories
+    _savedStories = await StarStoryService.all();
     if (mounted) setState(() {});
+  }
+
+  Future<void> _autoSaveStories() async {
+    final bankable = _turns.where((t) => t.score != null && t.score! >= 7);
+    var count = 0;
+    for (final turn in bankable) {
+      final tags = StarStoryService.extractTags(turn.question, turn.answer);
+      await StarStoryService.save(StarStory(
+        id: '${DateTime.now().millisecondsSinceEpoch}_$count',
+        question: turn.question,
+        answer: turn.answer,
+        score: turn.score!,
+        feedback: turn.feedback,
+        role: _role,
+        type: _type,
+        createdAt: DateTime.now().toIso8601String(),
+        tags: tags,
+      ));
+      count++;
+    }
+    _savedStories = await StarStoryService.all();
+    if (mounted && count > 0) {
+      _newlySavedCount = count;
+      setState(() {});
+    }
   }
 
   @override
@@ -378,9 +411,14 @@ FEEDBACK: <2-3 sentences>''';
       _turns[_idx].feedback = 'Network error: ${e.toString().replaceFirst("Exception: ", "")}';
     }
 
+    final isLast = _idx >= _turns.length - 1;
+    if (isLast) {
+      // Auto-save strong answers (score >= 7) to Story Bank
+      _autoSaveStories();
+    }
     setState(() {
       _loading = false;
-      if (_idx < _turns.length - 1) {
+      if (!isLast) {
         _idx++;
       } else {
         _state = _IvState.feedback;
@@ -892,6 +930,90 @@ FEEDBACK: <2-3 sentences>''';
             ]),
           );
         }),
+
+        // Story Bank auto-save banner
+        if (_newlySavedCount > 0) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF22C55E).withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF22C55E).withValues(alpha: 0.25))),
+            child: Row(children: [
+              const Icon(Icons.auto_stories_rounded, size: 20, color: Color(0xFF22C55E)),
+              const SizedBox(width: 10),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('$_newlySavedCount answer${_newlySavedCount == 1 ? "" : "s"} saved to Story Bank',
+                  style: GoogleFonts.inter(
+                    fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF22C55E))),
+                Text('Your best answers are saved for future interviews',
+                  style: GoogleFonts.inter(fontSize: 11, color: t.muted)),
+              ])),
+            ]),
+          ),
+        ],
+
+        // Story Bank section
+        if (_savedStories.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Row(children: [
+            const Icon(Icons.auto_stories_rounded, size: 16, color: Color(0xFF8B5CF6)),
+            const SizedBox(width: 6),
+            Text('Your Story Bank', style: GoogleFonts.sourceSerif4(
+              fontSize: 17, fontWeight: FontWeight.w700, color: t.primary)),
+            const Spacer(),
+            Text('${_savedStories.length} stories', style: GoogleFonts.inter(
+              fontSize: 12, color: t.muted)),
+          ]),
+          const SizedBox(height: 12),
+          ..._savedStories.take(5).map((story) => Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: t.surface, borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: t.divider, width: 0.5)),
+            child: Row(children: [
+              Container(
+                width: 28, height: 28,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(7)),
+                child: Center(child: Text('${story.score}', style: GoogleFonts.inter(
+                  fontSize: 12, fontWeight: FontWeight.w800, color: const Color(0xFF8B5CF6)))),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(story.question, style: GoogleFonts.inter(
+                  fontSize: 12, fontWeight: FontWeight.w600, color: t.primary),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text('${story.role} · ${story.type}', style: GoogleFonts.inter(
+                  fontSize: 10, color: t.muted)),
+              ])),
+              GestureDetector(
+                onTap: () async {
+                  await StarStoryService.remove(story.id);
+                  _savedStories = await StarStoryService.all();
+                  if (mounted) setState(() {});
+                },
+                child: Icon(Icons.close_rounded, size: 16, color: t.muted),
+              ),
+            ]),
+          )),
+        ],
+
+        const SizedBox(height: 24),
+        GestureDetector(
+          onTap: _restart,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              color: t.primary, borderRadius: BorderRadius.circular(12)),
+            child: Center(child: Text('Practice Again', style: GoogleFonts.inter(
+              fontSize: 15, fontWeight: FontWeight.w700, color: t.background))),
+          ),
+        ),
       ]),
     );
   }

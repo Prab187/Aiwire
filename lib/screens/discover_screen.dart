@@ -207,7 +207,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               else if (_videos.isEmpty)
                 SliverToBoxAdapter(child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                  child: Text('No trending videos this week',
+                  child: Text('Pull down to refresh videos',
                     style: GoogleFonts.inter(fontSize: 13, color: t.muted)),
                 ))
               else
