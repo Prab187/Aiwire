@@ -8,12 +8,13 @@ import 'services/firestore_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase — non-blocking, app works without it
   try {
     await Firebase.initializeApp()
         .timeout(const Duration(seconds: 5));
-  } catch (_) {
-    // Firebase unavailable — app runs without Firestore cache
-  }
+  } catch (_) {}
+
   unawaited(SubscriptionService.initialize());
   unawaited(SubscriptionService.validateSubscription());
   // Kick off background cache refresh — non-blocking

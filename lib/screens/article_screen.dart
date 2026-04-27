@@ -12,6 +12,7 @@ import '../services/likes_service.dart';
 import '../services/subscription_service.dart';
 import '../screens/paywall_screen.dart';
 import '../theme/app_theme.dart';
+import '../widgets/bullet_summary.dart';
 
 class ArticleScreen extends StatefulWidget {
   final Article article;
@@ -133,64 +134,36 @@ class _ArticleScreenState extends State<ArticleScreen> {
   }
 
   Widget _buildSummaryBlock(String text, AppTheme t) {
-    final parts = text.split('Key Insight:');
-    final summary = parts[0].trim();
-    final insight = parts.length > 1 ? parts[1].trim() : null;
-
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Container(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-        decoration: BoxDecoration(
-          color: t.surface,
-          borderRadius: BorderRadius.circular(4),
-          border: Border(left: BorderSide(color: t.accent, width: 3)),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Icon(Icons.auto_awesome_rounded, size: 13, color: t.accent),
-            const SizedBox(width: 6),
-            Text('AI Summary', style: GoogleFonts.inter(
-                fontSize: 11, fontWeight: FontWeight.w600,
-                color: t.accent, letterSpacing: 0.3)),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [
+            t.accent.withValues(alpha: 0.08),
+            t.surface,
           ]),
-          const SizedBox(height: 10),
-          Text(summary, style: GoogleFonts.sourceSerif4(
-            fontSize: 16,
-            color: t.secondary,
-            height: 1.75,
-            fontStyle: FontStyle.italic,
-          )),
-        ]),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: t.accent.withValues(alpha: 0.2), width: 0.8),
       ),
-
-      if (insight != null) ...[
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-          decoration: BoxDecoration(
-            color: t.surface,
-            borderRadius: BorderRadius.circular(4),
-            border: Border(left: BorderSide(color: t.accent, width: 3)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: t.accent.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(7)),
+            child: Icon(Icons.auto_awesome_rounded, size: 13, color: t.accent),
           ),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Icon(Icons.lightbulb_outline_rounded, size: 13, color: t.accent),
-              const SizedBox(width: 6),
-              Text('Key Insight', style: GoogleFonts.inter(
-                  fontSize: 11, fontWeight: FontWeight.w600,
-                  color: t.accent, letterSpacing: 0.3)),
-            ]),
-            const SizedBox(height: 10),
-            Text(insight, style: GoogleFonts.sourceSerif4(
-              fontSize: 16,
-              color: t.secondary,
-              height: 1.75,
-              fontStyle: FontStyle.italic,
-            )),
-          ]),
-        ),
-      ],
-    ]);
+          const SizedBox(width: 10),
+          Text('AI Summary', style: GoogleFonts.inter(
+              fontSize: 12, fontWeight: FontWeight.w700,
+              color: t.primary, letterSpacing: 0.3)),
+        ]),
+        const SizedBox(height: 14),
+        BulletSummary(text: text, theme: t, accent: t.accent, fontSize: 15),
+      ]),
+    );
   }
 
   Widget _buildLockedSummary(AppTheme t) {
@@ -253,7 +226,7 @@ class _ArticleScreenState extends State<ArticleScreen> {
         } else {
           publishedAt = timeago.format(published);
         }
-      } catch (_) {}
+      } catch (e) { debugPrint("AIWire: $e"); }
     }
 
     return Scaffold(

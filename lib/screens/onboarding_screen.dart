@@ -64,7 +64,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   Text(p['icon']!, style: const TextStyle(fontSize: 48)),
                   const SizedBox(height: 40),
                   Text(p['title']!, style: GoogleFonts.sourceSerif4(
-                    fontSize: 42, fontWeight: FontWeight.w600,
+                    fontSize: 42, fontWeight: FontWeight.w700,
                     color: Colors.white, height: 1.15)),
                   const SizedBox(height: 24),
                   Text(p['body']!, style: GoogleFonts.inter(

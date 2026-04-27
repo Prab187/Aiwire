@@ -22,20 +22,24 @@ class UdemyService {
       'fields[user]': 'display_name',
     });
 
-    final response = await http.get(uri, headers: {
-      'Authorization': _basicAuth(),
-      'Accept': 'application/json, version=2',
-    });
+    try {
+      final response = await http.get(uri, headers: {
+        'Authorization': _basicAuth(),
+        'Accept': 'application/json, version=2',
+      }).timeout(const Duration(seconds: 10));
 
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      final results = data['results'] as List? ?? [];
-      return results
-          .map((c) => UdemyCourse.fromJson(c as Map<String, dynamic>))
-          .where((c) => c.title.isNotEmpty && c.rating >= 3.5)
-          .toList();
-    } else {
-      throw Exception('Udemy API error: ${response.statusCode}');
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final results = data['results'] as List? ?? [];
+        return results
+            .map((c) => UdemyCourse.fromJson(c as Map<String, dynamic>))
+            .where((c) => c.title.isNotEmpty && c.rating >= 3.5)
+            .toList();
+      } else {
+        return [];
+      }
+    } catch (_) {
+      return [];
     }
   }
 }

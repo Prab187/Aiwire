@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import '../models/article.dart';
 
@@ -12,6 +13,8 @@ import '../services/firestore_service.dart';
 import 'bookmarks_screen.dart';
 import 'discover_screen.dart';
 import 'profile_screen.dart';
+
+const _kModeKey = 'app_theme_mode';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -37,7 +40,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _modeAnim = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
     _fadeAnim = CurvedAnimation(parent: _modeAnim, curve: Curves.easeInOut);
     SystemChrome.setSystemUIOverlayStyle(AppTheme(_mode).systemUi);
+    _loadSavedMode();
     _loadNews();
+  }
+
+  Future<void> _loadSavedMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_kModeKey);
+    if (saved == null) return;
+    final restored = switch (saved) {
+      'light' => AppMode.light,
+      'dark' => AppMode.dark,
+      'kindle' => AppMode.kindle,
+      _ => null,
+    };
+    if (restored != null && mounted && restored != _mode) {
+      setState(() => _mode = restored);
+      _updateSystemUi();
+    }
+  }
+
+  Future<void> _saveMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kModeKey, _mode.name);
   }
 
   void _updateSystemUi() {
@@ -56,6 +81,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
     _updateSystemUi();
     _modeAnim.forward(from: 0);
+    _saveMode();
   }
 
   Future<void> _loadNews() async {

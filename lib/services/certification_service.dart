@@ -16,7 +16,7 @@ class CertificationService {
     try {
       final response = await http.get(url, headers: {
         'Accept': 'application/json',
-      });
+      }).timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) return [];
 
       final data = json.decode(response.body);
@@ -65,7 +65,7 @@ class CertificationService {
       try {
         final response = await http.get(url, headers: {
           'Accept': 'application/json',
-        });
+        }).timeout(const Duration(seconds: 10));
         if (response.statusCode != 200) continue;
 
         final data = json.decode(response.body);
@@ -99,11 +99,74 @@ class CertificationService {
     return allCerts;
   }
 
+  // ── Udemy courses (free key — udemy.com/developers) ──────────────────────
+  static Future<List<Certification>> _fetchUdemyCourses() async {
+    const clientId = String.fromEnvironment('UDEMY_CLIENT_ID');
+    const clientSecret = String.fromEnvironment('UDEMY_CLIENT_SECRET');
+    if (clientId.isEmpty || clientSecret.isEmpty) return [];
+
+    final queries = ['artificial intelligence', 'machine learning', 'deep learning', 'LLM'];
+    final allCerts = <Certification>[];
+    final seen = <int>{};
+
+    for (final query in queries) {
+      try {
+        final credentials = base64Encode(utf8.encode('$clientId:$clientSecret'));
+        final uri = Uri.parse(
+          'https://www.udemy.com/api-2.0/courses/'
+          '?search=$query&page_size=10&ordering=highest-rated&language=en'
+          '&fields[course]=id,title,headline,url,price,avg_rating,num_reviews,image_480x270,visible_instructors',
+        );
+        final response = await http.get(uri, headers: {
+          'Authorization': 'Basic $credentials',
+          'Accept': 'application/json, version=2',
+        }).timeout(const Duration(seconds: 10));
+        if (response.statusCode != 200) continue;
+
+        final data = json.decode(response.body);
+        final results = data['results'] as List? ?? [];
+
+        for (final c in results) {
+          final id = c['id'] as int? ?? 0;
+          if (!seen.add(id)) continue;
+          final rating = (c['avg_rating'] as num?)?.toDouble() ?? 0.0;
+          if (rating < 3.5) continue;
+
+          final instructors = c['visible_instructors'] as List? ?? [];
+          final instructor = instructors.isNotEmpty
+              ? (instructors.first['display_name'] ?? 'Unknown').toString()
+              : 'Unknown';
+          final title = c['title'] ?? '';
+          final desc = c['headline'] ?? '';
+
+          allCerts.add(Certification(
+            id: 'udemy_$id',
+            name: title,
+            provider: 'Udemy · $instructor',
+            providerType: 'Platform',
+            description: desc,
+            level: _inferLevel(title, desc),
+            price: c['price'] ?? 'Paid',
+            isFree: c['price'] == 'Free',
+            url: 'https://www.udemy.com${c['url'] ?? ''}',
+            skills: _extractSkills(title, desc),
+            rating: rating,
+            enrolledCount: c['num_reviews'] as int?,
+          ));
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+    return allCerts;
+  }
+
   // ── Public method ────────────────────────────────────────────────────────
   static Future<List<Certification>> fetchCertifications({String? level, String? providerType}) async {
     final results = await Future.wait([
       _fetchCourseraCourses().catchError((_) => <Certification>[]),
       _fetchCourseraSpecializations().catchError((_) => <Certification>[]),
+      _fetchUdemyCourses().catchError((_) => <Certification>[]),
     ]);
 
     // Merge and deduplicate

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
+import '../theme/app_theme.dart';
 import 'home_screen.dart';
 import 'privacy_policy_screen.dart';
 
@@ -18,6 +19,27 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _loadingApple = false;
   bool _loadingGoogle = false;
   bool _loadingGuest = false;
+  AppMode _mode = AppMode.dark;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMode();
+  }
+
+  Future<void> _loadMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('app_theme_mode');
+    final restored = switch (saved) {
+      'light' => AppMode.light,
+      'dark' => AppMode.dark,
+      'kindle' => AppMode.kindle,
+      _ => AppMode.dark,
+    };
+    if (mounted && restored != _mode) {
+      setState(() => _mode = restored);
+    }
+  }
 
   Future<void> _goHome() async {
     final prefs = await SharedPreferences.getInstance();
@@ -43,10 +65,13 @@ class _LoginScreenState extends State<LoginScreen> {
     if (success) {
       await _goHome();
     } else {
+      final t = AppTheme(_mode);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Apple Sign-In cancelled.'),
-          backgroundColor: Color(0xFF1A1A1A),
+        SnackBar(
+          content: Text('Apple Sign-In cancelled.',
+            style: TextStyle(color: t.background)),
+          backgroundColor: t.primary,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -60,10 +85,13 @@ class _LoginScreenState extends State<LoginScreen> {
     if (success) {
       await _goHome();
     } else {
+      final t = AppTheme(_mode);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Google Sign-In cancelled.'),
-          backgroundColor: Color(0xFF1A1A1A),
+        SnackBar(
+          content: Text('Google Sign-In cancelled.',
+            style: TextStyle(color: t.background)),
+          backgroundColor: t.primary,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -77,11 +105,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
+    final t = AppTheme(_mode);
+    SystemChrome.setSystemUIOverlayStyle(t.systemUi);
     final isLoading = _loadingApple || _loadingGoogle || _loadingGuest;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
+      backgroundColor: t.background,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -94,12 +123,12 @@ class _LoginScreenState extends State<LoginScreen> {
               RichText(text: TextSpan(children: [
                 TextSpan(text: 'AI',
                   style: GoogleFonts.sourceSerif4(
-                    fontSize: 20, fontWeight: FontWeight.w600,
-                    color: Colors.white, letterSpacing: -0.3)),
+                    fontSize: 20, fontWeight: FontWeight.w700,
+                    color: t.primary, letterSpacing: -0.3)),
                 TextSpan(text: 'Wire',
                   style: GoogleFonts.sourceSerif4(
                     fontSize: 20, fontWeight: FontWeight.w300,
-                    color: Colors.white, letterSpacing: -0.3)),
+                    color: t.primary, letterSpacing: -0.3)),
               ])),
 
               const Spacer(),
@@ -108,15 +137,15 @@ class _LoginScreenState extends State<LoginScreen> {
               Text(
                 'Good stories\nstart here.',
                 style: GoogleFonts.sourceSerif4(
-                  fontSize: 28, fontWeight: FontWeight.w600,
-                  color: Colors.white, height: 1.2, letterSpacing: -0.5,
+                  fontSize: 28, fontWeight: FontWeight.w700,
+                  color: t.primary, height: 1.2, letterSpacing: -0.5,
                 ),
               ),
               const SizedBox(height: 10),
               Text(
                 'AI-powered news, summarised for you.',
                 style: GoogleFonts.inter(
-                  fontSize: 13, color: const Color(0xFF666666),
+                  fontSize: 13, color: t.muted,
                   height: 1.55, letterSpacing: -0.1,
                 ),
               ),
@@ -124,16 +153,18 @@ class _LoginScreenState extends State<LoginScreen> {
               const Spacer(),
 
               if (isLoading)
-                const SizedBox(
+                SizedBox(
                   height: 144,
                   child: Center(child: CircularProgressIndicator(
-                    color: Colors.white, strokeWidth: 1.5)),
+                    color: t.primary, strokeWidth: 1.5)),
                 )
               else ...[
                 // Apple Sign In — official Apple-approved button
                 SignInWithAppleButton(
                   onPressed: _signInWithApple,
-                  style: SignInWithAppleButtonStyle.white,
+                  style: _mode == AppMode.light
+                      ? SignInWithAppleButtonStyle.black
+                      : SignInWithAppleButtonStyle.white,
                   height: 48,
                   borderRadius: BorderRadius.circular(3),
                 ),
@@ -142,11 +173,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Google Sign In
                 _SignInButton(
                   onTap: _signInWithGoogle,
-                  backgroundColor: const Color(0xFF1A1A1A),
-                  foregroundColor: Colors.white,
+                  backgroundColor: t.surface,
+                  foregroundColor: t.primary,
                   icon: _GoogleLogo(),
                   label: 'Continue with Google',
-                  border: Border.all(color: const Color(0xFF2A2A2A), width: 1),
+                  border: Border.all(color: t.divider, width: 1),
                 ),
                 const SizedBox(height: 20),
 
@@ -157,10 +188,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Text(
                       'Continue as guest',
                       style: GoogleFonts.inter(
-                        fontSize: 13, color: const Color(0xFF555555),
+                        fontSize: 13, color: t.muted,
                         letterSpacing: -0.1,
                         decoration: TextDecoration.underline,
-                        decorationColor: const Color(0xFF555555),
+                        decorationColor: t.muted,
                       ),
                     ),
                   ),
@@ -168,7 +199,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ],
 
               const SizedBox(height: 24),
-              _LegalText(),
+              _LegalText(theme: t),
               const SizedBox(height: 16),
             ],
           ),
@@ -179,6 +210,9 @@ class _LoginScreenState extends State<LoginScreen> {
 }
 
 class _LegalText extends StatelessWidget {
+  final AppTheme theme;
+  const _LegalText({required this.theme});
+
   Future<void> _openTerms() async {
     final uri = Uri.parse('https://aiwire.app/terms');
     if (await canLaunchUrl(uri)) {
@@ -196,13 +230,13 @@ class _LegalText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final baseStyle = GoogleFonts.inter(
-      fontSize: 11, color: const Color(0xFF3A3A3A), height: 1.5);
+      fontSize: 11, color: theme.muted.withValues(alpha: 0.6), height: 1.5);
     final linkStyle = GoogleFonts.inter(
       fontSize: 11,
-      color: const Color(0xFF555555),
+      color: theme.muted,
       height: 1.5,
       decoration: TextDecoration.underline,
-      decorationColor: const Color(0xFF555555),
+      decorationColor: theme.muted,
     );
 
     return Center(

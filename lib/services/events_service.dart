@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
@@ -72,13 +73,13 @@ class EventsService {
 
           DateTime? pubDate;
           if (rawDate != null) {
-            try { pubDate = DateTime.parse(rawDate); } catch (_) {}
+            try { pubDate = DateTime.parse(rawDate); } catch (e) { debugPrint("AIWire: $e"); }
             if (pubDate == null) {
               // RFC 822 fallback
               try {
                 final p = rawDate.replaceAll(RegExp(r'GMT|UTC|\+\d{4}|-\d{4}'), '').trim();
                 pubDate = DateTime.tryParse(p);
-              } catch (_) {}
+              } catch (e) { debugPrint("AIWire: $e"); }
             }
           }
           // Skip past events
@@ -103,7 +104,7 @@ class EventsService {
             isFree: true,
           ));
         }
-      } catch (_) {}
+      } catch (e) { debugPrint("AIWire: $e"); }
     }));
 
     return results;
@@ -141,7 +142,7 @@ class EventsService {
       final response = await http.get(url, headers: {
         'Authorization': 'Bearer $token',
         'Accept': 'application/json',
-      });
+      }).timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) return [];
 
       final data = json.decode(response.body);
@@ -150,9 +151,10 @@ class EventsService {
       return results.map((e) {
         final start = e['start'] ?? '';
         final datePart = start.toString().split('T').first;
-        final timePart = start.toString().contains('T')
-            ? start.toString().split('T').last.substring(0, 5)
-            : '09:00';
+        final rawTime = start.toString().contains('T')
+            ? start.toString().split('T').last
+            : '';
+        final timePart = rawTime.length >= 5 ? rawTime.substring(0, 5) : '09:00';
         final location = e['location'] ?? [];
         final geo = e['geo'] ?? {};
         final address = geo['address']?['formatted_address'] ?? '';
@@ -198,7 +200,7 @@ class EventsService {
     try {
       final response = await http.get(url, headers: {
         'Authorization': 'Bearer $token',
-      });
+      }).timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) return [];
 
       final data = json.decode(response.body);
@@ -221,9 +223,12 @@ class EventsService {
           organizer: e['organizer']?['name'] ?? 'TBA',
           description: e['description']?['text']?.toString().take(200) ?? '',
           date: start['local']?.toString().split('T').first ?? '',
-          time: start['local']?.toString().contains('T') == true
-              ? start['local'].toString().split('T').last.substring(0, 5)
-              : '09:00',
+          time: () {
+            final raw = start['local']?.toString() ?? '';
+            if (!raw.contains('T')) return '09:00';
+            final t = raw.split('T').last;
+            return t.length >= 5 ? t.substring(0, 5) : '09:00';
+          }(),
           timezone: start['timezone'] ?? 'UTC',
           type: e['online_event'] == true ? 'Webinar' : 'Conference',
           format: e['online_event'] == true ? 'Virtual' : 'In-Person',
@@ -368,7 +373,10 @@ class EventsService {
           organizer: e['promoter']?['name'] as String? ?? 'TBA',
           description: 'Tech/AI event. See event page for full details.',
           date: dates['localDate'] as String? ?? '',
-          time: (dates['localTime'] as String? ?? '09:00').substring(0, 5),
+          time: () {
+            final t = dates['localTime'] as String? ?? '09:00';
+            return t.length >= 5 ? t.substring(0, 5) : '09:00';
+          }(),
           timezone: 'Local',
           type: 'Conference',
           format: venues.isEmpty ? 'Virtual' : 'In-Person',
@@ -384,7 +392,7 @@ class EventsService {
   }
 
   // ── Public method ────────────────────────────────────────────────────────
-  static Future<List<AIEvent>> fetchEvents({String? type, String? format, bool upcomingOnly = true}) async {
+  static Future<List<AIEvent>> fetchEvents({String? type, String? format, bool upcomingOnly = true, String? country}) async {
     // Fetch from all sources in parallel
     final results = await Future.wait([
       _fetchRssEvents().catchError((_) => <AIEvent>[]),
@@ -418,7 +426,28 @@ class EventsService {
       events = events.where((e) => e.format == format).toList();
     }
 
-    events.sort((a, b) => a.date.compareTo(b.date));
+    // Country filter: keep virtual events everywhere; filter in-person by country
+    if (country != null && country.isNotEmpty) {
+      final cLower = country.toLowerCase();
+      events = events.where((e) {
+        // Virtual/Hybrid events are accessible from anywhere
+        if (e.format == 'Virtual' || e.format == 'Hybrid') return true;
+        // In-Person: only keep if event's location mentions the user's country
+        final loc = (e.location ?? '').toLowerCase();
+        return loc.contains(cLower);
+      }).toList();
+    }
+
+    // Sort: country in-person first, then virtual, then by date
+    events.sort((a, b) {
+      final aLocal = country != null && a.format != 'Virtual'
+          && (a.location ?? '').toLowerCase().contains(country.toLowerCase());
+      final bLocal = country != null && b.format != 'Virtual'
+          && (b.location ?? '').toLowerCase().contains(country.toLowerCase());
+      if (aLocal && !bLocal) return -1;
+      if (!aLocal && bLocal) return 1;
+      return a.date.compareTo(b.date);
+    });
     return events;
   }
 
@@ -483,7 +512,7 @@ class EventsService {
       topics: ['Generative AI', 'Cloud AI', 'Machine Learning'], isFree: true, attendeeCount: 25000),
     AIEvent(id: 'f5', title: 'LLM Fine-tuning Masterclass', organizer: 'Hugging Face',
       description: 'Hands-on workshop covering LoRA, QLoRA, and PEFT techniques for efficient LLM customization.',
-      date: '2026-04-10', time: '14:00', timezone: 'CET', type: 'Workshop', format: 'Virtual',
+      date: '2026-06-15', time: '14:00', timezone: 'CET', type: 'Workshop', format: 'Virtual',
       registrationUrl: 'https://huggingface.co/events',
       topics: ['LLM', 'Fine-tuning', 'Transformers'], isFree: true, attendeeCount: 3000),
     AIEvent(id: 'f6', title: 'AI in Healthcare Summit', organizer: 'MIT',
@@ -494,7 +523,7 @@ class EventsService {
       topics: ['Healthcare AI', 'Deep Learning'], isFree: false, price: '\$500', attendeeCount: 2000),
     AIEvent(id: 'f7', title: 'MLOps Community Meetup', organizer: 'MLOps Community',
       description: 'Monthly virtual meetup discussing best practices in ML deployment and monitoring.',
-      date: '2026-04-02', time: '18:00', timezone: 'UTC', type: 'Meetup', format: 'Virtual',
+      date: '2026-05-20', time: '18:00', timezone: 'UTC', type: 'Meetup', format: 'Virtual',
       registrationUrl: 'https://mlops.community/events',
       topics: ['MLOps', 'Cloud AI'], isFree: true, attendeeCount: 800),
     AIEvent(id: 'f8', title: 'Responsible AI Forum', organizer: 'Partnership on AI',

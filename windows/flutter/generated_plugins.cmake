@@ -3,12 +3,11 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  cloud_firestore
-  firebase_auth
   firebase_core
   flutter_tts
   geolocator_windows
   share_plus
+  speech_to_text_windows
   url_launcher_windows
 )
 

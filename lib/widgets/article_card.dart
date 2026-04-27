@@ -265,21 +265,27 @@ class _ArticleCardState extends State<ArticleCard> with TickerProviderStateMixin
                 ],
               ])),
 
-              // Thumbnail — always shown
-              const SizedBox(width: 14),
-              Hero(
-                tag: 'img_${widget.article.url}',
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: widget.article.urlToImage != null
-                    ? CachedNetworkImage(
-                        imageUrl: widget.article.urlToImage!,
-                        width: 80, height: 80, fit: BoxFit.cover,
-                        fadeInDuration: const Duration(milliseconds: 200),
-                        placeholder: (c, u) => Container(width: 80, height: 80, color: t.surface),
-                        errorWidget: (c, u, e) => _sourcePlaceholder(t),
-                      )
-                    : _sourcePlaceholder(t),
+              // Thumbnail with Hero
+              if (widget.article.urlToImage != null) ...[
+                const SizedBox(width: 14),
+                Hero(
+                  tag: 'img_${widget.article.url}',
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Semantics(
+                      label: 'Article thumbnail for ${widget.article.title}',
+                      image: true,
+                      child: CachedNetworkImage(
+                      imageUrl: widget.article.urlToImage!,
+                      width: 80, height: 80, fit: BoxFit.cover,
+                      fadeInDuration: const Duration(milliseconds: 200),
+                      placeholder: (c, u) => Container(width: 80, height: 80, color: t.surface),
+                      errorWidget: (c, u, e) => Container(
+                        width: 80, height: 80, color: t.surface,
+                        child: Icon(Icons.image_outlined, color: t.muted, size: 20),
+                      ),
+                    )),
+                  ),
                 ),
               ),
             ]),
