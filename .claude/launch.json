@@ -18,6 +18,19 @@
       "runtimeExecutable": "flutter",
       "runtimeArgs": ["run", "-d", "iphone simulator"],
       "port": 0
+    },
+    {
+      "name": "logo-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["http-server", ".", "-p", "8090", "-c-1"],
+      "port": 8090
+    },
+    {
+      "name": "stryk-web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["next", "dev", "--hostname", "0.0.0.0", "--port", "3001"],
+      "port": 3001,
+      "cwd": "/tmp/stryk-main/apps/web"
     }
   ]
 }

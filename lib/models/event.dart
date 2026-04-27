@@ -53,6 +53,24 @@ class AIEvent {
     );
   }
 
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'organizer': organizer,
+    'description': description,
+    'date': date,
+    'time': time,
+    'timezone': timezone,
+    'type': type,
+    'format': format,
+    'location': location,
+    'registrationUrl': registrationUrl,
+    'topics': topics,
+    'isFree': isFree,
+    'price': price,
+    'attendeeCount': attendeeCount,
+  };
+
   bool get isUpcoming {
     try {
       return DateTime.parse(date).isAfter(DateTime.now().subtract(const Duration(days: 1)));

@@ -28,7 +28,7 @@ class AnalyticsDashboardScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text('Analytics', style: GoogleFonts.sourceSerif4(
-          fontSize: 20, fontWeight: FontWeight.w700, color: t.primary)),
+          fontSize: 20, fontWeight: FontWeight.w600, color: t.primary)),
         centerTitle: true,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -160,7 +160,7 @@ class _HeroCard extends StatelessWidget {
       child: Column(
         children: [
           Text('The Elite 0.33%', style: GoogleFonts.sourceSerif4(
-            fontSize: 28, fontWeight: FontWeight.w700, color: t.accent)),
+            fontSize: 28, fontWeight: FontWeight.w600, color: t.accent)),
           const SizedBox(height: 8),
           Text(
             'Out of ~30 million IT professionals worldwide, only ~99,000 possess the specialized AI/ML expertise that defines this concentrated talent pool.',

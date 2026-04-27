@@ -3,7 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../models/event.dart';
-import '../services/events_service.dart';
+import '../services/firestore_service.dart';
+
 
 class EventsHubScreen extends StatefulWidget {
   final AppTheme theme;
@@ -39,7 +40,7 @@ class _EventsHubScreenState extends State<EventsHubScreen> {
 
   Future<void> _loadEvents() async {
     setState(() => _loading = true);
-    final events = await EventsService.fetchEvents(
+    final events = await FirestoreService.fetchEvents(
       type: _typeFilter, format: _formatFilter);
     _allEvents = events;
     _applyFilters();

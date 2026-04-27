@@ -225,6 +225,8 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
         city: loc.city,
         country: loc.country,
         countryCode: loc.countryCode,
+        lat: loc.lat,
+        lng: loc.lng,
         radiusKm: _radiusKm,
         includeRemote: _includeRemote,
       );
@@ -239,10 +241,14 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
 
   Future<void> _loadJobs() async {
     setState(() => _loading = true);
+    final loc = _location;
     final jobs = await FirestoreService.fetchJobs(
       query: _searchQuery.isEmpty ? null : _searchQuery,
       type: _typeFilter,
       level: _levelFilter,
+      countryCode: loc?.countryCode ?? '',
+      city: loc?.city ?? '',
+      country: loc?.country ?? '',
     );
     setState(() { _allJobs = jobs; _loading = false; });
   }

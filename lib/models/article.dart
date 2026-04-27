@@ -18,16 +18,29 @@ class Article {
   });
 
   factory Article.fromJson(Map<String, dynamic> json) {
+    // source can be a nested map (NewsAPI) or a plain string (Firestore)
+    final src = json['source'];
+    final sourceName = src is Map ? src['name'] : src as String?;
     return Article(
       title: json['title'] ?? '',
       description: json['description'],
       urlToImage: json['urlToImage'],
       url: json['url'] ?? '',
       publishedAt: json['publishedAt'],
-      source: json['source']?['name'],
+      source: sourceName,
       content: json['content'],
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'description': description,
+    'urlToImage': urlToImage,
+    'url': url,
+    'publishedAt': publishedAt,
+    'source': source,
+    'content': content,
+  };
 
   int get readingTime {
     // Combine all available text

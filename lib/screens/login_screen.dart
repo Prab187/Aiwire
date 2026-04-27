@@ -94,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
               RichText(text: TextSpan(children: [
                 TextSpan(text: 'AI',
                   style: GoogleFonts.sourceSerif4(
-                    fontSize: 20, fontWeight: FontWeight.w700,
+                    fontSize: 20, fontWeight: FontWeight.w600,
                     color: Colors.white, letterSpacing: -0.3)),
                 TextSpan(text: 'Wire',
                   style: GoogleFonts.sourceSerif4(
@@ -108,7 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
               Text(
                 'Good stories\nstart here.',
                 style: GoogleFonts.sourceSerif4(
-                  fontSize: 28, fontWeight: FontWeight.w700,
+                  fontSize: 28, fontWeight: FontWeight.w600,
                   color: Colors.white, height: 1.2, letterSpacing: -0.5,
                 ),
               ),

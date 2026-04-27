@@ -45,7 +45,7 @@ class _TalentPoolScreenState extends State<TalentPoolScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text('Elite Talent Pool', style: GoogleFonts.sourceSerif4(
-          fontSize: 20, fontWeight: FontWeight.w700, color: t.primary)),
+          fontSize: 20, fontWeight: FontWeight.w600, color: t.primary)),
         centerTitle: true,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -72,7 +72,7 @@ class _TalentPoolScreenState extends State<TalentPoolScreen> {
                   child: Column(
                     children: [
                       Text('Top 0.33%', style: GoogleFonts.sourceSerif4(
-                        fontSize: 32, fontWeight: FontWeight.w700, color: t.accent)),
+                        fontSize: 32, fontWeight: FontWeight.w600, color: t.accent)),
                       const SizedBox(height: 4),
                       Text('of the global IT workforce', style: GoogleFonts.inter(
                         fontSize: 14, color: t.secondary)),

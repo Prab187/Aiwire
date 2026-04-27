@@ -58,7 +58,7 @@ class _UdemyScreenState extends State<UdemyScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text('Udemy Courses', style: GoogleFonts.sourceSerif4(
-          fontSize: 20, fontWeight: FontWeight.w700, color: t.primary)),
+          fontSize: 20, fontWeight: FontWeight.w600, color: t.primary)),
         centerTitle: true,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),

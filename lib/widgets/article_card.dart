@@ -172,6 +172,27 @@ class _ArticleCardState extends State<ArticleCard> with TickerProviderStateMixin
   void _onTapUp(TapUpDetails _) => _tapAnim.reverse();
   void _onTapCancel() => _tapAnim.reverse();
 
+  Widget _sourcePlaceholder(AppTheme t) {
+    final source = widget.article.source ?? '';
+    final initial = source.isNotEmpty ? source[0].toUpperCase() : 'A';
+    return Container(
+      width: 80, height: 80,
+      decoration: BoxDecoration(
+        color: t.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.article_outlined, color: t.muted, size: 22),
+          const SizedBox(height: 4),
+          Text(initial, style: GoogleFonts.inter(
+            fontSize: 16, fontWeight: FontWeight.w700, color: t.primary)),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = widget.theme;
@@ -232,7 +253,7 @@ class _ArticleCardState extends State<ArticleCard> with TickerProviderStateMixin
                 Text(
                   widget.article.title,
                   style: GoogleFonts.sourceSerif4(
-                    fontSize: 20, fontWeight: FontWeight.w700, color: t.primary, height: 1.3),
+                    fontSize: 20, fontWeight: FontWeight.w600, color: t.primary, height: 1.3),
                   maxLines: 2, overflow: TextOverflow.ellipsis,
                 ),
                 if (widget.article.description != null) ...[
@@ -244,26 +265,23 @@ class _ArticleCardState extends State<ArticleCard> with TickerProviderStateMixin
                 ],
               ])),
 
-              // Thumbnail with Hero
-              if (widget.article.urlToImage != null) ...[
-                const SizedBox(width: 14),
-                Hero(
-                  tag: 'img_${widget.article.url}',
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: CachedNetworkImage(
-                      imageUrl: widget.article.urlToImage!,
-                      width: 80, height: 80, fit: BoxFit.cover,
-                      fadeInDuration: const Duration(milliseconds: 200),
-                      placeholder: (c, u) => Container(width: 80, height: 80, color: t.surface),
-                      errorWidget: (c, u, e) => Container(
-                        width: 80, height: 80, color: t.surface,
-                        child: Icon(Icons.image_outlined, color: t.muted, size: 20),
-                      ),
-                    ),
-                  ),
+              // Thumbnail — always shown
+              const SizedBox(width: 14),
+              Hero(
+                tag: 'img_${widget.article.url}',
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: widget.article.urlToImage != null
+                    ? CachedNetworkImage(
+                        imageUrl: widget.article.urlToImage!,
+                        width: 80, height: 80, fit: BoxFit.cover,
+                        fadeInDuration: const Duration(milliseconds: 200),
+                        placeholder: (c, u) => Container(width: 80, height: 80, color: t.surface),
+                        errorWidget: (c, u, e) => _sourcePlaceholder(t),
+                      )
+                    : _sourcePlaceholder(t),
                 ),
-              ],
+              ),
             ]),
             const SizedBox(height: 14),
 

@@ -85,6 +85,7 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
         skills: profile.skills,
         countryCode: profile.countryCode,
         jobTitle: profile.jobTitle,
+        country: profile.country,
       );
 
       setState(() {
@@ -336,38 +337,47 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: t.surface,
+              color: const Color(0xFFFFFBEB),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: t.divider, width: 0.5),
+              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.25)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(children: [
-                  Icon(Icons.lightbulb_outline_rounded, size: 15, color: t.accent),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text('Skills appearing in these jobs you don\'t have yet',
-                      style: GoogleFonts.inter(
-                        fontSize: 13, fontWeight: FontWeight.w600, color: t.primary)),
+                  Container(
+                    width: 28, height: 28,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: const Icon(Icons.lightbulb_rounded, size: 15, color: Color(0xFFF59E0B)),
                   ),
+                  const SizedBox(width: 8),
+                  Text('Skills to Acquire',
+                    style: GoogleFonts.inter(
+                      fontSize: 15, fontWeight: FontWeight.w700, color: const Color(0xFFB45309))),
                 ]),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
+                Text('These skills appear in matched jobs but are missing from your resume',
+                  style: GoogleFonts.inter(
+                    fontSize: 12, color: const Color(0xFF92400E).withValues(alpha: 0.7), height: 1.3)),
+                const SizedBox(height: 12),
                 Wrap(
                   spacing: 6, runSpacing: 6,
                   children: skillGaps.map((s) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: t.accent.withValues(alpha: 0.07),
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: t.accent.withValues(alpha: 0.2)),
+                      border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.35)),
                     ),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.add_circle_outline_rounded, size: 12, color: t.accent),
-                      const SizedBox(width: 4),
+                      const Icon(Icons.add_circle_outline_rounded, size: 13, color: Color(0xFFF59E0B)),
+                      const SizedBox(width: 5),
                       Text(s,
                         style: GoogleFonts.inter(
-                          fontSize: 11, fontWeight: FontWeight.w500, color: t.accent)),
+                          fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFFB45309))),
                     ]),
                   )).toList(),
                 ),

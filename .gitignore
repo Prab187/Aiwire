@@ -20,6 +20,10 @@ android/local.properties
 android/app/debug/
 android/app/profile/
 android/app/release/
+android/key.properties
+android/.keystore_password_BACKUP_SAVE_THIS.txt
+*.jks
+*.keystore
 
 # iOS
 ios/Pods/

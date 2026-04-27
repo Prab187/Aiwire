@@ -129,7 +129,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ? 'Reading as guest'
                           : (_name?.isNotEmpty == true ? _name! : 'Signed in'),
                       style: GoogleFonts.sourceSerif4(
-                        fontSize: 20, fontWeight: FontWeight.w700,
+                        fontSize: 20, fontWeight: FontWeight.w600,
                         color: t.primary, letterSpacing: -0.3,
                       ),
                     ),

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "406104133905",
+    "project_id": "aiwire-6c3da",
+    "storage_bucket": "aiwire-6c3da.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:406104133905:android:e255e657efff0c20d4fcb0",
+        "android_client_info": {
+          "package_name": "com.aiwire.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_9uWegp5UFVQ_2HNv32OGWk9xCLk2Gys"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

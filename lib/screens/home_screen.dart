@@ -3,11 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import '../models/article.dart';
-import '../services/news_service.dart';
+
 import '../widgets/article_card.dart';
 import '../widgets/filter_bar.dart';
 import '../widgets/shimmer_loading.dart';
 import '../theme/app_theme.dart';
+import '../services/firestore_service.dart';
 import 'bookmarks_screen.dart';
 import 'discover_screen.dart';
 import 'profile_screen.dart';
@@ -60,7 +61,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _loadNews() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final articles = await NewsService.fetchAINews();
+      final articles = await FirestoreService.fetchArticles();
       setState(() { _articles = articles; _loading = false; _applyFilter(_sortFilter); });
     } catch (e) {
       setState(() { _error = e.toString(); _loading = false; });
@@ -145,7 +146,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ? Center(child: Padding(padding: const EdgeInsets.all(40),
                   child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                     Text('Something went wrong', style: GoogleFonts.sourceSerif4(
-                        fontSize: 20, fontWeight: FontWeight.w700, color: t.primary)),
+                        fontSize: 20, fontWeight: FontWeight.w600, color: t.primary)),
                     const SizedBox(height: 10),
                     Text(_error!, style: GoogleFonts.inter(color: t.muted, fontSize: 13),
                         textAlign: TextAlign.center),
@@ -172,7 +173,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 'AIWire',
                                 style: GoogleFonts.sourceSerif4(
                                   fontSize: 28,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w600,
                                   color: t.primary,
                                 ),
                               ),
@@ -295,8 +296,8 @@ class _StickyLabelDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
   const _StickyLabelDelegate({required this.child});
 
-  @override double get minExtent => 40;
-  @override double get maxExtent => 40;
+  @override double get minExtent => 44;
+  @override double get maxExtent => 44;
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => child;

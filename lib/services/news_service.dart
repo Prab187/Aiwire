@@ -17,26 +17,45 @@ class NewsService {
     // ── Tier 1: Pure AI news ──────────────────────────────────
     {'url': 'https://techcrunch.com/category/artificial-intelligence/feed/', 'source': 'TechCrunch AI'},
     {'url': 'https://venturebeat.com/category/ai/feed/', 'source': 'VentureBeat AI'},
-    {'url': 'https://artificialintelligence-news.com/feed/', 'source': 'AI News'},
     {'url': 'https://www.marktechpost.com/feed/', 'source': 'MarkTechPost'},
-    {'url': 'https://syncedreview.com/feed/', 'source': 'Synced Review'},
-    {'url': 'https://www.aitrends.com/feed/', 'source': 'AI Trends'},
-    {'url': 'https://techxplore.com/rss-feed/machine-learning-ai-news/', 'source': 'TechXplore AI'},
-    // ── Tier 2: Top labs & research ──────────────────────────
+    {'url': 'https://thegradient.pub/rss/', 'source': 'The Gradient'},
+    // ── Tier 2: Top AI labs ───────────────────────────────────
     {'url': 'https://openai.com/blog/rss.xml', 'source': 'OpenAI'},
     {'url': 'https://www.deepmind.com/blog/rss.xml', 'source': 'DeepMind'},
     {'url': 'https://huggingface.co/blog/feed.xml', 'source': 'HuggingFace'},
-    {'url': 'https://hai.stanford.edu/news/rss.xml', 'source': 'Stanford HAI'},
-    {'url': 'https://bair.berkeley.edu/blog/feed.xml', 'source': 'Berkeley AI'},
-    {'url': 'https://thegradient.pub/rss/', 'source': 'The Gradient'},
-    // ── Tier 3: Trusted tech with AI coverage ─────────────────
+    {'url': 'https://www.anthropic.com/news/rss', 'source': 'Anthropic'},
+    {'url': 'https://ai.googleblog.com/feeds/posts/default', 'source': 'Google AI'},
+    {'url': 'https://engineering.fb.com/category/ml-applications/feed/', 'source': 'Meta AI'},
+    // ── Tier 3: Top newsletters ───────────────────────────────
+    {'url': 'https://www.deeplearning.ai/the-batch/feed/', 'source': 'The Batch'},
+    {'url': 'https://jack-clark.net/feed/', 'source': 'Import AI'},
+    // ── Tier 4: Trusted tech with AI coverage ─────────────────
     {'url': 'https://www.technologyreview.com/feed/', 'source': 'MIT Tech Review'},
     {'url': 'https://www.wired.com/feed/tag/artificial-intelligence/rss', 'source': 'Wired'},
     {'url': 'https://feeds.arstechnica.com/arstechnica/technology-lab', 'source': 'Ars Technica'},
     {'url': 'https://www.theverge.com/rss/index.xml', 'source': 'The Verge'},
-    {'url': 'https://www.zdnet.com/topic/artificial-intelligence/rss.xml', 'source': 'ZDNet'},
-    {'url': 'https://news.crunchbase.com/feed/', 'source': 'Crunchbase'},
   ];
+
+  // Fallback images for sources that don't provide images in their RSS
+  static const Map<String, String> _sourceFallbackImages = {
+    'OpenAI':         'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/OpenAI_Logo.svg/320px-OpenAI_Logo.svg.png',
+    'Anthropic':      'https://upload.wikimedia.org/wikipedia/commons/thumb/7/78/Anthropic_logo.svg/320px-Anthropic_logo.svg.png',
+    'DeepMind':       'https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/DeepMind_new_logo.svg/320px-DeepMind_new_logo.svg.png',
+    'Google AI':      'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Google_2015_logo.svg/320px-Google_2015_logo.svg.png',
+    'Meta AI':        'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Meta_Platforms_Inc._logo.svg/320px-Meta_Platforms_Inc._logo.svg.png',
+    'Import AI':      'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Python-logo-notext.svg/240px-Python-logo-notext.svg.png',
+    'The Batch':      'https://www.deeplearning.ai/wp-content/uploads/2021/02/the-batch-logo.png',
+    'Stanford HAI':   'https://hai.stanford.edu/sites/default/files/2020-01/HAI_Homepage_Hero.jpg',
+    'HuggingFace':    'https://huggingface.co/front/assets/huggingface_logo.svg',
+    'The Gradient':   'https://thegradient.pub/content/images/2019/10/gradient_og.png',
+    'TechCrunch AI':  'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/TechCrunch_logo.svg/320px-TechCrunch_logo.svg.png',
+    'VentureBeat AI': 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ad/VentureBeat_logo.svg/320px-VentureBeat_logo.svg.png',
+    'MarkTechPost':   'https://www.marktechpost.com/wp-content/uploads/2022/09/cropped-New-Logo-192x192.png',
+    'MIT Tech Review':'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/MIT_Technology_Review_modern_logo.svg/320px-MIT_Technology_Review_modern_logo.svg.png',
+    'Wired':          'https://upload.wikimedia.org/wikipedia/commons/thumb/9/95/Wired_logo.svg/320px-Wired_logo.svg.png',
+    'Ars Technica':   'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Ars_Technica_logo_%282016%29.svg/320px-Ars_Technica_logo_%282016%29.svg.png',
+    'The Verge':      'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/The_Verge_logo.svg/320px-The_Verge_logo.svg.png',
+  };
 
   static bool _isEnglish(String text) {
     final nonEnglishPattern = RegExp(
@@ -100,7 +119,7 @@ class NewsService {
         articles.add(Article(
           title: title,
           description: description.isNotEmpty ? description : null,
-          urlToImage: imageUrl,
+          urlToImage: imageUrl ?? _sourceFallbackImages[sourceName],
           url: url,
           publishedAt: publishedAt,
           source: sourceName,
@@ -219,16 +238,29 @@ class NewsService {
   }
 
   static String _stripHtml(String html) {
-    return html
-        .replaceAll(RegExp(r'<[^>]*>'), '')
-        .replaceAll('&amp;', '&')
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .replaceAll('&quot;', '"')
-        .replaceAll('&#39;', "'")
-        .replaceAll('&nbsp;', ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+    var s = html;
+    // Strip CDATA wrappers
+    s = s.replaceAll(RegExp(r'<!\[CDATA\['), '').replaceAll(']]>', '');
+    // Remove all HTML tags
+    s = s.replaceAll(RegExp(r'<[^>]*>'), '');
+    // Named entities
+    const named = {
+      '&amp;'  : '&',  '&lt;'   : '<',  '&gt;'   : '>',
+      '&quot;' : '"',  '&apos;' : "'",  '&#39;'  : "'",
+      '&nbsp;' : ' ',
+      // Smart quotes & typographic chars
+      '&#8216;': '\u2018', '&#8217;': '\u2019',
+      '&#8220;': '\u201C', '&#8221;': '\u201D',
+      '&#8230;': '\u2026', '&#8211;': '\u2013',
+      '&#8212;': '\u2014', '&#160;' : ' ',
+    };
+    named.forEach((entity, char) { s = s.replaceAll(entity, char); });
+    // Remaining numeric entities &#NNNN;
+    s = s.replaceAllMapped(RegExp(r'&#(\d+);'), (m) {
+      final code = int.tryParse(m.group(1)!);
+      return code != null ? String.fromCharCode(code) : '';
+    });
+    return s.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   static const _months = {
@@ -238,44 +270,44 @@ class NewsService {
 
   static String? _parseDate(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
+    var s = raw.trim();
 
-    // 1. ISO 8601 — try directly
-    try {
-      return DateTime.parse(raw.trim()).toIso8601String();
-    } catch (_) {}
+    // 1. ISO 8601 — handles Z, +offset, .milliseconds
+    try { return DateTime.parse(s).toIso8601String(); } catch (_) {}
 
-    // 2. RFC 822 — e.g. "Mon, 25 Mar 2026 10:30:00 +0000"
+    // 2. RFC 822 — "Mon, 25 Mar 2026 10:30:00 +0000" or "...GMT"
     try {
-      final parts = raw.trim().split(RegExp(r'[\s,]+'));
-      // parts: [Mon, 25, Mar, 2026, 10:30:00, +0000]
-      // or without weekday: [25, Mar, 2026, 10:30:00, +0000]
+      // Normalise timezone: GMT/UTC → +0000
+      s = s.replaceAll(RegExp(r'\bGMT\b'), '+0000')
+           .replaceAll(RegExp(r'\bUTC\b'), '+0000');
+      final parts = s.split(RegExp(r'[\s,]+'));
       int day = 0, month = 0, year = 0;
       int hour = 0, minute = 0, second = 0;
-
       for (int i = 0; i < parts.length; i++) {
         final p = parts[i];
-        final monthNum = _months[p.toLowerCase().substring(0, p.length.clamp(0, 3))];
+        final key = p.toLowerCase();
+        final monthNum = _months[key.length >= 3 ? key.substring(0, 3) : key];
         if (monthNum != null) {
           month = monthNum;
           if (i > 0) day = int.tryParse(parts[i - 1]) ?? 0;
           if (i + 1 < parts.length) year = int.tryParse(parts[i + 1]) ?? 0;
           if (i + 2 < parts.length && parts[i + 2].contains(':')) {
-            final timeParts = parts[i + 2].split(':');
-            hour   = int.tryParse(timeParts[0]) ?? 0;
-            minute = int.tryParse(timeParts.length > 1 ? timeParts[1] : '0') ?? 0;
-            second = int.tryParse(timeParts.length > 2 ? timeParts[2] : '0') ?? 0;
+            final t = parts[i + 2].split(':');
+            hour   = int.tryParse(t[0]) ?? 0;
+            minute = int.tryParse(t.length > 1 ? t[1] : '0') ?? 0;
+            second = int.tryParse(t.length > 2 ? t[2] : '0') ?? 0;
           }
           break;
         }
       }
-
       if (day > 0 && month > 0 && year > 0) {
-        return DateTime.utc(year, month, day, hour, minute, second).toIso8601String();
+        return DateTime.utc(year, month, day, hour, minute, second)
+            .toIso8601String();
       }
     } catch (_) {}
 
-    // 3. Give up — return null so article still shows without a timestamp
-    return null;
+    // 3. Fallback — return now so article always has a timestamp
+    return DateTime.now().toIso8601String();
   }
 
   // ── Scoring ──────────────────────────────────────────────────

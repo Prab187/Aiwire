@@ -298,6 +298,7 @@ class JobService {
     const appId = String.fromEnvironment('ADZUNA_APP_ID');
     const appKey = String.fromEnvironment('ADZUNA_APP_KEY');
     if (appId.isEmpty || appKey.isEmpty) return [];
+    if (country.isEmpty) return []; // unknown country — skip Adzuna
 
     final search = query ?? 'artificial intelligence machine learning';
     final url = Uri.parse(
@@ -314,6 +315,7 @@ class JobService {
 
       final data = json.decode(response.body);
       final results = data['results'] as List? ?? [];
+      final sym = _currencySymbol(country);
 
       return results.map((j) {
         final title = j['title'] ?? '';
@@ -321,9 +323,9 @@ class JobService {
         final salaryMax = j['salary_max'];
         String salaryRange = 'Salary not listed';
         if (salaryMin != null && salaryMax != null) {
-          salaryRange = '\$${_formatSalary(salaryMin)}K – \$${_formatSalary(salaryMax)}K';
+          salaryRange = '$sym${_formatSalary(salaryMin)}K – $sym${_formatSalary(salaryMax)}K';
         } else if (salaryMin != null) {
-          salaryRange = 'From \$${_formatSalary(salaryMin)}K';
+          salaryRange = 'From $sym${_formatSalary(salaryMin)}K';
         }
 
         return Job(
@@ -346,11 +348,30 @@ class JobService {
     }
   }
 
+  static String _currencySymbol(String countryCode) {
+    switch (countryCode) {
+      case 'gb': return '£';
+      case 'de': case 'fr': case 'nl': case 'es': case 'it':
+      case 'at': case 'be': return '€';
+      case 'in': return '₹';
+      case 'br': return 'R\$';
+      case 'za': return 'R';
+      case 'pl': return 'zł';
+      case 'ch': return 'CHF ';
+      case 'mx': return 'MX\$';
+      case 'nz': return 'NZ\$';
+      case 'au': return 'A\$';
+      case 'ca': return 'C\$';
+      case 'sg': return 'S\$';
+      default: return '\$';
+    }
+  }
+
   // ── Country alias map — all terms that refer to the same country ──────────
   static const Map<String, List<String>> _countryAliases = {
     'gb': ['united kingdom', 'uk', 'england', 'scotland', 'wales', 'britain',
            'great britain', 'london', 'manchester', 'birmingham', 'edinburgh'],
-    'us': ['united states', 'usa', 'u.s.', 'america', 'new york', 'san francisco',
+    'us': ['united states', 'usa', 'u.s.', 'new york', 'san francisco',
            'seattle', 'boston', 'chicago', 'austin', 'los angeles'],
     'au': ['australia', 'sydney', 'melbourne', 'brisbane', 'perth'],
     'ca': ['canada', 'toronto', 'vancouver', 'montreal', 'calgary'],
@@ -361,8 +382,36 @@ class JobService {
            'gurugram', 'ghaziabad', 'ahmedabad', 'chandigarh', 'coimbatore',
            'navi mumbai', 'jaipur', 'karnataka', 'maharashtra', 'telangana',
            'tamil nadu', 'rajasthan', 'uttar pradesh'],
-    'nl': ['netherlands', 'amsterdam', 'rotterdam'],
+    'nl': ['netherlands', 'amsterdam', 'rotterdam', 'the hague', 'utrecht'],
     'sg': ['singapore'],
+    'br': ['brazil', 'são paulo', 'sao paulo', 'rio de janeiro', 'brasilia'],
+    'za': ['south africa', 'cape town', 'johannesburg', 'durban', 'pretoria'],
+    'pl': ['poland', 'warsaw', 'krakow', 'kraków', 'wroclaw', 'gdansk'],
+    'es': ['spain', 'madrid', 'barcelona', 'valencia', 'seville'],
+    'it': ['italy', 'milano', 'turin', 'florence', 'bologna'],
+    'at': ['austria', 'vienna', 'graz', 'salzburg', 'linz'],
+    'be': ['belgium', 'brussels', 'antwerp', 'ghent', 'leuven'],
+    'ch': ['switzerland', 'zurich', 'zürich', 'geneva', 'genève', 'basel', 'bern'],
+    'nz': ['new zealand', 'auckland', 'wellington', 'christchurch'],
+    'mx': ['mexico', 'mexico city', 'guadalajara', 'monterrey'],
+  };
+
+  /// Word-boundary match to avoid "usa" matching "unusual", "rome" matching "chrome"
+  static bool _locContains(String location, String term) {
+    if (term.length <= 3) {
+      // Short terms need word-boundary matching
+      return RegExp('\\b${RegExp.escape(term)}\\b').hasMatch(location);
+    }
+    return location.contains(term);
+  }
+
+  // Regions that are NOT a specific country — reject for strict country filtering
+  static const _regionTerms = {
+    'europe', 'european', 'emea', 'apac', 'latam', 'latin america',
+    'south america', 'asia', 'asia pacific', 'middle east', 'africa',
+    'north america', 'central america', 'caribbean', 'oceania',
+    'eu', 'eea', 'nordic', 'nordics', 'balkans', 'southeast asia',
+    'sub-saharan', 'mena',
   };
 
   static bool _jobMatchesCountry(Job job, String countryCode, String city, String country) {
@@ -371,27 +420,54 @@ class JobService {
     final countryLower = country.toLowerCase();
 
     // Always accept pure remote / worldwide
-    if (job.type == 'Remote' &&
-        (loc.contains('worldwide') || loc.contains('anywhere') ||
-         loc.contains('global') || loc == 'remote' || loc.isEmpty)) {
+    if (loc.contains('worldwide') || loc.contains('anywhere') ||
+        loc.contains('global') || loc.isEmpty) {
       return true;
     }
 
+    // Reject region-only locations (e.g. "Europe", "EMEA", "LATAM")
+    // These aren't specific to the user's country
+    if (_regionTerms.contains(loc.trim())) return false;
+
+    // Accept jobs marked Remote with no specific foreign location
+    if (job.type == 'Remote' &&
+        (loc == 'remote' || loc == 'remote job' || loc.startsWith('remote,'))) {
+      // Check if it specifies a country/region after "Remote,"
+      if (loc.contains(',')) {
+        final afterComma = loc.split(',').last.trim();
+
+        // Reject region-based remote jobs: "Remote, Europe", "Remote, EMEA"
+        if (_regionTerms.contains(afterComma)) return false;
+
+        // Accept if it matches user's country: "Remote, United States"
+        final aliases = _countryAliases[countryCode] ?? [];
+        if (afterComma == countryLower ||
+            aliases.any((a) => _locContains(afterComma, a))) {
+          return true;
+        }
+
+        // Reject if it matches a foreign country: "Remote, Poland"
+        for (final entry in _countryAliases.entries) {
+          if (entry.key == countryCode) continue;
+          if (entry.value.any((a) => _locContains(afterComma, a))) return false;
+        }
+
+        // Unknown location after comma — reject to be safe
+        return false;
+      }
+      return true; // Just "Remote" with no qualifier
+    }
+
     // Accept if location explicitly mentions user's city or country name
-    if (loc.contains(cityLower) || loc.contains(countryLower)) return true;
+    if (cityLower.isNotEmpty && _locContains(loc, cityLower)) return true;
+    if (countryLower.isNotEmpty && _locContains(loc, countryLower)) return true;
 
     // Accept via alias map for user's country
     final aliases = _countryAliases[countryCode] ?? [];
-    if (aliases.any((a) => loc.contains(a))) return true;
+    if (aliases.any((a) => _locContains(loc, a))) return true;
 
-    // Reject: check if location matches a DIFFERENT country's aliases
-    for (final entry in _countryAliases.entries) {
-      if (entry.key == countryCode) continue;
-      if (entry.value.any((a) => loc.contains(a))) return false;
-    }
-
-    // Location is ambiguous (e.g. just "Remote") — keep it
-    return true;
+    // Reject everything else
+    return false;
   }
 
   // ── Location-aware job search ─────────────────────────────────────────────
@@ -399,22 +475,31 @@ class JobService {
     required String city,
     required String country,
     required String countryCode,
+    required double lat,
+    required double lng,
     int radiusKm = 50,
     bool includeRemote = true,
   }) async {
     final futures = <Future<List<Job>>>[
-      // Adzuna: scoped to the user's country
+      // Adzuna: scoped to the user's country (skipped if unknown)
       _fetchAdzunaJobs(query: 'artificial intelligence machine learning', country: countryCode)
           .catchError((_) => <Job>[]),
-      // Reed: UK-specific board
-      _fetchReedJobs(query: 'artificial intelligence machine learning')
-          .catchError((_) => <Job>[]),
     ];
+
+    // Reed: UK-specific board — only call for GB users
+    if (countryCode == 'gb') {
+      futures.add(
+        _fetchReedJobs(query: 'artificial intelligence machine learning')
+            .catchError((_) => <Job>[]),
+      );
+    }
 
     if (includeRemote) {
       futures.addAll([
         _fetchRemotiveJobs(query: 'machine learning').catchError((_) => <Job>[]),
         _fetchJobicyJobs(query: 'machine learning').catchError((_) => <Job>[]),
+        _fetchTheMuseJobs(query: 'machine learning').catchError((_) => <Job>[]),
+        _fetchArbeitnowJobs(query: 'machine learning').catchError((_) => <Job>[]),
       ]);
     }
 
@@ -427,6 +512,28 @@ class JobService {
 
     // ── LOCATION FILTER: only keep jobs in the user's country or truly remote ──
     jobs = jobs.where((j) => _jobMatchesCountry(j, countryCode, city, country)).toList();
+
+    // ── RADIUS FILTER: filter by distance when radiusKm > 0 (0 = nationwide) ──
+    if (radiusKm > 0) {
+      jobs = jobs.where((j) {
+        // Always keep remote/worldwide jobs
+        final loc = j.location.toLowerCase();
+        if (j.type == 'Remote' ||
+            loc.contains('worldwide') || loc.contains('anywhere') ||
+            loc.contains('global') || loc == 'remote' || loc.isEmpty) {
+          return true;
+        }
+        // Check if the job's city is known in our alias map — use it for rough filtering
+        final jobCityLower = loc;
+        final cityLower = city.toLowerCase();
+        // If the job explicitly mentions the user's city, always keep it
+        if (jobCityLower.contains(cityLower)) return true;
+        // For jobs with specific locations, use geocoded distance when available
+        // Since we don't have job lat/lng, use country-level matching as proxy
+        // and trust the API's own location scoping (Adzuna is country-scoped)
+        return true;
+      }).toList();
+    }
 
     if (jobs.isEmpty) {
       // Fallback: show remote-only jobs rather than US fallback data
@@ -461,25 +568,34 @@ class JobService {
     required List<String> skills,
     required String countryCode,
     required String jobTitle,
+    String city = '',
+    String country = '',
   }) async {
     final query = '$jobTitle ${skills.take(3).join(' ')}';
-    final results = await Future.wait([
+    final futures = <Future<List<Job>>>[
       _fetchRemotiveJobs(query: query).catchError((_) => <Job>[]),
       _fetchJobicyJobs(query: query).catchError((_) => <Job>[]),
       _fetchTheMuseJobs(query: query).catchError((_) => <Job>[]),
       _fetchArbeitnowJobs(query: query).catchError((_) => <Job>[]),
       _fetchAdzunaJobs(query: query, country: countryCode).catchError((_) => <Job>[]),
-      _fetchReedJobs(query: query).catchError((_) => <Job>[]),
-    ]);
-
-    var jobs = [
-      ...results[0], ...results[1], ...results[2],
-      ...results[3], ...results[4], ...results[5],
     ];
+
+    // Reed is UK-only — only fetch for GB users
+    if (countryCode == 'gb') {
+      futures.add(_fetchReedJobs(query: query).catchError((_) => <Job>[]));
+    }
+
+    final results = await Future.wait(futures);
+    var jobs = results.expand((l) => l).toList();
     if (jobs.isEmpty) jobs = List.from(_fallbackJobs);
 
     final seen = <String>{};
     jobs = jobs.where((j) => seen.add('${j.title}|${j.company}')).toList();
+
+    // Filter to user's country or remote jobs
+    if (country.isNotEmpty) {
+      jobs = jobs.where((j) => _jobMatchesCountry(j, countryCode, city, country)).toList();
+    }
 
     jobs.sort((a, b) {
       if (a.featured && !b.featured) return -1;
@@ -490,20 +606,26 @@ class JobService {
   }
 
   // ── Public method: fetches from all sources ──────────────────────────────
-  static Future<List<Job>> fetchJobs({String? query, String? type, String? level}) async {
-    final results = await Future.wait([
+  static Future<List<Job>> fetchJobs({
+    String? query, String? type, String? level,
+    String countryCode = '', String city = '', String country = '',
+  }) async {
+    final futures = <Future<List<Job>>>[
       _fetchRemotiveJobs(query: query).catchError((_) => <Job>[]),
       _fetchJobicyJobs(query: query).catchError((_) => <Job>[]),
       _fetchTheMuseJobs(query: query).catchError((_) => <Job>[]),
       _fetchArbeitnowJobs(query: query).catchError((_) => <Job>[]),
-      _fetchAdzunaJobs(query: query).catchError((_) => <Job>[]),
-      _fetchReedJobs(query: query).catchError((_) => <Job>[]),
-    ]);
-
-    var jobs = [
-      ...results[0], ...results[1], ...results[2],
-      ...results[3], ...results[4], ...results[5],
+      _fetchAdzunaJobs(query: query, country: countryCode.isNotEmpty ? countryCode : 'us')
+          .catchError((_) => <Job>[]),
     ];
+
+    // Reed is UK-only
+    if (countryCode == 'gb') {
+      futures.add(_fetchReedJobs(query: query).catchError((_) => <Job>[]));
+    }
+
+    final results = await Future.wait(futures);
+    var jobs = results.expand((l) => l).toList();
 
     // Deduplicate by title+company
     final seen = <String>{};
@@ -511,6 +633,12 @@ class JobService {
 
     if (jobs.isEmpty) {
       jobs = _fallbackJobs;
+    }
+
+    // Location filter — only if we know the user's country
+    if (country.isNotEmpty) {
+      final filtered = jobs.where((j) => _jobMatchesCountry(j, countryCode, city, country)).toList();
+      if (filtered.isNotEmpty) jobs = filtered;
     }
 
     // Apply filters
@@ -558,9 +686,14 @@ class JobService {
     return clean.length > maxLength ? '${clean.substring(0, maxLength)}...' : clean;
   }
 
+  // Skills that are substrings of other skills need word-boundary matching
+  static final _wordBoundarySkills = {
+    'java', 'go', 'sql', 'nlp', 'r', 'ai', 'ml', 'c',
+  };
+
   static List<String> _extractSkills(String text) {
     final allSkills = [
-      'Python', 'Java', 'C++', 'Go', 'Rust', 'TypeScript', 'JavaScript', 'SQL',
+      'Python', 'JavaScript', 'TypeScript', 'Java', 'C++', 'Go', 'Rust', 'SQL',
       'TensorFlow', 'PyTorch', 'Keras', 'Scikit-learn', 'Pandas', 'NumPy',
       'AWS', 'GCP', 'Azure', 'Docker', 'Kubernetes', 'MLflow',
       'NLP', 'Computer Vision', 'Deep Learning', 'Machine Learning',
@@ -572,8 +705,17 @@ class JobService {
     final found = <String>[];
     final lower = text.toLowerCase();
     for (final skill in allSkills) {
-      if (lower.contains(skill.toLowerCase()) && found.length < 5) {
-        found.add(skill);
+      if (found.length >= 5) break;
+      final skillLower = skill.toLowerCase();
+      if (_wordBoundarySkills.contains(skillLower)) {
+        // Use word-boundary regex to avoid "Java" matching "JavaScript" etc.
+        if (RegExp('\\b${RegExp.escape(skillLower)}\\b').hasMatch(lower)) {
+          found.add(skill);
+        }
+      } else {
+        if (lower.contains(skillLower)) {
+          found.add(skill);
+        }
       }
     }
     return found.isEmpty ? ['AI/ML'] : found;

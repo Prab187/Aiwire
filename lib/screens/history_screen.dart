@@ -42,7 +42,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               child: Icon(Icons.arrow_back, color: t.primary)),
             const SizedBox(width: 16),
             Text('Recently Read', style: GoogleFonts.sourceSerif4(
-                fontSize: 22, fontWeight: FontWeight.w700, color: t.primary)),
+                fontSize: 22, fontWeight: FontWeight.w600, color: t.primary)),
             const Spacer(),
             if (_history.isNotEmpty)
               GestureDetector(
@@ -62,7 +62,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 Icon(Icons.history, color: t.muted, size: 48),
                 const SizedBox(height: 16),
                 Text('No reading history', style: GoogleFonts.sourceSerif4(
-                    fontSize: 20, fontWeight: FontWeight.w700, color: t.primary)),
+                    fontSize: 20, fontWeight: FontWeight.w600, color: t.primary)),
                 const SizedBox(height: 8),
                 Text('Articles you read will appear here',
                     style: GoogleFonts.inter(color: t.muted, fontSize: 13)),

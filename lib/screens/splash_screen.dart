@@ -91,7 +91,9 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                 ),
               );
             },
-            child: Column(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Logo mark
@@ -108,14 +110,14 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                       Positioned(
                         left: 8,
                         child: Text('A', style: GoogleFonts.sourceSerif4(
-                          fontSize: 52, fontWeight: FontWeight.w700,
+                          fontSize: 52, fontWeight: FontWeight.w600,
                           color: Colors.white, height: 1)),
                       ),
                       // W
                       Positioned(
                         right: 4,
                         child: Text('W', style: GoogleFonts.sourceSerif4(
-                          fontSize: 52, fontWeight: FontWeight.w700,
+                          fontSize: 52, fontWeight: FontWeight.w600,
                           color: Colors.white.withOpacity(0.35), height: 1)),
                       ),
                       // I slash
@@ -136,7 +138,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                 // Wordmark
                 RichText(text: TextSpan(children: [
                   TextSpan(text: 'AI', style: GoogleFonts.sourceSerif4(
-                    fontSize: 32, fontWeight: FontWeight.w700, color: Colors.white)),
+                    fontSize: 32, fontWeight: FontWeight.w600, color: Colors.white)),
                   TextSpan(text: 'Wire', style: GoogleFonts.sourceSerif4(
                     fontSize: 32, fontWeight: FontWeight.w300, color: Colors.white)),
                 ])),
@@ -150,7 +152,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                   ),
                 ),
               ],
-            ),
+            )),
           ),
         ),
       ),

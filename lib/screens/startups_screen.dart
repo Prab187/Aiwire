@@ -57,7 +57,7 @@ class _StartupsScreenState extends State<StartupsScreen> with SingleTickerProvid
           onPressed: () => Navigator.pop(context),
         ),
         title: Text('Startups & Forecast', style: GoogleFonts.sourceSerif4(
-          fontSize: 20, fontWeight: FontWeight.w700, color: t.primary)),
+          fontSize: 20, fontWeight: FontWeight.w600, color: t.primary)),
         centerTitle: true,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(49),
@@ -157,7 +157,7 @@ class _StartupsScreenState extends State<StartupsScreen> with SingleTickerProvid
           child: Column(
             children: [
               Text('2026 AI Job Market', style: GoogleFonts.sourceSerif4(
-                fontSize: 22, fontWeight: FontWeight.w700, color: t.primary)),
+                fontSize: 22, fontWeight: FontWeight.w600, color: t.primary)),
               const SizedBox(height: 4),
               Text('Year-over-year growth in AI/ML roles', style: GoogleFonts.inter(
                 fontSize: 13, color: t.muted)),

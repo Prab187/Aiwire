@@ -44,7 +44,7 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
               child: Icon(Icons.arrow_back, color: t.primary)),
             const SizedBox(width: 16),
             Text('Saved', style: GoogleFonts.sourceSerif4(
-                fontSize: 22, fontWeight: FontWeight.w700, color: t.primary)),
+                fontSize: 22, fontWeight: FontWeight.w600, color: t.primary)),
           ]),
         ),
         Divider(height: 1, color: t.divider),

@@ -61,6 +61,8 @@ class _NearbyJobsScreenState extends State<NearbyJobsScreen> {
         city: loc.city,
         country: loc.country,
         countryCode: loc.countryCode,
+        lat: loc.lat,
+        lng: loc.lng,
         radiusKm: _radiusKm,
         includeRemote: _includeRemote,
       );

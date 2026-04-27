@@ -91,13 +91,13 @@ class LocationService {
       }
     } catch (_) {}
 
-    // Fallback: return coords without city name
+    // Fallback: return coords without city name — don't assume 'us'
     return LocationResult(
       lat: lat,
       lng: lng,
       city: 'Your Location',
-      country: 'Worldwide',
-      countryCode: 'us',
+      country: 'Unknown',
+      countryCode: '',
       displayName: '${lat.toStringAsFixed(3)}, ${lng.toStringAsFixed(3)}',
     );
   }
@@ -108,7 +108,7 @@ class LocationService {
       'us', 'gb', 'au', 'ca', 'de', 'fr', 'in', 'nl', 'sg', 'br',
       'za', 'pl', 'es', 'it', 'at', 'be', 'ch', 'nz', 'mx',
     };
-    return supported.contains(iso) ? iso : 'us';
+    return supported.contains(iso) ? iso : '';
   }
 
   /// Rough km distance between two lat/lng points (Haversine)

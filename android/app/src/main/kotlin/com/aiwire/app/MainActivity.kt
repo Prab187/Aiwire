@@ -1,4 +1,4 @@
-package com.example.aiwire
+package com.aiwire.app
 
 import io.flutter.embedding.android.FlutterActivity
 

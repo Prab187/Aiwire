@@ -90,7 +90,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                   Text('Unlock AIWire\nPremium',
                       style: GoogleFonts.sourceSerif4(
                         fontSize: 30,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                         color: t.primary,
                         height: 1.15,
                         letterSpacing: -0.5,

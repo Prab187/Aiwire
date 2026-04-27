@@ -312,7 +312,7 @@ class _ArticleScreenState extends State<ArticleScreen> {
 
                   Text(widget.article.title,
                     style: GoogleFonts.sourceSerif4(
-                      fontSize: 28, fontWeight: FontWeight.w700,
+                      fontSize: 28, fontWeight: FontWeight.w600,
                       color: t.primary, height: 1.25)),
                   const SizedBox(height: 16),
 

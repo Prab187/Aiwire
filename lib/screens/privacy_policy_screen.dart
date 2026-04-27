@@ -199,7 +199,7 @@ class _PolicyBody extends StatelessWidget {
         text,
         style: GoogleFonts.sourceSerif4(
           fontSize: isTitle ? 20 : 15,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w600,
           color: Colors.white,
           letterSpacing: -0.3,
           height: 1.3,
