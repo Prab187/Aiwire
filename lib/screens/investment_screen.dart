@@ -9,6 +9,7 @@ import 'package:xml/xml.dart';
 import '../theme/app_theme.dart';
 import '../services/claude_cache.dart';
 import '../services/claude_error.dart';
+import '../services/claude_http.dart';
 import '../widgets/bullet_summary.dart';
 
 class InvestmentScreen extends StatelessWidget {
@@ -61,12 +62,27 @@ class InvestmentScreen extends StatelessWidget {
                 const SizedBox(height: 12),
                 Divider(color: t.divider),
                 const SizedBox(height: 8),
-                Text('Sources: Crunchbase · PitchBook · Bloomberg',
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.auto_awesome_rounded, size: 12, color: const Color(0xFFF59E0B)),
+                      const SizedBox(width: 5),
+                      Text('Curated editorial snapshot',
+                        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600,
+                          color: const Color(0xFFB45309))),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text('Compiled from public funding announcements',
                   style: GoogleFonts.inter(fontSize: 11, color: t.muted),
                   textAlign: TextAlign.center),
-                const SizedBox(height: 2),
-                Text('Data as of Q4 2025',
-                  style: GoogleFonts.inter(fontSize: 11, color: t.muted)),
               ]),
             ),
             const SizedBox(height: 28),
@@ -573,25 +589,25 @@ class _FundingNewsFeedState extends State<_FundingNewsFeed> {
   bool _loading = true;
   List<Map<String, String>> _items = [];
 
-  static const _fallback = [
-    {
-      'title': 'Anthropic raises \$2B at \$61.5B valuation',
-      'description': 'Anthropic, the AI safety company behind Claude, announced a fresh \$2 billion funding round led by Google, pushing its valuation to \$61.5 billion.',
-      'date': 'Jan 2026',
-      'url': 'https://techcrunch.com',
-    },
-    {
-      'title': 'CoreWeave secures \$1.5B in new debt financing',
-      'description': 'Cloud infrastructure provider CoreWeave closed a \$1.5 billion debt facility to expand its GPU capacity for AI workloads.',
-      'date': 'Feb 2026',
-      'url': 'https://techcrunch.com',
-    },
-    {
-      'title': 'ElevenLabs closes \$180M Series C round',
-      'description': 'Voice AI startup ElevenLabs raised \$180 million in Series C funding, valuing the company at over \$3 billion.',
-      'date': 'Jan 2026',
-      'url': 'https://techcrunch.com',
-    },
+  // Multiple RSS feeds that actually publish AI funding news, most reliable first
+  static const _feeds = [
+    'https://techcrunch.com/category/venture/feed/',
+    'https://techcrunch.com/category/artificial-intelligence/feed/',
+    'https://venturebeat.com/category/ai/feed/',
+    'https://www.theinformation.com/feed',
+    'https://news.crunchbase.com/feed/',
+  ];
+
+  static const _keywords = [
+    'fund', 'raise', 'raised', 'invest', 'million', 'billion',
+    'series a', 'series b', 'series c', 'series d', 'series e',
+    'valuation', 'acquires', 'acquired', 'acquisition', 'ipo',
+    'seed round', 'pre-seed', 'venture', 'startup',
+  ];
+  static const _aiTerms = [
+    'ai', 'artificial intelligence', 'machine learning', 'ml ',
+    'llm', 'generative', 'openai', 'anthropic', 'ml/ai',
+    'neural', 'foundation model', 'agent', 'robotics',
   ];
 
   @override
@@ -601,85 +617,114 @@ class _FundingNewsFeedState extends State<_FundingNewsFeed> {
   }
 
   Future<void> _fetchNews() async {
-    try {
-      final response = await http.get(
-        Uri.parse('https://techcrunch.com/feed/'),
-        headers: {'User-Agent': 'Mozilla/5.0'},
-      ).timeout(const Duration(seconds: 10));
+    final collected = <Map<String, String>>[];
+    final seenTitles = <String>{};
 
-      if (response.statusCode == 200) {
+    // Fetch all feeds in parallel, but collect successfully parsed items
+    await Future.wait(_feeds.map((feedUrl) async {
+      try {
+        final response = await http.get(
+          Uri.parse(feedUrl),
+          headers: {'User-Agent': 'Mozilla/5.0 (AIWire)'},
+        ).timeout(const Duration(seconds: 10));
+        if (response.statusCode != 200) return;
+
         final document = XmlDocument.parse(response.body);
-        final items = document.findAllElements('item');
-        final keywords = ['fund', 'raise', 'invest', 'million', 'billion',
-          'series', 'valuation', 'acquires', 'acquisition', 'ipo'];
+        final items = document.findAllElements('item').toList();
+        // Also handle Atom feeds
+        final entries = items.isEmpty
+            ? document.findAllElements('entry').toList()
+            : items;
 
-        final filtered = <Map<String, String>>[];
-        for (final item in items) {
-          if (filtered.length >= 6) break;
-          final title = item.findElements('title').firstOrNull?.innerText ?? '';
+        for (final item in entries) {
+          final title = item.childElements
+              .where((e) => e.name.local == 'title')
+              .firstOrNull?.innerText.trim() ?? '';
+          if (title.isEmpty) continue;
+          if (seenTitles.contains(title.toLowerCase())) continue;
+
           final titleLower = title.toLowerCase();
-          final hasKeyword = keywords.any((k) => titleLower.contains(k));
-          if (!hasKeyword) continue;
+          final hasFundingTerm = _keywords.any((k) => titleLower.contains(k));
+          final hasAiTerm = _aiTerms.any((a) => titleLower.contains(a));
+          // Must contain BOTH a funding keyword AND an AI term
+          if (!hasFundingTerm || !hasAiTerm) continue;
 
-          final link = item.findElements('link').firstOrNull?.innerText ??
-              item.findElements('guid').firstOrNull?.innerText ?? '';
-          final pubDate = item.findElements('pubDate').firstOrNull?.innerText ?? '';
+          // Extract URL
+          String link = '';
+          for (final el in item.childElements) {
+            if (el.name.local == 'link') {
+              final href = el.getAttribute('href');
+              if (href != null && href.isNotEmpty) { link = href; break; }
+              final text = el.innerText.trim();
+              if (text.startsWith('http')) { link = text; break; }
+            }
+          }
+          if (link.isEmpty) {
+            link = item.childElements
+                .where((e) => e.name.local == 'guid')
+                .firstOrNull?.innerText.trim() ?? '';
+          }
+          if (!link.startsWith('http')) continue;
 
-          // Description (strip HTML)
-          final rawDesc = item.findElements('description').firstOrNull?.innerText ?? '';
+          // Extract date
+          final pubDate = item.childElements.where((e) =>
+            e.name.local == 'pubDate' || e.name.local == 'published'
+            || e.name.local == 'updated').firstOrNull?.innerText.trim() ?? '';
+          DateTime? parsed;
+          try { parsed = DateTime.parse(pubDate); } catch (_) {}
+          // Only show last 90 days
+          if (parsed != null &&
+              DateTime.now().difference(parsed).inDays > 90) continue;
+
+          String dateDisplay = 'Recent';
+          if (parsed != null) {
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            dateDisplay = '${months[parsed.month - 1]} ${parsed.day}, ${parsed.year}';
+          }
+
+          // Extract description and strip HTML
+          final rawDesc = item.childElements.where((e) =>
+            e.name.local == 'description' || e.name.local == 'summary'
+            || e.name.local == 'content' || e.name.local == 'encoded')
+            .firstOrNull?.innerText.trim() ?? '';
           final cleanDesc = rawDesc
+              .replaceAll(RegExp(r'<!\[CDATA\[|\]\]>'), '')
               .replaceAll(RegExp(r'<[^>]*>'), '')
               .replaceAll(RegExp(r'\s+'), ' ')
               .trim();
-          final description = cleanDesc.length > 300
-              ? '${cleanDesc.substring(0, 300)}…'
+
+          // SKIP items without a real description — these won't read well
+          if (cleanDesc.length < 80) continue;
+
+          final description = cleanDesc.length > 400
+              ? '${cleanDesc.substring(0, 400)}…'
               : cleanDesc;
 
-          String dateDisplay = pubDate;
-          try {
-            final d = DateTime.parse(pubDate);
-            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-            dateDisplay = '${months[d.month - 1]} ${d.year}';
-          } catch (_) {
-            if (pubDate.length > 10) {
-              dateDisplay = pubDate.substring(0, pubDate.length > 16 ? 16 : pubDate.length);
-            }
-          }
-
-          filtered.add({
+          seenTitles.add(title.toLowerCase());
+          collected.add({
             'title': title,
             'description': description,
             'date': dateDisplay,
             'url': link,
+            'published': parsed?.toIso8601String() ?? '',
           });
         }
+      } catch (_) {}
+    }));
 
-        // Guarantee a minimum of 3 items: top up from fallback if needed
-        final combined = <Map<String, String>>[...filtered];
-        for (final f in _fallback) {
-          if (combined.length >= 3) break;
-          if (!combined.any((x) => x['title'] == f['title'])) {
-            combined.add(f);
-          }
-        }
-
-        setState(() {
-          _items = combined.isEmpty ? _fallback : combined;
-          _loading = false;
-        });
-      } else {
-        _useFallback();
-      }
-    } catch (_) {
-      _useFallback();
-    }
-  }
-
-  void _useFallback() {
-    setState(() {
-      _items = _fallback;
-      _loading = false;
+    // Sort by date (newest first)
+    collected.sort((a, b) {
+      final ap = DateTime.tryParse(a['published'] ?? '') ?? DateTime(2000);
+      final bp = DateTime.tryParse(b['published'] ?? '') ?? DateTime(2000);
+      return bp.compareTo(ap);
     });
+
+    if (mounted) {
+      setState(() {
+        _items = collected.take(8).toList();
+        _loading = false;
+      });
+    }
   }
 
   void _showSummary(Map<String, String> item) {
@@ -704,6 +749,27 @@ class _FundingNewsFeedState extends State<_FundingNewsFeed> {
           padding: const EdgeInsets.symmetric(vertical: 20),
           child: CircularProgressIndicator(color: t.primary, strokeWidth: 1.5),
         ),
+      );
+    }
+
+    if (_items.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: t.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: t.divider, width: 0.5),
+        ),
+        child: Column(children: [
+          Icon(Icons.inbox_rounded, size: 32, color: t.muted.withValues(alpha: 0.5)),
+          const SizedBox(height: 8),
+          Text('No recent funding news', style: GoogleFonts.inter(
+            fontSize: 13, fontWeight: FontWeight.w600, color: t.primary)),
+          const SizedBox(height: 4),
+          Text('Showing only articles with verified content from the last 90 days.\nCheck back soon.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(fontSize: 11, color: t.muted, height: 1.4)),
+        ]),
       );
     }
 
@@ -837,19 +903,15 @@ Title: $title
 ${description.isNotEmpty ? description : "(no extended description available — infer from title)"}''';
 
     try {
-      final response = await http.post(
-        Uri.parse('https://api.anthropic.com/v1/messages'),
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: json.encode({
+      final response = await ClaudeHttp.post(
+        apiKey: apiKey,
+        timeout: const Duration(seconds: 30),
+        body: {
           'model': 'claude-haiku-4-5',
           'max_tokens': 320,
           'messages': [{'role': 'user', 'content': prompt}],
-        }),
-      ).timeout(const Duration(seconds: 20));
+        },
+      );
 
       if (response.statusCode != 200) {
         throw Exception(claudeError(response.statusCode, response.body));

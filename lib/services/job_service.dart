@@ -535,22 +535,42 @@ class JobService {
   static List<Job> _filterByCountry(List<Job> jobs, String countryCode) {
     final cc = countryCode.toLowerCase();
     final name = (_countryNames[cc] ?? '').toLowerCase();
-    if (name.isEmpty) return jobs; // unknown country — don't filter
+    if (name.isEmpty) {
+      // Unknown country — reject only obviously-foreign jobs but keep remotes
+      return jobs.where((j) {
+        final loc = j.location.toLowerCase();
+        return loc.isEmpty
+            || loc.contains('remote')
+            || loc.contains('worldwide')
+            || loc.contains('anywhere')
+            || loc.contains('global');
+      }).toList();
+    }
+
+    // User's country has known aliases (US → "united states", "usa", etc.)
+    final myAliases = <String>{name, cc};
+    if (cc == 'us') myAliases.addAll(['united states', 'usa', 'u.s.']);
+    if (cc == 'gb') myAliases.addAll(['united kingdom', 'uk', 'britain', 'england']);
 
     // Build a set of all known foreign country names to reject against
     final foreignNames = <String>{};
     for (final entry in _countryNames.entries) {
-      if (entry.key != cc) foreignNames.add(entry.value.toLowerCase());
+      if (entry.key != cc) {
+        foreignNames.add(entry.value.toLowerCase());
+        foreignNames.add(entry.key.toLowerCase());
+      }
     }
+    // Add US/UK common aliases as foreign if user isn't in them
+    if (cc != 'us') foreignNames.addAll(['united states', 'usa', 'u.s.']);
+    if (cc != 'gb') foreignNames.addAll(['united kingdom', 'uk', 'britain']);
 
     return jobs.where((j) {
       final loc = j.location.toLowerCase();
 
-      // Keep if location explicitly mentions user's country
-      if (loc.contains(name)) return true;
+      // Keep if location explicitly mentions user's country or its aliases
+      if (myAliases.any((a) => loc.contains(a))) return true;
 
-      // Keep only truly global remote jobs — reject remote jobs
-      // that mention a specific foreign country
+      // Keep only truly global remote jobs (not foreign-scoped remotes)
       if (loc.contains('worldwide') || loc.contains('anywhere') ||
           loc.contains('global') || loc == 'remote' || loc.isEmpty) {
         return true;
@@ -618,20 +638,34 @@ class JobService {
     return jobs;
   }
 
-  // ── Public method: fetches from all sources ──────────────────────────────
+  // ── Public method: fetches from all sources, filtered by country ─────────
   static Future<List<Job>> fetchJobs({String? query, String? type, String? level, String country = 'us'}) async {
-    final results = await Future.wait([
+    final cc = country.toLowerCase();
+
+    // Source pruning based on country — skip APIs that can't serve this region
+    final futures = <Future<List<Job>>>[
+      // Global sources — always called
       _fetchRemotiveJobs(query: query).catchError((_) => <Job>[]),
       _fetchJobicyJobs(query: query).catchError((_) => <Job>[]),
-      _fetchTheMuseJobs(query: query).catchError((_) => <Job>[]),
-      _fetchArbeitnowJobs(query: query).catchError((_) => <Job>[]),
-      _fetchAdzunaJobs(query: query, country: country).catchError((_) => <Job>[]),
-      _fetchReedJobs(query: query).catchError((_) => <Job>[]),
+      _fetchAdzunaJobs(query: query, country: cc).catchError((_) => <Job>[]),
       _fetchGreenhouseJobs(query: query).catchError((_) => <Job>[]),
       _fetchAshbyJobs(query: query).catchError((_) => <Job>[]),
       _fetchLeverJobs(query: query).catchError((_) => <Job>[]),
-    ]);
+    ];
+    // US/CA: The Muse
+    if (cc == 'us' || cc == 'ca') {
+      futures.add(_fetchTheMuseJobs(query: query).catchError((_) => <Job>[]));
+    }
+    // EU: Arbeitnow
+    if (_euCodes.contains(cc)) {
+      futures.add(_fetchArbeitnowJobs(query: query).catchError((_) => <Job>[]));
+    }
+    // UK: Reed
+    if (cc == 'gb') {
+      futures.add(_fetchReedJobs(query: query).catchError((_) => <Job>[]));
+    }
 
+    final results = await Future.wait(futures);
     var jobs = results.expand((list) => list).toList();
 
     // Deduplicate by title+company
@@ -639,10 +673,15 @@ class JobService {
     jobs = jobs.where((j) => seen.add('${j.title}|${j.company}')).toList();
 
     if (jobs.isEmpty) {
-      jobs = _fallbackJobs;
+      jobs = List<Job>.from(_fallbackJobs);
     }
 
-    // Apply filters
+    // ⚠️ NEW: Apply country filter — stops foreign jobs leaking through
+    // (Remotive/Jobicy/Greenhouse/Ashby/Lever return global jobs; this post-filter
+    // keeps only ones relevant to user's country + worldwide remote jobs)
+    jobs = _filterByCountry(jobs, cc);
+
+    // Apply user-facing filters
     if (type != null && type != 'All') {
       jobs = jobs.where((j) => j.type == type).toList();
     }

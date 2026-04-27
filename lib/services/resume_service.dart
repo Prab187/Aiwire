@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import '../models/resume_profile.dart';
 import 'claude_cache.dart';
 import 'claude_error.dart';
+import 'claude_http.dart';
+import 'curated_resources.dart';
 
 const _sampleResumeText = '''ALEX MORGAN
 ML Engineer · San Francisco, CA · alex.morgan@email.com · +1 (415) 555-0142
@@ -101,34 +102,48 @@ class ResumeService {
   "experience_level": "Junior|Mid|Senior|Lead|Principal",
   "years_of_experience": 0,
   "country": "full country name",
-  "country_code": "2-letter lowercase ISO 3166-1 code (e.g. us, gb, in, ae, jp, ng, br, de, sg, au, ca, fr, nl, za, kr, se, etc). Default to 'us' ONLY if absolutely no location signal. Extract aggressively from: address, phone country code (+91=in, +44=gb, +1=us/ca, +61=au, +49=de, +971=ae, +81=jp), city names, timezone, language.",
+  "country_code": "2-letter lowercase ISO 3166-1 code (us, gb, in, ae, jp, ng, br, de, sg, au, ca, fr, nl, za, kr, se, etc). Default to 'us' ONLY if absolutely no location signal. Extract from: address, phone country code (+91=in, +44=gb, +1=us/ca, +61=au, +49=de, +971=ae, +81=jp), city names, timezone.",
   "job_title": "best matching job title (e.g. ML Engineer, Data Scientist)",
   "summary": "2-3 sentence professional summary highlighting their strongest qualifications",
   "projects": ["up to 4 notable projects or work achievements mentioned — short 1-line each"],
   "certifications": ["all certifications or courses mentioned"],
   "education": "highest education: degree, institution, year if available",
   "strengths": ["3 key strengths based on what stands out in the resume"],
-  "gaps": ["2-3 skill gaps or areas for improvement based on current AI/ML market demands"],
-  "ats_score": <integer 0-100 estimating how well this resume would pass an ATS scanner — based on keywords, structure, action verbs, quantified achievements, formatting>,
-  "ats_issues": ["2-4 specific fixes to improve the ATS score, e.g. 'Add quantified achievements (% improved, dollars saved)', 'Use standard section headings', 'Add missing keywords: TensorFlow, Kubernetes'"]
+  "gaps": [
+    {
+      "name": "Specific missing skill/credential (e.g. 'AWS Machine Learning Specialty')",
+      "severity": "CRITICAL | HIGH | MEDIUM",
+      "market_reason": "Why this matters in their country's AI/ML market in one sentence (reference their specific country)",
+      "time_to_close": "Realistic timeframe (e.g. '6 weeks', '3 months', 'ongoing')",
+      "resource": "Specific named course/platform/provider (e.g. 'Stephane Maarek AWS ML on Udemy', 'DeepLearning.AI MLOps Specialization on Coursera', 'Fast.ai Practical DL course')",
+      "resource_url": "Actual URL if you know it, else null",
+      "cost": "Cost with local currency (e.g. 'Free', '\$49', '₹499', '£12/mo')"
+    }
+  ],
+  "ats_score": <integer 0-100 estimating ATS compatibility based on keywords, structure, action verbs, quantified achievements, formatting>,
+  "ats_issues": ["2-4 specific fixes with BEFORE/AFTER examples, e.g. 'Change \"Responsible for ML projects\" → \"Led 3 NLP projects on AWS, cut latency 35%\"'"]
 }
+
+CRITICAL for gaps:
+- Generate 3 structured gaps, ranked by severity (CRITICAL first)
+- Be SPECIFIC: not "cloud" but "AWS Certified Machine Learning Specialty"
+- Reference their country in market_reason (e.g. "80% of India ML jobs require AWS or GCP")
+- Cost should reflect their country's pricing (India: ₹, UK: £, EU: €, US: \$)
+
+⚠️ RESOURCE HALLUCINATION GUARD — MANDATORY:
+${CuratedResources.compactProviders}
 
 Extract years_of_experience by calculating from work history dates. If dates unclear, estimate from experience_level.
 Determine country from: address, phone country code, or any location mention.
-For strengths: identify what makes this candidate competitive.
-For gaps: identify what's missing compared to top AI/ML job requirements today (e.g. missing cloud certs, no LLM experience, no MLOps, etc).''';
+For strengths: identify what makes this candidate competitive.''';
 
-    final response = await http.post(
-      Uri.parse('https://api.anthropic.com/v1/messages'),
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        if (isPdf) 'anthropic-beta': 'pdfs-2024-09-25',
-      },
-      body: json.encode({
+    final response = await ClaudeHttp.post(
+      apiKey: apiKey,
+      extraHeaders: isPdf ? {'anthropic-beta': 'pdfs-2024-09-25'} : null,
+      timeout: const Duration(seconds: 60),
+      body: {
         'model': 'claude-haiku-4-5',
-        'max_tokens': 1100,
+        'max_tokens': 2000,
         'messages': [
           {
             'role': 'user',
@@ -138,8 +153,8 @@ For gaps: identify what's missing compared to top AI/ML job requirements today (
             ],
           }
         ],
-      }),
-    ).timeout(const Duration(seconds: 30));
+      },
+    );
 
     if (response.statusCode != 200) {
       throw Exception('Resume analysis failed — ${claudeError(response.statusCode, response.body)}');
@@ -160,16 +175,59 @@ For gaps: identify what's missing compared to top AI/ML job requirements today (
         .replaceFirst(RegExp(r'\s*```$'), '')
         .trim();
 
-    final dynamic decoded;
+    // Try direct parse, fall back to repair for truncated responses
+    Map<String, dynamic>? parsed;
     try {
-      decoded = json.decode(jsonText);
+      parsed = json.decode(jsonText) as Map<String, dynamic>;
     } catch (_) {
-      throw Exception('AI returned invalid JSON. Please try again.');
+      // Attempt to repair truncated JSON (common when max_tokens hits)
+      parsed = _repairTruncatedJson(jsonText);
+      if (parsed == null) {
+        throw Exception('AI response was cut off. Please try again — if it keeps happening, the resume may be too long.');
+      }
     }
-    final parsed = decoded as Map<String, dynamic>;
     // Store in cache for 30 days
     await ClaudeCache.set('resume', cacheKey, jsonText);
     return ResumeProfile.fromJson(parsed);
+  }
+
+  /// Best-effort repair of truncated JSON. Common failure modes:
+  ///   1. Trailing comma + no closing brace
+  ///   2. Unclosed string (no trailing quote)
+  ///   3. Truncated mid-array
+  /// Returns null if unrepairable.
+  static Map<String, dynamic>? _repairTruncatedJson(String raw) {
+    var s = raw.trim();
+    // Pass 1: Close any unterminated string at end of text
+    final quoteCount = RegExp('"').allMatches(s).length;
+    if (quoteCount.isOdd) s = '$s"';
+    // Pass 2: Drop trailing comma
+    s = s.replaceAll(RegExp(r',\s*$'), '');
+    // Pass 3: Count unbalanced brackets and close them
+    int openObj = 0, openArr = 0;
+    bool inString = false;
+    bool escape = false;
+    for (var i = 0; i < s.length; i++) {
+      final c = s[i];
+      if (escape) { escape = false; continue; }
+      if (c == '\\') { escape = true; continue; }
+      if (c == '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (c == '{') openObj++;
+      else if (c == '}') openObj--;
+      else if (c == '[') openArr++;
+      else if (c == ']') openArr--;
+    }
+    // Close any remaining open array/object
+    s = s + (']' * openArr.clamp(0, 10)) + ('}' * openObj.clamp(0, 10));
+    // Drop any content after last valid closing brace
+    final lastBrace = s.lastIndexOf('}');
+    if (lastBrace > 0) s = s.substring(0, lastBrace + 1);
+    try {
+      return json.decode(s) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
   }
 
   static Map<String, dynamic> _pdfContent(Uint8List bytes) {

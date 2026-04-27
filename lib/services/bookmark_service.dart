@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/article.dart';
+import 'user_activity_context.dart';
 
 class BookmarkService {
   static const _key = 'bookmarked_articles';
@@ -38,6 +39,8 @@ class BookmarkService {
     if (!isDuplicate) {
       raw.add(json.encode(map));
       await prefs.setStringList(_key, raw);
+      // Feed into user activity context for LLM personalization
+      await UserActivityContext.recordBookmark(article.title);
     }
   }
 

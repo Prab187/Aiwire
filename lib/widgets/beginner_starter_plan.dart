@@ -10,12 +10,22 @@ import '../theme/app_theme.dart';
 class BeginnerStarterPlan extends StatefulWidget {
   final AppTheme theme;
   final String userName;
+  final String education;
+  final bool hasWorkExp;
+  final String workYears;
+  final String workRole;
+  final String domain;
   final VoidCallback? onUnlock30Day;
 
   const BeginnerStarterPlan({
     super.key,
     required this.theme,
     required this.userName,
+    this.education = '',
+    this.hasWorkExp = false,
+    this.workYears = '',
+    this.workRole = '',
+    this.domain = '',
     this.onUnlock30Day,
   });
 
@@ -75,6 +85,41 @@ class _BeginnerStarterPlanState extends State<BeginnerStarterPlan> {
     return 7; // all done
   }
 
+  /// Personalized welcome subtitle based on discovery data.
+  String _welcomeSubtitle(String firstName) {
+    final parts = <String>[];
+    if (widget.education.isNotEmpty) parts.add(widget.education);
+    if (widget.hasWorkExp && widget.workRole.isNotEmpty) {
+      final yrs = widget.workYears.isNotEmpty ? '${widget.workYears}yr ' : '';
+      parts.add('$yrs${widget.workRole}');
+    }
+    final hasDomain = widget.domain.isNotEmpty && widget.domain != 'Not sure yet';
+    if (hasDomain && parts.isNotEmpty) {
+      return "${parts.join(" · ")} → AI in ${widget.domain} is booming. 15 min/day, 7 days — let's get you in.";
+    }
+    if (hasDomain) {
+      return "AI in ${widget.domain} is one of the fastest-growing fields. 15 min/day, 7 days — you're starting now.";
+    }
+    if (parts.isNotEmpty) {
+      return "${parts.join(" · ")} — perfect starting point for AI. 15 min/day, 7 days.";
+    }
+    return "Most people think about AI. You're actually starting. 15 min/day, 7 days — that's it.";
+  }
+
+  /// Domain-specific tip for career cards.
+  String get _domainHint {
+    switch (widget.domain) {
+      case 'Healthcare': return 'AI is transforming diagnostics, drug discovery & patient care';
+      case 'Finance': return 'AI drives fraud detection, trading bots & risk analysis';
+      case 'Education': return 'AI powers personalized learning, grading & curriculum design';
+      case 'Marketing': return 'AI automates ad targeting, content creation & customer insights';
+      case 'E-commerce': return 'AI runs recommendation engines, pricing & inventory management';
+      case 'Real Estate': return 'AI predicts property values, automates listings & lead scoring';
+      case 'Content Creation': return 'AI generates copy, videos, images & social media strategies';
+      default: return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final firstName = widget.userName.split(' ').first;
@@ -106,7 +151,7 @@ class _BeginnerStarterPlanState extends State<BeginnerStarterPlan> {
           const SizedBox(height: 4),
           Text(
             _completedDays == 0
-                ? "Most people think about AI. You're actually starting. 15 min/day, 7 days — that's it."
+                ? _welcomeSubtitle(firstName)
                 : _allDone
                     ? "You completed all 7 days. You're ahead of 95% of people who just talk about getting into AI."
                     : "$_completedDays down, ${7 - _completedDays} to go. You're already ahead of most people.",
@@ -153,7 +198,7 @@ class _BeginnerStarterPlanState extends State<BeginnerStarterPlan> {
         icon: Icons.work_outline_rounded,
         color: const Color(0xFF3B82F6),
         title: 'AI Careers That Don\'t Need Coding',
-        subtitle: 'Tap the one that excites you',
+        subtitle: _domainHint.isNotEmpty ? _domainHint : 'Tap the one that excites you',
         child: _buildCareers(),
       ),
 

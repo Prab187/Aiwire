@@ -7,7 +7,6 @@ import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../services/youtube_service.dart';
-import '../services/job_service.dart';
 import '../widgets/bullet_summary.dart';
 import '../services/analytics_service.dart';
 import 'job_board_screen.dart';

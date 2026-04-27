@@ -4,9 +4,6 @@ import 'dart:convert';
 ///
 /// Anthropic returns errors as:
 /// `{"type":"error","error":{"type":"invalid_request_error","message":"..."}}`
-///
-/// Returns a string like "400 invalid_request_error: model not found" or
-/// just "400" if the body can't be parsed.
 String claudeError(int statusCode, String body) {
   try {
     final data = json.decode(body);
@@ -28,29 +25,51 @@ String claudeError(int statusCode, String body) {
   return snippet.isEmpty ? '$statusCode' : '$statusCode: $snippet';
 }
 
-/// Detects whether a Claude error message indicates the user has hit
-/// their monthly spend limit or run out of credits. When true, the UI
-/// should show a friendly "quota reached" message with a link to the
-/// Anthropic billing page instead of raw error text.
-bool isUsageLimitError(String errorMessage) {
+/// True if the error is a **per-minute rate limit** (TPM/RPM). These clear
+/// automatically after ~60 seconds — the user doesn't need to add credits.
+bool isRateLimitError(String errorMessage) {
   final m = errorMessage.toLowerCase();
-  return m.contains('usage limit')
-      || m.contains('spend limit')
-      || m.contains('credit balance')
-      || m.contains('credit_balance_too_low')
-      || m.contains('quota')
-      || m.contains('monthly limit')
-      || m.contains('rate_limit_error')
-      || m.contains('insufficient_quota');
+  // Anthropic uses "rate_limit_error" type + messages mentioning tpm/rpm
+  return m.contains('rate_limit_error')
+      || m.contains('rate limit')
+      || m.contains('tokens per min')
+      || m.contains('per-minute')
+      || m.contains('429')
+      || (m.contains('too many requests'))
+      || m.contains('tpm')
+      || m.contains('rpm');
 }
 
-/// Friendly replacement message for usage-limit errors.
-const String kUsageLimitMessage =
-    'Monthly AI quota reached. Please add credits at console.anthropic.com or try again tomorrow.';
+/// True if the error is a **hard balance/spend-cap** issue. Only this case
+/// actually requires the user to go add credits.
+bool isCreditExhaustionError(String errorMessage) {
+  final m = errorMessage.toLowerCase();
+  // Don't false-positive on rate limits
+  if (isRateLimitError(m) && !m.contains('credit') && !m.contains('balance')
+      && !m.contains('spend limit')) {
+    return false;
+  }
+  return m.contains('credit balance')
+      || m.contains('credit_balance_too_low')
+      || m.contains('insufficient_quota')
+      || m.contains('spend limit')
+      || m.contains('monthly limit')
+      || m.contains('quota exceeded')
+      || m.contains('usage limit');
+}
 
-/// Returns the friendly message if this looks like a quota error,
-/// otherwise returns the original error text unchanged.
+/// Legacy helper — kept for back-compat with older callers.
+bool isUsageLimitError(String errorMessage) =>
+    isRateLimitError(errorMessage) || isCreditExhaustionError(errorMessage);
+
+/// Converts any Anthropic error into a user-actionable message.
+/// Critically, distinguishes **wait 60 seconds** from **add money**.
 String friendlyError(String raw) {
-  if (isUsageLimitError(raw)) return kUsageLimitMessage;
+  if (isCreditExhaustionError(raw)) {
+    return 'AI credits exhausted. Please add credits at console.anthropic.com → Settings → Plans & Billing, then try again.';
+  }
+  if (isRateLimitError(raw)) {
+    return 'Too many AI requests in a short time. This resets in ~60 seconds — please wait a moment and try again.';
+  }
   return raw;
 }

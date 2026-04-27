@@ -25,6 +25,8 @@ import '../services/profile_storage_service.dart';
 import '../services/application_tracker_service.dart';
 import '../services/claude_cache.dart';
 import '../services/claude_error.dart';
+import '../services/curated_resources.dart';
+import '../services/user_activity_context.dart';
 import '../services/job_scoring_service.dart';
 import '../services/ghost_job_detector.dart';
 import '../models/job_grade.dart';
@@ -57,6 +59,11 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
   List<Job> _jobs = [];
   Map<String, JobLegitimacy> _legitimacyMap = {};
 
+  /// Set to false when the resume parse returned too little information to
+  /// trust ANY downstream suggestions. When false, every tab shows an honest
+  /// "we couldn't read your resume" message instead of fabricated advice.
+  bool _profileReadable = true;
+
   late final AnimationController _pulseCtrl;
   late final Animation<double> _pulse;
   late TabController _tabCtrl;
@@ -85,6 +92,22 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
   final _nameCtrl = TextEditingController();
   final _certCtrl = TextEditingController();
 
+  // Beginner discovery fields
+  int _discoveryStep = 0; // 0 = not started, 1 = education, 2 = background, 3 = domain
+  String _starterEducation = '';
+  String _starterWorkExp = 'No';
+  String _starterWorkYears = '';
+  String _starterRole = '';
+  String _starterDomain = '';
+  final _starterRoleCtrl = TextEditingController();
+  final _starterYearsCtrl = TextEditingController();
+
+  // Additional context for realistic career planning (collected in manual flow)
+  String _manualCountry = '';          // e.g. "India", "United States"
+  String _manualHoursPerWeek = '';     // e.g. "5-10", "10-20", "20+"
+  String _manualGoal = '';             // e.g. "First AI job", "Career switch", "Level up", "Freelance"
+  String _manualWhy = '';              // e.g. "Interest", "Higher pay", "Job security"
+
   AppTheme get t => widget.theme;
 
   static const _skillOptions = [
@@ -110,6 +133,8 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
     _tabCtrl.dispose();
     _nameCtrl.dispose();
     _certCtrl.dispose();
+    _starterRoleCtrl.dispose();
+    _starterYearsCtrl.dispose();
     super.dispose();
   }
 
@@ -130,9 +155,11 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
 
     try {
       await Future.delayed(const Duration(milliseconds: 600));
+      if (!mounted) return;
       setState(() => _statusMessage = 'Extracting skills & experience\u2026');
 
       final profile = await ResumeService.analyzeResume(file);
+      if (!mounted) return;
 
       // Save skills + country for other screens
       final prefs = await SharedPreferences.getInstance();
@@ -150,6 +177,7 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
         createdAt: DateTime.now().toIso8601String(),
       ));
 
+      if (!mounted) return;
       setState(() => _statusMessage = 'Finding jobs in ${profile.country}\u2026');
 
       final jobs = await JobService.fetchJobsForResume(
@@ -158,15 +186,23 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
         jobTitle: profile.jobTitle,
         country: profile.country,
       );
+      if (!mounted) return;
 
       // Premium gate disabled during testing
       // await AiQuotaGuard.record();
       // await AiQuotaGuard.record();
 
+      // ⚠️ GLOBAL GATE: If the resume parse returned too little signal,
+      // set _profileReadable=false so EVERY tab shows the honest "can't read
+      // your resume" message instead of fabricated advice. We also skip all
+      // downstream Claude calls — saves API cost and prevents confusing UX.
+      final readable = !_profileIsWeak(profile);
+
       setState(() {
         _profile = profile;
-        _jobs = jobs;
-        _legitimacyMap = GhostJobDetector.evaluateAll(jobs);
+        _jobs = readable ? jobs : <Job>[];
+        _legitimacyMap = readable ? GhostJobDetector.evaluateAll(jobs) : {};
+        _profileReadable = readable;
         _state = _ScanState.results;
       });
 
@@ -177,12 +213,24 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
         AnalyticsService.resumeScanned(country: profile.country);
       }
 
-      _generateRecommendation();
-      _loadRecommendedCerts();
-      _loadRecommendedEvents();
-      _loadRecommendedNews();
-      _loadRecommendedVideos();
+      // Only fire downstream features if the resume was actually readable
+      if (readable) {
+        // Fire non-Claude features first (certs/events/news/videos use public
+        // APIs, not Claude) — they won't eat into the TPM budget.
+        _loadRecommendedCerts();
+        _loadRecommendedEvents();
+        _loadRecommendedNews();
+        _loadRecommendedVideos();
+        // Delay the Claude recommendation call by 3 seconds so the resume
+        // analysis tokens (~3500) have time to "drain" from the 60-second
+        // rolling window before the recommendation (~2800 more tokens) fires.
+        // Reduces chance of hitting 10K TPM limit on resume scan.
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) _generateRecommendation();
+        });
+      }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _state = _ScanState.error;
         _errorMessage = e.toString().replaceFirst('Exception: ', '');
@@ -207,6 +255,20 @@ Get yours: aiwire.app''';
     await SharePlus.instance.share(ShareParams(text: text));
   }
 
+  /// Returns true if the parsed resume has enough signal to generate a useful
+  /// career plan. If false, we REFUSE to fabricate advice and tell the user
+  /// their resume couldn't be read properly.
+  bool _profileIsWeak(ResumeProfile p) {
+    // Need at least 3 skills AND (a job title OR some work experience signal)
+    final hasSkills = p.skills.length >= 3;
+    final hasRoleSignal = p.jobTitle.trim().isNotEmpty
+        && p.jobTitle.toLowerCase() != 'ai/ml engineer'; // default fallback value
+    final hasExperienceSignal = p.yearsOfExperience > 0
+        || p.projects.isNotEmpty
+        || p.education != null;
+    return !(hasSkills && (hasRoleSignal || hasExperienceSignal));
+  }
+
   Future<void> _generateRecommendation({String? manualContext}) async {
     setState(() { _recLoading = true; _recommendation = null; });
 
@@ -220,7 +282,14 @@ Get yours: aiwire.app''';
     if (manualContext != null) {
       prompt = manualContext;
     } else {
+      // Upstream gate (_profileReadable check in _analyzeResume) already
+      // prevented this from firing for unreadable resumes. Defensive re-check:
+      if (!_profileReadable) {
+        setState(() { _recLoading = false; _recommendation = null; });
+        return;
+      }
       final p = _profile!;
+
       // Use qualified matches (fuzzy, ≥10%) for both the prompt and avg score
       final qualified = _qualifiedMatches;
       debugPrint('AIWire DEBUG: _jobs.length=${_jobs.length}, qualified.length=${qualified.length}');
@@ -233,114 +302,149 @@ Get yours: aiwire.app''';
         '${m.job.title} at ${m.job.company}: Grade ${m.grade.letter} (${m.grade.composite}%)'
       ).join('\n');
 
-      int avgMatch;
+      // ── HONEST MATCH COMPUTATION ────────────────────────────────────
+      // Only show a percentage if we have REAL data to back it up.
+      // No more "p.skills.length >= 6 ? 35 : 20" fabrications.
+      int? avgMatch;      // null = insufficient data
+      String matchStatus;  // What we actually know
+
       if (qualified.isNotEmpty) {
+        // Best case: real matches against real jobs
         avgMatch = qualified.take(10).map((m) => m.grade.composite).reduce((a, b) => a + b) ~/ qualified.take(10).length;
+        matchStatus = 'Based on ${qualified.length} real job matches above ${_kMinMatchPct}% threshold';
       } else if (_jobs.isNotEmpty) {
-        // Jobs exist but none met the 10% threshold — compute raw average across all jobs
+        // Jobs exist but none hit threshold — compute raw average honestly (no clamping)
         final allScores = _jobs.map((j) {
-          if (j.skills.isEmpty) return 0;
+          if (j.skills.isEmpty) return -1; // -1 = don't count
           final pLower = p.skills.map((s) => s.toLowerCase()).toList();
-          final jobText = '${j.title} ${j.description} ${j.skills.join(" ")}'.toLowerCase();
           var matched = 0;
           for (final s in pLower) {
             if (s.isEmpty) continue;
             if (j.skills.any((js) => js.toLowerCase().contains(s) || s.contains(js.toLowerCase()))) {
               matched++;
-            } else if (jobText.contains(s)) {
-              matched++;
             }
           }
-          return pLower.isEmpty ? 0 : ((matched / pLower.length) * 100).round();
-        }).toList();
-        avgMatch = allScores.isEmpty ? 15 : (allScores.reduce((a, b) => a + b) ~/ allScores.length).clamp(5, 100);
+          return pLower.isEmpty ? -1 : ((matched / pLower.length) * 100).round();
+        }).where((s) => s >= 0).toList();
+        if (allScores.isNotEmpty) {
+          avgMatch = allScores.reduce((a, b) => a + b) ~/ allScores.length;
+          matchStatus = 'Weak match — ${_jobs.length} jobs scanned, none above ${_kMinMatchPct}% threshold';
+        } else {
+          avgMatch = null;
+          matchStatus = 'Jobs returned no comparable skill data';
+        }
       } else {
-        // No jobs at all — estimate based on profile strength
-        avgMatch = p.skills.length >= 6 ? 35 : (p.skills.length >= 3 ? 20 : 10);
+        // No jobs at all — be HONEST that we can't compute
+        avgMatch = null;
+        matchStatus = 'No open jobs found in ${p.country} for your role right now';
       }
-      debugPrint('AIWire DEBUG: avgMatch=$avgMatch');
+      debugPrint('AIWire DEBUG: avgMatch=${avgMatch ?? "unavailable"}, status=$matchStatus');
 
-      prompt = '''You are a senior AI/ML career advisor. Analyze this resume profile in depth and give a highly personalized recommendation. Reference SPECIFIC items from their resume to show the advice is tailored.
+      // Trimmed prompt — ~40% fewer tokens than before, same output quality
+      final readinessLine1 = avgMatch != null
+          ? '1. Start EXACTLY with: "You match $avgMatch% of AI/ML roles in ${p.country}."'
+          : '1. Start EXACTLY with: "Match unavailable — ${matchStatus.toLowerCase()}."';
 
-CANDIDATE PROFILE:
-Name: ${p.name ?? 'User'}
-Current Role: ${p.jobTitle}
-Experience: ${p.experienceLevel} (${p.yearsOfExperience} years)
-Country: ${p.country}
+      prompt = '''Senior AI/ML career advisor: generate a specific, ${p.country}-focused recommendation for this candidate. Reference their actual resume details.
+
+PROFILE:
+Name: ${p.name ?? 'User'} | Role: ${p.jobTitle} | Level: ${p.experienceLevel} (${p.yearsOfExperience}y) | Country: ${p.country}
 Education: ${p.education ?? 'Not specified'}
 Skills: ${p.skills.join(', ')}
-Certifications: ${p.certifications.isNotEmpty ? p.certifications.join(', ') : 'None listed'}
-Key Projects: ${p.projects.isNotEmpty ? p.projects.join(' | ') : 'Not detailed'}
-Strengths identified: ${p.strengths.isNotEmpty ? p.strengths.join(', ') : 'General AI/ML skills'}
-Gaps identified: ${p.gaps.isNotEmpty ? p.gaps.join(', ') : 'None identified'}
-Summary: ${p.summary}
+${p.certifications.isNotEmpty ? "Certs: ${p.certifications.join(', ')}" : ""}
+${p.projects.isNotEmpty ? "Projects: ${p.projects.join(' | ')}" : ""}
+${p.strengths.isNotEmpty ? "Strengths: ${p.strengths.join(', ')}" : ""}
+${p.gaps.isNotEmpty ? "Gaps: ${p.gaps.join(', ')}" : ""}
 
-JOB MARKET DATA:
-Average match score across top 10 jobs: $avgMatch%
-Top job matches:
-$matchScores
+JOB MATCH DATA:
+${avgMatch != null ? "Avg match: $avgMatch% ($matchStatus)" : "Match UNAVAILABLE ($matchStatus)"}
+${matchScores.isEmpty ? "(no qualifying matches)" : matchScores}
 
-REGIONAL CONTEXT (CRITICAL):
-This candidate is based in ${p.country}. EVERY recommendation in this response
-MUST be specific to the ${p.country} market. Do NOT give generic global advice:
-- For salary figures, use ${p.country}'s local currency and current market rates
-- For certifications, prioritize providers and credentials recognized by ${p.country} employers
-- For networking and communities, mention ${p.country}-specific meetups, Slacks, and conferences
-- For job platforms, reference ones popular in ${p.country} (e.g. Naukri in India, StepStone in Germany, Seek in Australia)
-- For skills to add, reflect ${p.country}'s AI/ML hiring trends specifically
-- For the 90-day action plan, include at least 2 ${p.country}-specific concrete steps
-If you are unsure about something ${p.country}-specific, say so rather than substituting US data.
+RULES:
+- Every section = EXACTLY 4 numbered points (1. 2. 3. 4.), one concise sentence each.
+- Localize: ${p.country} salary/currency, ${p.country}-specific courses + communities (e.g. Naukri for India, StepStone for Germany, Seek for AU).
+- NO invented match %. Use only what's given above or say "unavailable".
+- NO fabricated skills/gaps not supported by the profile data.
+- Name SPECIFIC courses/providers — pick from: ${CuratedResources.compactProviders.trim().replaceAll(RegExp(r'\s+'), ' ').substring(0, 350)}...
 
-Provide a structured recommendation using these EXACT headers IN THIS EXACT ORDER.
-CRITICAL FORMATTING RULES:
-- Every section MUST have EXACTLY 4 numbered points (1. 2. 3. 4.)
-- Each point is ONE concise sentence — no paragraphs
-- Start each point with a verb or key insight
-- In SKILLS TO ACQUIRE, write the FULL skill name clearly (e.g. "1. Large Language Model Fine-Tuning (LoRA/QLoRA): ...")
-- Do NOT use bullet dashes or bullet dots — ONLY use "1." "2." "3." "4." numbering
+OUTPUT THESE 4 SECTIONS IN THIS ORDER:
 
 JOB READINESS
-1. [Start with: "You match $avgMatch% of AI/ML roles in ${p.country}."]
-2. [What's helping their score — reference specific strong skills]
-3. [What's hurting their score — reference specific missing skills]
-4. [The single most impactful action to improve their readiness]
+$readinessLine1
+2. What's HELPING — cite specific skills from their resume.
+3. What's HURTING — cite specific gaps. If thin data, say so.
+4. Single most impactful next action. Concrete (named skill/cert/project), not generic.
 
 GAP ANALYSIS
-1. [Biggest gap: what ${p.country}'s market demands that they lack — name the skill]
-2. [Second gap: another missing competency vs top job requirements]
-3. [Experience gap: what level/type of project experience is missing]
-4. [Industry gap: what domain knowledge or certification would close the gap]
+1. Biggest gap for ${p.country} AI/ML market — name the skill.
+2. Second gap.
+3. Experience/project gap.
+4. Credential or domain gap.
 
 SKILLS TO ACQUIRE
-1. [Start now: FULL SKILL NAME — one sentence explaining why it matters in ${p.country}]
-2. [Start now: FULL SKILL NAME — one sentence with a specific resource to learn it]
-3. [Learn next: FULL SKILL NAME — one sentence explaining why it matters in ${p.country}]
-4. [Learn next: FULL SKILL NAME — one sentence with a specific resource to learn it]
+1. Start now: FULL SKILL — why it matters in ${p.country}.
+2. Start now: FULL SKILL — named resource to learn it.
+3. Learn next: FULL SKILL — why.
+4. Learn next: FULL SKILL — named resource.
 
-90-DAY PLAN
-1. [Month 1 action: specific skill to learn or certification to start, ${p.country}-specific]
-2. [Month 1-2 action: specific project to build referencing their profile]
-3. [Month 2-3 action: community/event in ${p.country} to join or attend]
-4. [Month 3 action: specific application target or portfolio milestone]
+90-DAY PLAN (each item needs: action + named resource + hrs/wk + outcome)
+1. Month 1 — Skill/cert: Course by Provider (hrs/wk, local price). Outcome.
+2. Month 1-2 — Portfolio project referencing their skills. Where to publish.
+3. Month 2-3 — Named ${p.country} meetup/Slack/Discord. Outcome: 3 connections.
+4. Month 3 — Apply to 5-10 specific ${p.jobTitle} roles. Local community: ${CuratedResources.communitiesFor(p.country)}
 
-Be direct, specific, and ${p.country}-focused. No generic advice. Address by first name. Each point must be a COMPLETE sentence with no truncation.''';
+Address by first name. Direct. Complete sentences.''';
+    }
+
+    // Retry loop: iOS can close sockets unexpectedly, giving "bad file
+    // descriptor". We try up to 3 times with exponential backoff.
+    const maxAttempts = 3;
+    http.Response? response;
+    Object? lastError;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      // Use a fresh HTTP client per attempt so we never reuse a dead socket
+      final client = http.Client();
+      try {
+        response = await client.post(
+          Uri.parse('https://api.anthropic.com/v1/messages'),
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: json.encode({
+            'model': 'claude-haiku-4-5',
+            'max_tokens': 1600,
+            'messages': [{'role': 'user', 'content': prompt}],
+          }),
+        ).timeout(const Duration(seconds: 60));
+        break; // success
+      } on TimeoutException catch (e) {
+        lastError = e;
+      } catch (e) {
+        lastError = e;
+        // Retry on socket/network errors (bad file descriptor, connection
+        // closed, etc.) — NOT on HTTP errors (those need no retry).
+        final msg = e.toString().toLowerCase();
+        final isTransient = msg.contains('bad file descriptor')
+            || msg.contains('connection closed')
+            || msg.contains('socket')
+            || msg.contains('broken pipe')
+            || msg.contains('connection reset');
+        if (!isTransient) break;
+      } finally {
+        client.close();
+      }
+      if (attempt < maxAttempts) {
+        // Exponential backoff: 500ms, 1500ms
+        await Future.delayed(Duration(milliseconds: 500 * attempt * attempt));
+      }
     }
 
     try {
-      final response = await http.post(
-        Uri.parse('https://api.anthropic.com/v1/messages'),
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: json.encode({
-          'model': 'claude-haiku-4-5',
-          'max_tokens': 1600,
-          'messages': [{'role': 'user', 'content': prompt}],
-        }),
-      ).timeout(const Duration(seconds: 60));
-
+      if (response == null) {
+        throw Exception(lastError?.toString() ?? 'Network unavailable');
+      }
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final contentList = data['content'] as List?;
@@ -358,84 +462,139 @@ Be direct, specific, and ${p.country}-focused. No generic advice. Address by fir
     } on TimeoutException {
       if (mounted) setState(() { _recommendation = 'Request timed out. Please try again.'; _recLoading = false; });
     } catch (e) {
-      if (mounted) setState(() { _recommendation = 'Error: ${e.toString().replaceFirst("Exception: ", "")}'; _recLoading = false; });
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      // Convert technical errors into friendlier messages
+      final friendly = msg.toLowerCase().contains('bad file descriptor')
+          || msg.toLowerCase().contains('socket')
+          ? 'Network connection dropped. Please check your internet and try again.'
+          : msg;
+      if (mounted) setState(() { _recommendation = 'Error: $friendly'; _recLoading = false; });
     }
   }
 
   void _generateManualRecommendation() {
-    if (_manualName.isEmpty || _manualSkill.isEmpty) return;
+    if (_manualName.isEmpty) return;
     HapticFeedback.lightImpact();
 
     final isNewbie = _manualYears == 'No exp';
+    final hasNoSkill = _manualSkill == 'None';
+    final country = _manualCountry.isEmpty ? 'Global (country not specified)' : _manualCountry;
 
-    // Pure beginners get the instant starter plan (no API call)
-    if (isNewbie && _manualSkill == 'None') {
+    // ── Pure beginner shortcut — use hardcoded starter plan (NO Claude call) ──
+    // This gives the user a rich, immediately-useful 7-day kickstart plan without
+    // spending API credits. The BeginnerStarterPlan widget already personalizes
+    // using the discovery data they entered (education, domain, prior role).
+    if (isNewbie && hasNoSkill) {
       setState(() {
         _showBeginnerPlan = true;
         _recommendation = null;
       });
       return;
     }
+
+    // Build a rich context block that ACTUALLY uses every input the user gave.
+    // Previously the Claude prompt ignored education, prior work, domain, etc.
+    // which is why beginners saw generic advice that felt disconnected.
+    final backgroundLines = <String>[];
+    if (_starterEducation.isNotEmpty) {
+      backgroundLines.add('- Education: $_starterEducation');
+    }
+    if (_starterWorkExp == 'Yes' && _starterRole.isNotEmpty) {
+      final yrs = _starterWorkYears.isNotEmpty ? '$_starterWorkYears yrs as ' : '';
+      backgroundLines.add('- Prior non-AI work: $yrs$_starterRole');
+      backgroundLines.add('  → Identify 2 TRANSFERABLE skills from being a $_starterRole that apply to AI roles (be specific — e.g., if Teacher: instructional design transfers to LLM prompt crafting + user-facing AI explanation; if Sales: customer empathy transfers to AI product work).');
+    } else if (_starterWorkExp == 'No') {
+      backgroundLines.add('- Prior work experience: None — fresh start');
+    }
+    if (_starterDomain.isNotEmpty && _starterDomain != 'Not sure yet') {
+      backgroundLines.add('- Target industry: $_starterDomain');
+      backgroundLines.add('  → Recommend 1 domain-specific AI application in $_starterDomain they should build as a portfolio project.');
+    }
+    final backgroundBlock = backgroundLines.isEmpty
+        ? ''
+        : '\n\nBACKGROUND DETAILS (use these to tailor advice — do NOT ignore):\n${backgroundLines.join("\n")}';
+
+    // Time + goal context — hugely affects realistic plan scale
+    final planningContext = <String>[];
+    if (_manualHoursPerWeek.isNotEmpty) {
+      planningContext.add('- Hours available per week: $_manualHoursPerWeek');
+      planningContext.add('  → Scale the 90-day plan to this budget. At 5hrs/wk expect 3-6 months to first cert; at 20+hrs/wk expect 2-3 months.');
+    }
+    if (_manualGoal.isNotEmpty) {
+      planningContext.add('- Primary goal: $_manualGoal');
+    }
+    if (_manualWhy.isNotEmpty) {
+      planningContext.add('- Motivation: $_manualWhy');
+    }
+    final planBlock = planningContext.isEmpty
+        ? ''
+        : '\n\nPLANNING CONTEXT:\n${planningContext.join("\n")}';
+
     final expLine = isNewbie
         ? 'Experience: Complete beginner — no prior AI/ML work experience'
         : 'Years of Experience: $_manualYears';
+
     final newbieContext = isNewbie
         ? '''
-IMPORTANT: This person has ZERO work experience in AI/ML. They are a complete beginner.
-- Do NOT assume they know industry jargon
-- Recommend FREE beginner-friendly resources only (YouTube tutorials, Coursera free courses, Kaggle)
-- Focus on building a portfolio from scratch — personal projects, Kaggle competitions, open-source contributions
-- Suggest entry-level roles: Junior Data Analyst, ML Intern, AI Annotator, Data Labeling, Research Assistant
-- The 90-day plan should be a realistic learning path from zero to first job application
-'''
+IMPORTANT: This person is a BEGINNER in AI/ML. Be realistic but encouraging.
+- Do NOT assume they know industry jargon — explain terms briefly
+- Prioritize FREE resources (Coursera financial aid, Fast.ai, Hugging Face courses, Kaggle Learn, YouTube)
+- Focus on building a public portfolio (GitHub + Kaggle) from zero
+- Suggest entry-level roles appropriate for their background (use Education + Prior Role above)
+- Build on their TRANSFERABLE skills — don't treat them as a blank slate if they have non-tech work experience'''
         : '';
 
-    final skillLine = _manualSkill == 'None'
-        ? 'Primary Skill: No specific AI/ML skill yet — complete beginner looking to break into AI'
+    final skillLine = hasNoSkill
+        ? 'Primary Skill: No specific AI/ML skill yet — complete beginner'
         : 'Primary Skill: $_manualSkill';
 
-    final prompt = '''Give a personalized AI/ML career recommendation for this person.
+    final prompt = '''Give a personalized AI/ML career recommendation for this person. Use EVERY detail below — do not give a generic plan.
 
 Name: $_manualName
+Country: $country
 $skillLine
 $expLine
 Certifications/Projects: ${_manualCerts.isNotEmpty ? _manualCerts : 'None mentioned'}
+$backgroundBlock
+$planBlock
 $newbieContext
+
+REGIONAL CONTEXT (CRITICAL):
+EVERY recommendation MUST be specific to $country:
+- Salary: local currency (₹ for India, £ for UK, € for EU, \$ for US)
+- Courses: prefer providers with local pricing/availability
+- Communities: name ACTUAL meetups/Slacks in $country (e.g. PyData Bangalore for India, London AI Meetup for UK, MLOps Community for US)
+- Job boards: Naukri for India, Seek for Australia, StepStone for Germany, LinkedIn globally
+
 Provide a structured recommendation using these EXACT headers IN THIS EXACT ORDER.
-CRITICAL: Every section MUST have EXACTLY 4 numbered points (1. 2. 3. 4.). Each point is ONE complete sentence. In SKILLS TO ACQUIRE, write the FULL skill name clearly.
+CRITICAL: Every section MUST have EXACTLY 4 numbered points (1. 2. 3. 4.). Each point is ONE complete sentence with specifics (named tools, courses, companies — not vague advice).
 
 JOB READINESS
-1. [${isNewbie ? "Honestly assess their starting point — it's okay to be at 0-5%" : "Estimate what % of AI/ML roles they could apply for"}]
-2. [${isNewbie ? "What advantage their primary skill gives them as a foundation" : "What's helping their profile"}]
-3. [${isNewbie ? "What's the biggest thing they need to build first (portfolio/skills)" : "What's holding them back"}]
-4. [${isNewbie ? "The single best first step to start their AI career today" : "Single most impactful action to improve"}]
+1. [${isNewbie ? "Honestly assess their starting point given their education (${_starterEducation.isNotEmpty ? _starterEducation : "not specified"}) and background — it's okay to be at 5-15%" : "Estimate what % of AI/ML roles they could apply for TODAY"}]
+2. [${isNewbie ? "ONE concrete advantage from their background (education, prior role, or domain interest) that helps" : "What's helping their profile"}]
+3. [${isNewbie ? "The biggest thing they must build first (specific skill or portfolio artifact)" : "What's holding them back"}]
+4. [${isNewbie ? "The single best first step to take THIS WEEK" : "Single most impactful action to improve"}]
 
 GAP ANALYSIS
-1. [${isNewbie ? "Core technical skill they must learn first (e.g. Python for data science)" : "Biggest missing skill vs market demands"}]
-2. [${isNewbie ? "Practical experience gap — they need hands-on projects" : "Second gap in their profile"}]
-3. [${isNewbie ? "Portfolio gap — no GitHub/Kaggle/projects to show" : "Experience or project gap"}]
-4. [${isNewbie ? "Credential gap — free certifications that signal readiness" : "Certification or domain knowledge gap"}]
+1. [Biggest missing skill for ${_starterDomain.isNotEmpty && _starterDomain != "Not sure yet" ? "$_starterDomain AI roles" : "AI/ML roles"} in $country right now]
+2. [Second gap — experience/portfolio/communication/domain]
+3. [Third gap — credential or certification]
+4. [Fourth gap — network, visibility, or project diversity]
 
 SKILLS TO ACQUIRE
-1. [Start now: FULL SKILL NAME — ${isNewbie ? "best free beginner resource to learn it" : "why it matters"}]
-2. [Start now: FULL SKILL NAME — ${isNewbie ? "a specific free course or tutorial (link if possible)" : "specific resource to learn"}]
-3. [Learn next: FULL SKILL NAME — ${isNewbie ? "why employers look for this skill" : "why it matters"}]
-4. [Learn next: FULL SKILL NAME — ${isNewbie ? "a specific free course or tutorial" : "specific resource to learn"}]
+1. [Start now: FULL SKILL NAME — one sentence: why + named resource (Coursera/Udemy/Fast.ai/etc.) + cost in $country currency]
+2. [Start now: FULL SKILL NAME — one sentence: why + named resource + cost]
+3. [Learn next (after 1-2 months): FULL SKILL NAME — why this is the right second skill for them]
+4. [Learn next: FULL SKILL NAME — specific to their target ${_starterDomain.isNotEmpty && _starterDomain != "Not sure yet" ? "($_starterDomain)" : "industry"}]
 
 90-DAY PLAN
-1. [Month 1: ${isNewbie ? "specific free course to complete + first small project to build" : "skill or certification to start"}]
-2. [Month 1-2: ${isNewbie ? "build a portfolio project on GitHub and enter a Kaggle competition" : "project to build"}]
-3. [Month 2-3: ${isNewbie ? "join a beginner AI community and attend a free event" : "community or event to join"}]
-4. [Month 3: ${isNewbie ? "apply to 5 entry-level roles (intern/junior/assistant)" : "application or portfolio milestone"}]
-${isNewbie ? '''
-MUST-WATCH TED TALKS
-Include EXACTLY 3 TED talks that are perfect for AI beginners. Use these EXACT talks with their real URLs:
-1. "The wonderful and terrifying implications of computers that can learn" by Jeremy Howard — https://www.ted.com/talks/jeremy_howard_the_wonderful_and_terrifying_implications_of_computers_that_can_learn
-2. "How AI could empower any business" by Andrew Ng — https://www.ted.com/talks/andrew_ng_how_ai_could_empower_any_business
-3. "Don't fear superintelligent AI" by Grady Booch — https://www.ted.com/talks/grady_booch_don_t_fear_superintelligent_ai
-For each talk, write ONE sentence explaining what the beginner will learn from it.
-''' : ''}
-Be concise, direct, actionable, and encouraging. Address them by first name.${isNewbie ? " Remember: they have ZERO experience — be realistic but motivating." : ""}''';
+Each item MUST include: (a) action, (b) SPECIFIC named resource (actual course/book/competition — NO placeholders), (c) hrs/week tuned to ${_manualHoursPerWeek.isEmpty ? "their availability (default 8-10 hrs)" : "$_manualHoursPerWeek hrs/wk"}, (d) measurable outcome.
+1. [Month 1: First skill or certification with named provider, cost, and week-by-week breakdown]
+2. [Month 1-2: Portfolio project using learnings — specific GitHub/Kaggle/HuggingFace deliverable. If they have domain interest (${_starterDomain.isNotEmpty ? _starterDomain : "not set"}), the project MUST be in that domain]
+3. [Month 2-3: Community engagement — named local meetup/Slack in $country + content they should post (blog, LinkedIn, Twitter)]
+4. [Month 3: Application target — specific companies hiring in $country + their referral strategy]
+
+Be concise, direct, actionable, and encouraging. Address them by first name.${isNewbie ? " Remember: they have ZERO AI experience but they DO have life/work experience — build on it, don't ignore it." : ""}''';
 
     _generateRecommendation(manualContext: prompt);
   }
@@ -456,6 +615,7 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
 
   Future<void> _loadRecommendedCerts() async {
     if (_profile == null) return;
+    if (!mounted) return;
     setState(() => _certsLoading = true);
     try {
       final all = await CertificationService.fetchCertifications();
@@ -522,6 +682,7 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
 
   Future<void> _loadRecommendedEvents() async {
     if (_profile == null) return;
+    if (!mounted) return;
     setState(() => _eventsLoading = true);
     try {
       // Pass country so the service returns virtual events + in-person events
@@ -571,6 +732,7 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
 
   Future<void> _loadRecommendedVideos() async {
     if (_profile == null) return;
+    if (!mounted) return;
     setState(() => _videosLoading = true);
     try {
       final p = _profile!;
@@ -595,6 +757,7 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
 
   Future<void> _loadRecommendedNews() async {
     if (_profile == null) return;
+    if (!mounted) return;
     setState(() => _newsLoading = true);
     try {
       final all = await NewsService.fetchAINews();
@@ -797,38 +960,252 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
               color: _manualYears == y ? t.primary : t.secondary)),
           ),
         )).toList()),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
 
-        // Certs/projects
-        TextField(
-          controller: _certCtrl,
-          style: GoogleFonts.inter(color: t.primary, fontSize: 14),
-          decoration: _inputDecor('Certifications or projects (optional)'),
-          onChanged: (v) => _manualCerts = v,
-        ),
-        const SizedBox(height: 18),
-
-        // Get Recommendation button
-        GestureDetector(
-          onTap: (_manualName.isNotEmpty && _manualSkill.isNotEmpty)
-              ? _generateManualRecommendation
-              : null,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-              color: (_manualName.isNotEmpty && _manualSkill.isNotEmpty)
-                  ? t.primary : t.muted.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(12)),
-            child: Center(child: _recLoading
-              ? SizedBox(width: 18, height: 18,
-                child: CircularProgressIndicator(color: t.background, strokeWidth: 2))
-              : Text('Get AI Career Plan', style: GoogleFonts.inter(
-                fontSize: 15, fontWeight: FontWeight.w700,
-                color: (_manualName.isNotEmpty && _manualSkill.isNotEmpty)
-                    ? t.background : t.muted))),
+        // ── Country picker — enables local salary/courses/communities ──
+        if (_manualName.isNotEmpty) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Your country', style: GoogleFonts.inter(
+              fontSize: 12, color: t.muted, fontWeight: FontWeight.w500)),
           ),
-        ),
+          const SizedBox(height: 8),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            'India', 'United States', 'United Kingdom', 'Canada', 'Australia',
+            'Germany', 'Singapore', 'Brazil', 'Other',
+          ].map((c) => GestureDetector(
+            onTap: () { HapticFeedback.selectionClick(); setState(() => _manualCountry = c); },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: _manualCountry == c ? t.primary.withValues(alpha: 0.1) : t.surface,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: _manualCountry == c ? t.primary.withValues(alpha: 0.3) : t.divider)),
+              child: Text(c, style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: _manualCountry == c ? FontWeight.w600 : FontWeight.w400,
+                color: _manualCountry == c ? t.primary : t.secondary)),
+            ),
+          )).toList()),
+          const SizedBox(height: 14),
+
+          // ── Hours per week — scales the plan realistically ──
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('How many hours per week can you dedicate?', style: GoogleFonts.inter(
+              fontSize: 12, color: t.muted, fontWeight: FontWeight.w500)),
+          ),
+          const SizedBox(height: 8),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            '2-5 hrs', '5-10 hrs', '10-20 hrs', '20+ hrs',
+          ].map((h) => GestureDetector(
+            onTap: () { HapticFeedback.selectionClick(); setState(() => _manualHoursPerWeek = h); },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: _manualHoursPerWeek == h ? t.primary.withValues(alpha: 0.1) : t.surface,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: _manualHoursPerWeek == h ? t.primary.withValues(alpha: 0.3) : t.divider)),
+              child: Text(h, style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: _manualHoursPerWeek == h ? FontWeight.w600 : FontWeight.w400,
+                color: _manualHoursPerWeek == h ? t.primary : t.secondary)),
+            ),
+          )).toList()),
+          const SizedBox(height: 14),
+
+          // ── Goal — what do they actually want? ──
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('What\'s your goal?', style: GoogleFonts.inter(
+              fontSize: 12, color: t.muted, fontWeight: FontWeight.w500)),
+          ),
+          const SizedBox(height: 8),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            'First AI/ML job',
+            'Career switch to AI',
+            'Level up in current AI role',
+            'Freelance / consulting',
+            'Just exploring',
+          ].map((g) => GestureDetector(
+            onTap: () { HapticFeedback.selectionClick(); setState(() => _manualGoal = g); },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: _manualGoal == g ? t.primary.withValues(alpha: 0.1) : t.surface,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: _manualGoal == g ? t.primary.withValues(alpha: 0.3) : t.divider)),
+              child: Text(g, style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: _manualGoal == g ? FontWeight.w600 : FontWeight.w400,
+                color: _manualGoal == g ? t.primary : t.secondary)),
+            ),
+          )).toList()),
+          const SizedBox(height: 14),
+        ],
+
+        // ── Beginner Discovery Flow (step-by-step cards) ──
+        // Now triggers for anyone with no/minimal experience OR no chosen skill —
+        // broader capture so transferable skills from prior careers are considered.
+        if ((_manualYears == 'No exp' || _manualYears == '0-1')
+            && (_manualSkill == 'None' || _manualSkill.isEmpty)
+            && _manualName.isNotEmpty
+            && _manualCountry.isNotEmpty
+            && _manualHoursPerWeek.isNotEmpty
+            && _manualGoal.isNotEmpty
+            && !_showBeginnerPlan) ...[
+          const SizedBox(height: 8),
+
+          // Step indicator
+          Row(children: [
+            ...List.generate(3, (i) => Expanded(child: Container(
+              margin: EdgeInsets.only(right: i < 2 ? 4 : 0),
+              height: 3,
+              decoration: BoxDecoration(
+                color: i <= _discoveryStep
+                    ? const Color(0xFF8B5CF6)
+                    : t.divider,
+                borderRadius: BorderRadius.circular(2)),
+            ))),
+            const SizedBox(width: 8),
+            Text('${_discoveryStep + 1}/3', style: GoogleFonts.inter(
+              fontSize: 11, fontWeight: FontWeight.w700,
+              color: const Color(0xFF8B5CF6))),
+          ]),
+          const SizedBox(height: 14),
+
+          // ── Step 1: Education ──
+          if (_discoveryStep == 0)
+            _DiscoveryCard(
+              theme: t,
+              emoji: '🎓',
+              question: 'What\'s your education level?',
+              hint: 'This helps us match careers to your background',
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  'High School', 'Diploma', 'Bachelor\'s', 'Master\'s', 'PhD', 'Self-taught',
+                ].map((e) => _discoveryChip(e, _starterEducation == e, () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _starterEducation = e);
+                })).toList()),
+              ]),
+              canContinue: _starterEducation.isNotEmpty,
+              onContinue: () => setState(() => _discoveryStep = 1),
+            ),
+
+          // ── Step 2: Work Background ──
+          if (_discoveryStep == 1)
+            _DiscoveryCard(
+              theme: t,
+              emoji: '💼',
+              question: 'Any work experience?',
+              hint: 'Even non-tech experience is an advantage in AI',
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  ('Fresh start — no work yet', 'No'),
+                  ('Yes, I\'ve worked before', 'Yes'),
+                ].map((e) => _discoveryChip(e.$1, _starterWorkExp == e.$2, () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _starterWorkExp = e.$2);
+                })).toList()),
+                if (_starterWorkExp == 'Yes') ...[
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Expanded(child: TextField(
+                      controller: _starterYearsCtrl,
+                      keyboardType: TextInputType.number,
+                      style: GoogleFonts.inter(color: t.primary, fontSize: 14),
+                      decoration: _inputDecor('Years'),
+                      onChanged: (v) => setState(() => _starterWorkYears = v),
+                    )),
+                    const SizedBox(width: 10),
+                    Expanded(flex: 2, child: TextField(
+                      controller: _starterRoleCtrl,
+                      style: GoogleFonts.inter(color: t.primary, fontSize: 14),
+                      decoration: _inputDecor('Your role (e.g. Teacher, Sales)'),
+                      onChanged: (v) => setState(() => _starterRole = v),
+                    )),
+                  ]),
+                ],
+              ]),
+              canContinue: _starterWorkExp.isNotEmpty,
+              onContinue: () => setState(() => _discoveryStep = 2),
+              onBack: () => setState(() => _discoveryStep = 0),
+            ),
+
+          // ── Step 3: Domain Interest ──
+          if (_discoveryStep == 2)
+            _DiscoveryCard(
+              theme: t,
+              emoji: '🚀',
+              question: 'Which industry excites you?',
+              hint: 'Pick one — you can always change later',
+              child: Wrap(spacing: 8, runSpacing: 8, children: [
+                ('🏥', 'Healthcare'), ('💰', 'Finance'), ('📚', 'Education'),
+                ('📢', 'Marketing'), ('🛒', 'E-commerce'), ('🏠', 'Real Estate'),
+                ('🎨', 'Content Creation'), ('💻', 'Tech / SaaS'), ('🤷', 'Not sure yet'),
+              ].map((e) => _discoveryChipWithEmoji(
+                e.$1, e.$2, _starterDomain == e.$2, () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _starterDomain = e.$2);
+                },
+              )).toList()),
+              canContinue: _starterDomain.isNotEmpty,
+              onContinue: _generateManualRecommendation,
+              onBack: () => setState(() => _discoveryStep = 1),
+              continueLabel: 'Build My Starter Plan',
+              continueIcon: Icons.rocket_launch_rounded,
+            ),
+        ] else if (_manualSkill != 'None' || _manualYears != 'No exp') ...[
+          // Certs/projects (for experienced users)
+          TextField(
+            controller: _certCtrl,
+            style: GoogleFonts.inter(color: t.primary, fontSize: 14),
+            decoration: _inputDecor('Certifications or projects (optional)'),
+            onChanged: (v) => _manualCerts = v,
+          ),
+          const SizedBox(height: 18),
+          // Get Recommendation button — needs name + country + hours + goal for a truly tailored plan
+          Builder(builder: (_) {
+            final canGenerate = _manualName.isNotEmpty
+                && _manualSkill.isNotEmpty
+                && _manualCountry.isNotEmpty
+                && _manualHoursPerWeek.isNotEmpty
+                && _manualGoal.isNotEmpty;
+            final missing = <String>[];
+            if (_manualCountry.isEmpty) missing.add('country');
+            if (_manualHoursPerWeek.isEmpty) missing.add('hours/week');
+            if (_manualGoal.isEmpty) missing.add('goal');
+
+            return Column(children: [
+              GestureDetector(
+                onTap: canGenerate ? _generateManualRecommendation : null,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: canGenerate ? t.primary : t.muted.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12)),
+                  child: Center(child: _recLoading
+                    ? SizedBox(width: 18, height: 18,
+                      child: CircularProgressIndicator(color: t.background, strokeWidth: 2))
+                    : Text('Get AI Career Plan', style: GoogleFonts.inter(
+                      fontSize: 15, fontWeight: FontWeight.w700,
+                      color: canGenerate ? t.background : t.muted))),
+                ),
+              ),
+              if (!canGenerate && missing.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('Please fill in: ${missing.join(", ")}',
+                  style: GoogleFonts.inter(
+                    fontSize: 11, color: t.muted, fontStyle: FontStyle.italic)),
+              ],
+            ]);
+          }),
+        ],
 
         // Beginner starter plan (instant, no API call)
         if (_showBeginnerPlan && _profile == null) ...[
@@ -836,6 +1213,11 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
           BeginnerStarterPlan(
             theme: t,
             userName: _manualName,
+            education: _starterEducation,
+            hasWorkExp: _starterWorkExp == 'Yes',
+            workYears: _starterWorkYears,
+            workRole: _starterRole,
+            domain: _starterDomain,
             onUnlock30Day: () {
               // After 7 days, generate an AI career path based on their picked career
               setState(() => _showBeginnerPlan = false);
@@ -922,6 +1304,62 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
   );
 
+  Widget _discoveryChip(String label, bool selected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? const Color(0xFF8B5CF6).withValues(alpha: 0.12)
+              : t.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected
+                ? const Color(0xFF8B5CF6).withValues(alpha: 0.4)
+                : t.divider,
+            width: selected ? 1.5 : 1),
+        ),
+        child: Text(label, style: GoogleFonts.inter(
+          fontSize: 13,
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+          color: selected ? const Color(0xFF8B5CF6) : t.secondary)),
+      ),
+    );
+  }
+
+  Widget _discoveryChipWithEmoji(
+    String emoji, String label, bool selected, VoidCallback onTap,
+  ) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? const Color(0xFF8B5CF6).withValues(alpha: 0.12)
+              : t.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected
+                ? const Color(0xFF8B5CF6).withValues(alpha: 0.4)
+                : t.divider,
+            width: selected ? 1.5 : 1),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(emoji, style: const TextStyle(fontSize: 16)),
+          const SizedBox(width: 6),
+          Text(label, style: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+            color: selected ? const Color(0xFF8B5CF6) : t.secondary)),
+        ]),
+      ),
+    );
+  }
+
   // ── Analyzing ─────────────────────────────────────────────────────────────
   Widget _buildAnalyzing() {
     return Center(
@@ -950,7 +1388,156 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
   }
 
   // ── Job Results Tab ───────────────────────────────────────────────────────
+  /// Shown in every results tab when the resume parse returned too little
+  /// information. Tells the user honestly that we can't help instead of
+  /// fabricating advice.
+  Widget _unreadableResumeCard() {
+    final p = _profile;
+    final skillsFound = p?.skills ?? const [];
+    final roleFound = p?.jobTitle ?? '';
+    final yearsFound = p?.yearsOfExperience ?? 0;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 32, 20, 40),
+      children: [
+        Center(child: Container(
+          width: 72, height: 72,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFEF3C7),
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0xFFF59E0B), width: 2),
+          ),
+          child: const Icon(Icons.description_outlined,
+            size: 36, color: Color(0xFFB45309)),
+        )),
+        const SizedBox(height: 20),
+        Text('We couldn\'t read your resume',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.sourceSerif4(
+            fontSize: 22, fontWeight: FontWeight.w700, color: t.primary)),
+        const SizedBox(height: 10),
+        Text(
+          'Your resume didn\'t contain enough readable text for us to generate '
+          'reliable suggestions. We won\'t fabricate advice — that would mislead you.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.inter(
+            fontSize: 14, color: t.muted, height: 1.5)),
+        const SizedBox(height: 24),
+
+        // What we found (if anything)
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: t.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: t.divider, width: 0.5),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('What we detected', style: GoogleFonts.inter(
+              fontSize: 11, fontWeight: FontWeight.w700,
+              color: t.muted, letterSpacing: 0.5)),
+            const SizedBox(height: 10),
+            _detectRow(Icons.work_outline_rounded, 'Role',
+              roleFound.isEmpty ? 'Not detected' : roleFound,
+              roleFound.isEmpty),
+            const SizedBox(height: 6),
+            _detectRow(Icons.psychology_alt_outlined, 'Skills',
+              skillsFound.isEmpty
+                ? 'Not detected'
+                : '${skillsFound.length} found: ${skillsFound.take(3).join(", ")}${skillsFound.length > 3 ? "..." : ""}',
+              skillsFound.length < 3),
+            const SizedBox(height: 6),
+            _detectRow(Icons.schedule_outlined, 'Experience',
+              yearsFound > 0 ? '$yearsFound years' : 'Not detected',
+              yearsFound == 0),
+          ]),
+        ),
+        const SizedBox(height: 20),
+
+        // Fix suggestions
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEFF6FF),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.2)),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Icon(Icons.lightbulb_outline_rounded, size: 16, color: const Color(0xFF1D4ED8)),
+              const SizedBox(width: 6),
+              Text('How to fix this', style: GoogleFonts.inter(
+                fontSize: 13, fontWeight: FontWeight.w700,
+                color: const Color(0xFF1E3A8A))),
+            ]),
+            const SizedBox(height: 10),
+            _fixRow('Upload a text-based PDF (not scanned images)'),
+            _fixRow('Use a simple, single-column layout'),
+            _fixRow('Avoid heavy graphics, icons, or charts'),
+            _fixRow('Try exporting from Word or Google Docs as PDF'),
+            _fixRow('If you scanned a paper resume, use OCR to convert it first'),
+          ]),
+        ),
+        const SizedBox(height: 24),
+
+        // Upload again CTA
+        Center(
+          child: GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              _reset();
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+              decoration: BoxDecoration(
+                color: t.primary, borderRadius: BorderRadius.circular(10)),
+              child: Text('Upload Another Resume',
+                style: GoogleFonts.inter(
+                  fontSize: 14, fontWeight: FontWeight.w700,
+                  color: t.background)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _detectRow(IconData icon, String label, String value, bool missing) {
+    return Row(children: [
+      Icon(icon, size: 15, color: missing ? t.muted : t.primary),
+      const SizedBox(width: 8),
+      SizedBox(width: 90, child: Text(label, style: GoogleFonts.inter(
+        fontSize: 12, fontWeight: FontWeight.w600, color: t.muted))),
+      Expanded(child: Text(value, style: GoogleFonts.inter(
+        fontSize: 12,
+        color: missing ? t.muted.withValues(alpha: 0.7) : t.primary,
+        fontStyle: missing ? FontStyle.italic : FontStyle.normal,
+        fontWeight: missing ? FontWeight.w400 : FontWeight.w500))),
+      if (missing) Icon(Icons.close_rounded, size: 13,
+        color: const Color(0xFFEF4444)),
+    ]);
+  }
+
+  Widget _fixRow(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Container(width: 4, height: 4,
+            decoration: const BoxDecoration(
+              color: Color(0xFF3B82F6), shape: BoxShape.circle)),
+        ),
+        const SizedBox(width: 10),
+        Expanded(child: Text(text, style: GoogleFonts.inter(
+          fontSize: 12, color: const Color(0xFF1E3A8A), height: 1.5))),
+      ]),
+    );
+  }
+
   Widget _buildJobResults() {
+    // ── GLOBAL GATE: if resume isn't readable, show honest message ─────
+    if (!_profileReadable) return _unreadableResumeCard();
     final p = _profile!;
     final qualified = _qualifiedMatches;
     final qualifiedJobs = qualified.map((m) => m.job).toList();
@@ -1040,7 +1627,38 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
           ),
         ]),
 
-        if (skillGaps.isNotEmpty) ...[
+        // ── Structured gaps with severity/timeline/resource (if Claude returned them) ──
+        if (p.structuredGaps.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.25))),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Container(
+                  width: 28, height: 28,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(7)),
+                  child: const Icon(Icons.lightbulb_rounded, size: 15, color: Color(0xFFF59E0B)),
+                ),
+                const SizedBox(width: 8),
+                Text('Skills to Acquire', style: GoogleFonts.inter(
+                  fontSize: 15, fontWeight: FontWeight.w700, color: const Color(0xFFB45309))),
+              ]),
+              const SizedBox(height: 4),
+              Text('Ranked by market impact in ${p.country}', style: GoogleFonts.inter(
+                fontSize: 12, color: const Color(0xFF92400E).withValues(alpha: 0.7), height: 1.3)),
+              const SizedBox(height: 12),
+              ...p.structuredGaps.map((g) => _buildStructuredGap(g, t)),
+            ]),
+          ),
+        ]
+        // Fallback: legacy plain gaps tags (from job matching, not Claude)
+        else if (skillGaps.isNotEmpty) ...[
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(14),
@@ -1113,6 +1731,9 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
   /// All matched jobs with A-F grades, filtered to composite >= _kMinMatchPct
   List<({Job job, JobGrade grade})> get _qualifiedMatches {
     if (_profile == null) return [];
+    // Don't surface match scores if the resume wasn't readable — prevents
+    // the Interview Prep section from showing fake "46% match" suggestions.
+    if (!_profileReadable) return [];
     final p = _profile!;
 
     return _jobs.map((j) {
@@ -1125,6 +1746,8 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
   List<({Job job, JobGrade grade})> get _topMatches => _qualifiedMatches.take(3).toList();
 
   Widget _buildRecommendation() {
+    // ── GLOBAL GATE: if resume isn't readable, show honest message ─────
+    if (!_profileReadable) return _unreadableResumeCard();
     final top = _topMatches;
 
     return SingleChildScrollView(
@@ -1385,11 +2008,11 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
               theme: t,
               icon: Icons.smart_display_outlined,
               color: const Color(0xFFFF0000),
-              title: 'AI Videos',
+              title: 'Knowledge Videos',
               count: 0,
               loading: _videosLoading,
               children: _recommendedVideos.map((v) =>
-                _RecVideoCard(video: v, theme: t)).toList(),
+                _RecVideoCard(video: v, theme: t, profile: _profile)).toList(),
             ),
 
           // ── Quick Start CTA ──
@@ -1446,6 +2069,98 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
     );
   }
 
+  // ── Structured skill gap card (from Claude's gap analysis) ─────────────────
+  Widget _buildStructuredGap(SkillGap g, AppTheme t) {
+    // Severity color: CRITICAL=red, HIGH=orange, MEDIUM=amber
+    Color sevColor;
+    switch (g.severity.toUpperCase()) {
+      case 'CRITICAL': sevColor = const Color(0xFFDC2626); break;
+      case 'HIGH':     sevColor = const Color(0xFFEA580C); break;
+      default:         sevColor = const Color(0xFFF59E0B);
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            // Severity pill
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                color: sevColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4)),
+              child: Text(g.severity, style: GoogleFonts.inter(
+                fontSize: 9, fontWeight: FontWeight.w800, color: sevColor,
+                letterSpacing: 0.5)),
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text(g.name, style: GoogleFonts.inter(
+              fontSize: 14, fontWeight: FontWeight.w700,
+              color: const Color(0xFFB45309)))),
+          ]),
+          if (g.marketReason.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(g.marketReason, style: GoogleFonts.inter(
+              fontSize: 12, color: const Color(0xFF92400E).withValues(alpha: 0.85),
+              height: 1.4)),
+          ],
+          const SizedBox(height: 8),
+          // Timeline + cost row
+          Row(children: [
+            if (g.timeToClose.isNotEmpty) ...[
+              Icon(Icons.schedule_rounded, size: 12, color: t.muted),
+              const SizedBox(width: 3),
+              Text(g.timeToClose, style: GoogleFonts.inter(
+                fontSize: 11, color: t.muted, fontWeight: FontWeight.w500)),
+              const SizedBox(width: 10),
+            ],
+            if (g.cost != null && g.cost!.isNotEmpty) ...[
+              Icon(Icons.payments_outlined, size: 12, color: t.muted),
+              const SizedBox(width: 3),
+              Text(g.cost!, style: GoogleFonts.inter(
+                fontSize: 11, color: t.muted, fontWeight: FontWeight.w500)),
+            ],
+          ]),
+          if (g.resource.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: g.resourceUrl != null && g.resourceUrl!.isNotEmpty
+                  ? () async {
+                      final uri = Uri.tryParse(g.resourceUrl!);
+                      if (uri != null && await canLaunchUrl(uri)) {
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      }
+                    }
+                  : null,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.25))),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(
+                    g.resourceUrl != null ? Icons.open_in_new_rounded : Icons.menu_book_outlined,
+                    size: 12, color: const Color(0xFFB45309)),
+                  const SizedBox(width: 5),
+                  Flexible(child: Text(g.resource, style: GoogleFonts.inter(
+                    fontSize: 11, fontWeight: FontWeight.w600,
+                    color: const Color(0xFFB45309)))),
+                ]),
+              ),
+            ),
+          ],
+        ]),
+      ),
+    );
+  }
+
   // ── Error ─────────────────────────────────────────────────────────────────
   Widget _buildError() {
     return Center(
@@ -1473,6 +2188,114 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
           ),
         ]),
       ),
+    );
+  }
+}
+
+// ── Discovery Step Card (beginner onboarding) ──────────────────────────────
+class _DiscoveryCard extends StatelessWidget {
+  final AppTheme theme;
+  final String emoji;
+  final String question;
+  final String hint;
+  final Widget child;
+  final bool canContinue;
+  final VoidCallback onContinue;
+  final VoidCallback? onBack;
+  final String continueLabel;
+  final IconData? continueIcon;
+
+  const _DiscoveryCard({
+    required this.theme,
+    required this.emoji,
+    required this.question,
+    required this.hint,
+    required this.child,
+    required this.canContinue,
+    required this.onContinue,
+    this.onBack,
+    this.continueLabel = 'Continue',
+    this.continueIcon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: t.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: t.divider),
+        boxShadow: [BoxShadow(
+          color: const Color(0xFF8B5CF6).withValues(alpha: 0.06),
+          blurRadius: 16, offset: const Offset(0, 4))],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Header
+        Row(children: [
+          Text(emoji, style: const TextStyle(fontSize: 28)),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(question, style: GoogleFonts.sourceSerif4(
+              fontSize: 17, fontWeight: FontWeight.w700, color: t.primary)),
+            const SizedBox(height: 2),
+            Text(hint, style: GoogleFonts.inter(
+              fontSize: 11, color: t.muted)),
+          ])),
+        ]),
+        const SizedBox(height: 16),
+
+        // Content
+        child,
+        const SizedBox(height: 18),
+
+        // Buttons row
+        Row(children: [
+          if (onBack != null) ...[
+            GestureDetector(
+              onTap: onBack,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: t.surface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: t.divider)),
+                child: Icon(Icons.arrow_back_rounded, size: 18, color: t.muted),
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Expanded(child: GestureDetector(
+            onTap: canContinue ? () {
+              HapticFeedback.lightImpact();
+              onContinue();
+            } : null,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: canContinue
+                    ? const Color(0xFF8B5CF6)
+                    : t.muted.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: canContinue ? [BoxShadow(
+                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                  blurRadius: 8, offset: const Offset(0, 3))] : null),
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                if (continueIcon != null) ...[
+                  Icon(continueIcon, size: 16,
+                    color: canContinue ? Colors.white : t.muted),
+                  const SizedBox(width: 6),
+                ],
+                Text(continueLabel, style: GoogleFonts.inter(
+                  fontSize: 14, fontWeight: FontWeight.w700,
+                  color: canContinue ? Colors.white : t.muted)),
+              ]),
+            ),
+          )),
+        ]),
+      ]),
     );
   }
 }
@@ -1518,7 +2341,7 @@ class _MockInterviewJobCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: scoreColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(4)),
-              child: Text('${grade.letter} · ${grade.composite}%', style: GoogleFonts.inter(
+              child: Text('${grade.composite}% match', style: GoogleFonts.inter(
                 fontSize: 10, fontWeight: FontWeight.w700, color: scoreColor)),
             ),
             const SizedBox(width: 6),
@@ -1871,12 +2694,42 @@ class _SectionCard extends StatelessWidget {
 
   /// Big readiness percentage gauge + numbered points
   Widget _buildJobReadiness(AppTheme t) {
+    final bodyLower = section.body.toLowerCase();
+    // Detect explicit "unavailable" signals — don't show a fake gauge
+    final isUnavailable = bodyLower.contains('unavailable')
+        || bodyLower.contains('no match')
+        || bodyLower.contains('insufficient data')
+        || bodyLower.contains('cannot assess')
+        || bodyLower.contains('no qualifying');
     final match = RegExp(r'(\d{1,3})\s*%').firstMatch(section.body);
-    final pct = match != null ? int.tryParse(match.group(1)!) : null;
+    final pct = (!isUnavailable && match != null)
+        ? int.tryParse(match.group(1)!)
+        : null;
     final items = _parseListItems(section.body);
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      if (pct != null) ...[
+      if (isUnavailable) ...[
+        // Honest "can't compute match" state — grey card, not fake number
+        Center(child: Column(children: [
+          Container(
+            width: 96, height: 96,
+            decoration: BoxDecoration(
+              color: t.muted.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+              border: Border.all(color: t.muted.withValues(alpha: 0.3), width: 2)),
+            child: Icon(Icons.help_outline_rounded, size: 36, color: t.muted),
+          ),
+          const SizedBox(height: 8),
+          Text('Match unavailable', style: GoogleFonts.inter(
+            fontSize: 13, fontWeight: FontWeight.w600, color: t.muted)),
+          const SizedBox(height: 2),
+          Text('Not enough data to score you',
+            style: GoogleFonts.inter(fontSize: 11, color: t.muted, fontStyle: FontStyle.italic)),
+        ])),
+        const SizedBox(height: 18),
+        Divider(height: 1, color: t.divider.withValues(alpha: 0.6)),
+        const SizedBox(height: 16),
+      ] else if (pct != null) ...[
         Center(child: Column(children: [
           SizedBox(
             width: 96, height: 96,
@@ -2111,15 +2964,15 @@ class _ResumeJobCard extends StatelessWidget {
               fontSize: 13, fontWeight: FontWeight.w500, color: t.secondary)),
           ])),
           const SizedBox(width: 8),
-          // A-F Grade badge
+          // Match % badge
           Container(
-            width: 36, height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: grade.color.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(color: grade.color.withValues(alpha: 0.3))),
-            child: Center(child: Text(grade.letter, style: GoogleFonts.inter(
-              fontSize: 16, fontWeight: FontWeight.w800, color: grade.color))),
+            child: Text(grade.percentLabel, style: GoogleFonts.inter(
+              fontSize: 13, fontWeight: FontWeight.w800, color: grade.color)),
           ),
         ]),
 
@@ -2246,6 +3099,7 @@ class _ResumeJobCard extends StatelessWidget {
           GestureDetector(
             onTap: () async {
               HapticFeedback.lightImpact();
+              await UserActivityContext.recordSavedJob(job.title, job.company);
               await ApplicationTrackerService.add(TrackedApplication(
                 id: job.id,
                 jobTitle: job.title,
@@ -3255,7 +4109,10 @@ ${description.isNotEmpty ? description : "(no extended description — infer fro
 class _RecVideoCard extends StatelessWidget {
   final YouTubeVideo video;
   final AppTheme theme;
-  const _RecVideoCard({required this.video, required this.theme});
+  /// Profile from the resume currently being viewed. When tapped, the summary
+  /// sheet will personalize its last bullet to this profile.
+  final ResumeProfile? profile;
+  const _RecVideoCard({required this.video, required this.theme, this.profile});
 
   @override
   Widget build(BuildContext context) {
@@ -3267,7 +4124,8 @@ class _RecVideoCard extends StatelessWidget {
           context: context,
           isScrollControlled: true,
           backgroundColor: Colors.transparent,
-          builder: (_) => _VideoSummarySheet(video: video, theme: t),
+          builder: (_) => _VideoSummarySheet(
+            video: video, theme: t, personalizeFor: profile),
         );
       },
       child: Container(
@@ -3350,7 +4208,14 @@ class _RecVideoCard extends StatelessWidget {
 class _VideoSummarySheet extends StatefulWidget {
   final YouTubeVideo video;
   final AppTheme theme;
-  const _VideoSummarySheet({required this.video, required this.theme});
+  /// When provided, the summary's last bullet is tailored to this profile.
+  /// Only set from the Resume Scan results tab — never from generic screens.
+  final ResumeProfile? personalizeFor;
+  const _VideoSummarySheet({
+    required this.video,
+    required this.theme,
+    this.personalizeFor,
+  });
 
   @override
   State<_VideoSummarySheet> createState() => _VideoSummarySheetState();
@@ -3371,7 +4236,10 @@ class _VideoSummarySheetState extends State<_VideoSummarySheet> {
 
   Future<void> _fetchSummary() async {
     try {
-      final s = await YouTubeService.summarizeVideo(widget.video);
+      final s = await YouTubeService.summarizeVideo(
+        widget.video,
+        personalizeFor: widget.personalizeFor,
+      );
       if (mounted) setState(() { _summary = s; _loading = false; });
     } catch (e) {
       if (mounted) setState(() {

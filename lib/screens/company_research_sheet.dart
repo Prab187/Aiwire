@@ -66,8 +66,9 @@ class _CompanyResearchSheetState extends State<CompanyResearchSheet> {
     final buf = StringBuffer();
 
     void flush() {
-      if (currentIdx != null) {
-        final s = _sections[currentIdx];
+      final ci = currentIdx;
+      if (ci != null) {
+        final s = _sections[ci];
         final body = buf.toString().trim();
         if (body.isNotEmpty) {
           result.add((title: s.$2, body: body, icon: s.$3, color: s.$4));
@@ -77,17 +78,48 @@ class _CompanyResearchSheetState extends State<CompanyResearchSheet> {
     }
 
     for (final line in lines) {
-      final trimmed = line.trim().replaceAll(RegExp(r'\*{1,3}'), '');
-      final idx = _sections.indexWhere((s) =>
-          trimmed.toUpperCase().startsWith(s.$1));
+      // Strip markdown markers (**, ##, ###, - at start) and whitespace
+      final stripped = line
+          .replaceAll(RegExp(r'\*{1,3}'), '')
+          .replaceAll(RegExp(r'^#{1,6}\s*'), '')
+          .trim();
+      final upper = stripped.toUpperCase();
+
+      // Match if line starts with OR equals a section name (with optional trailing colon)
+      int idx = -1;
+      for (int i = 0; i < _sections.length; i++) {
+        final name = _sections[i].$1;
+        if (upper == name ||
+            upper == '$name:' ||
+            upper.startsWith('$name ') ||
+            upper.startsWith('$name:')) {
+          idx = i;
+          break;
+        }
+      }
+
       if (idx >= 0) {
         flush();
         currentIdx = idx;
-      } else if (currentIdx != null && trimmed.isNotEmpty) {
-        buf.writeln(trimmed);
+        // If there's text after the header on the same line, include it
+        final remaining = stripped.substring(_sections[idx].$1.length)
+            .replaceFirst(RegExp(r'^[:\s]+'), '').trim();
+        if (remaining.isNotEmpty) buf.writeln(remaining);
+      } else if (currentIdx != null && stripped.isNotEmpty) {
+        buf.writeln(stripped);
       }
     }
     flush();
+
+    // Fallback: if parsing produced no sections, show raw text as a single section
+    if (result.isEmpty && text.trim().isNotEmpty) {
+      result.add((
+        title: 'Research Brief',
+        body: text.trim(),
+        icon: Icons.description_outlined,
+        color: const Color(0xFF3B82F6),
+      ));
+    }
     return result;
   }
 

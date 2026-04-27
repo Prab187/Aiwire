@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../models/job.dart';
 import '../services/job_service.dart';
+import '../services/user_activity_context.dart';
 
 class JobBoardScreen extends StatefulWidget {
   final AppTheme theme;
@@ -28,6 +31,7 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
   final _searchController = TextEditingController();
   final Set<String> _savedJobIds = {};
   bool _showSavedOnly = false;
+  Timer? _searchDebounce;
 
   AppTheme get t => widget.theme;
 
@@ -48,10 +52,32 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
   };
 
   void _detectRegion() {
+    // Fast sync default based on device locale — will be refined by
+    // _loadRegionFromPrefs() which is async and reads resume country.
     final locale = ui.PlatformDispatcher.instance.locale;
     final cc = locale.countryCode?.toUpperCase() ?? 'US';
     _region = _regionMap[cc] ?? 'us';
     _regionLabel = _regionLabels[_region] ?? 'Global';
+  }
+
+  /// Priority: Resume-scanned country > device locale. Runs async after init.
+  Future<void> _loadRegionFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedCode = prefs.getString('user_country_code');
+      if (savedCode != null && savedCode.isNotEmpty) {
+        final lower = savedCode.toLowerCase();
+        // Match to our region map
+        if (_regionLabels.containsKey(lower)) {
+          if (mounted) setState(() {
+            _region = lower;
+            _regionLabel = _regionLabels[lower] ?? _regionLabel;
+          });
+          // Reload jobs with the corrected region
+          _loadJobs();
+        }
+      }
+    } catch (_) {}
   }
 
   List<Job> get _filteredJobs {
@@ -102,23 +128,34 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
       _searchController.text = widget.initialQuery!;
     }
     _loadJobs();
+    // Refine region using resume-scanned country if available (runs async)
+    _loadRegionFromPrefs();
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
   Future<void> _loadJobs() async {
+    if (!mounted) return;
     setState(() => _loading = true);
-    final jobs = await JobService.fetchJobs(
-      query: _searchQuery.isEmpty ? null : _searchQuery,
-      type: _typeFilter,
-      level: _levelFilter,
-      country: _region,
-    );
-    setState(() { _allJobs = jobs; _loading = false; });
+    try {
+      final jobs = await JobService.fetchJobs(
+        query: _searchQuery.isEmpty ? null : _searchQuery,
+        type: _typeFilter,
+        level: _levelFilter,
+        country: _region,
+      );
+      if (!mounted) return;
+      setState(() { _allJobs = jobs; _loading = false; });
+    } catch (e) {
+      // Don't leave UI stuck in loading state on network failure.
+      if (!mounted) return;
+      setState(() { _allJobs = []; _loading = false; });
+    }
   }
 
   @override
@@ -149,10 +186,21 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
             child: TextField(
               controller: _searchController,
               style: GoogleFonts.inter(color: t.primary, fontSize: 14),
+              textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 hintText: 'Search jobs, companies, skills...',
                 hintStyle: GoogleFonts.inter(color: t.muted, fontSize: 14),
                 prefixIcon: Icon(Icons.search_rounded, color: t.muted, size: 20),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? GestureDetector(
+                        onTap: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                          _loadJobs();
+                        },
+                        child: Icon(Icons.close_rounded, color: t.muted, size: 18),
+                      )
+                    : null,
                 filled: true,
                 fillColor: t.surface,
                 border: OutlineInputBorder(
@@ -169,8 +217,17 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
+              onChanged: (v) {
+                setState(() => _searchQuery = v);
+                _searchDebounce?.cancel();
+                _searchDebounce = Timer(const Duration(milliseconds: 500), () {
+                  if (mounted) _loadJobs();
+                });
+              },
               onSubmitted: (v) {
-                _searchQuery = v;
+                _searchDebounce?.cancel();
+                setState(() => _searchQuery = v);
+                UserActivityContext.recordSearch(v);
                 _loadJobs();
               },
             ),
@@ -207,7 +264,44 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
             child: _loading
               ? Center(child: CircularProgressIndicator(color: t.primary, strokeWidth: 1.5))
               : displayJobs.isEmpty
-                ? Center(child: Text('No jobs found', style: GoogleFonts.inter(color: t.muted)))
+                ? Center(child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.search_off_rounded, size: 48, color: t.muted.withValues(alpha: 0.5)),
+                      const SizedBox(height: 16),
+                      Text('No jobs found', style: GoogleFonts.sourceSerif4(
+                        fontSize: 18, fontWeight: FontWeight.w600, color: t.primary)),
+                      const SizedBox(height: 8),
+                      Text(
+                        _searchQuery.isNotEmpty
+                            ? 'No matches for "$_searchQuery" in $_regionLabel.\nTry different keywords or change region.'
+                            : 'No jobs match your filters.\nTry widening the search or changing region.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(fontSize: 13, color: t.muted, height: 1.4)),
+                      const SizedBox(height: 20),
+                      if (_searchQuery.isNotEmpty || _typeFilter != 'All' || _levelFilter != 'All' || _salaryFilter != 'Any')
+                        GestureDetector(
+                          onTap: () {
+                            _searchController.clear();
+                            setState(() {
+                              _searchQuery = '';
+                              _typeFilter = 'All';
+                              _levelFilter = 'All';
+                              _salaryFilter = 'Any';
+                            });
+                            _loadJobs();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: t.primary),
+                              borderRadius: BorderRadius.circular(8)),
+                            child: Text('Clear filters', style: GoogleFonts.inter(
+                              fontSize: 13, fontWeight: FontWeight.w600, color: t.primary)),
+                          ),
+                        ),
+                    ]),
+                  ))
                 : RefreshIndicator(
                     color: t.primary,
                     backgroundColor: t.surface,
@@ -220,13 +314,18 @@ class _JobBoardScreenState extends State<JobBoardScreen> {
                         job: displayJobs[i],
                         theme: t,
                         isSaved: _savedJobIds.contains(displayJobs[i].id),
-                        onToggleSave: (id) => setState(() {
-                          if (_savedJobIds.contains(id)) {
-                            _savedJobIds.remove(id);
-                          } else {
-                            _savedJobIds.add(id);
-                          }
-                        }),
+                        onToggleSave: (id) {
+                          final job = displayJobs[i];
+                          setState(() {
+                            if (_savedJobIds.contains(id)) {
+                              _savedJobIds.remove(id);
+                            } else {
+                              _savedJobIds.add(id);
+                              // Feed into LLM context
+                              UserActivityContext.recordSavedJob(job.title, job.company);
+                            }
+                          });
+                        },
                         onTap: () => _showJobDetail(context, displayJobs[i]),
                       ),
                     ),

@@ -2,14 +2,15 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import '../theme/app_theme.dart';
 import '../services/analytics_service.dart';
 import '../services/claude_cache.dart';
 import '../services/claude_error.dart';
+import '../services/claude_http.dart';
 import '../services/star_story_service.dart';
+import '../services/user_activity_context.dart';
 import '../models/star_story.dart';
 // Premium gate disabled during testing
 // import '../services/ai_quota_guard.dart';
@@ -20,8 +21,14 @@ enum _IvState { setup, prepGuide, asking, feedback }
 class _Turn {
   final String question;
   String answer = '';
-  String? feedback;
-  int? score;
+  String? feedback;        // Overall actionable feedback
+  int? score;              // Overall score 1-10
+  // Rubric breakdown (each 0-5)
+  int? communicationScore;
+  int? technicalScore;
+  int? approachScore;
+  int? completenessScore;
+  String? betterAnswer;    // Example of a stronger answer
   _Turn(this.question);
 }
 
@@ -39,6 +46,8 @@ class _MockInterviewScreenState extends State<MockInterviewScreen>
   String _role = 'ML Engineer';
   String _level = 'Mid';
   String _type = 'Behavioral';
+  String _company = ''; // Optional — e.g. "Meta", "early-stage startup"
+  final _companyCtrl = TextEditingController();
   bool _loading = false;
   String? _error;
 
@@ -173,6 +182,7 @@ class _MockInterviewScreenState extends State<MockInterviewScreen>
     _stt.stop();
     _pulseCtrl.dispose();
     _answerCtrl.dispose();
+    _companyCtrl.dispose();
     super.dispose();
   }
 
@@ -188,30 +198,53 @@ class _MockInterviewScreenState extends State<MockInterviewScreen>
       return;
     }
 
-    // Cache questions by role+level+type for 7 days
-    final cacheKey = ClaudeCache.keyFrom([_role, _level, _type]);
+    // Cache questions by role+level+type+company for 3 days
+    final companyKey = _company.trim().isEmpty ? 'generic' : _company.trim().toLowerCase();
+    final cacheKey = ClaudeCache.keyFrom(['v2', _role, _level, _type, companyKey]);
     String? cleaned = await ClaudeCache.get('iv_q', cacheKey,
-        ttl: const Duration(days: 7));
+        ttl: const Duration(days: 3));
 
-    final prompt = '''Generate exactly 5 $_type interview questions for a $_level $_role role.
-Return ONLY a JSON array of strings, no markdown, no preamble. Example: ["Question 1?", "Question 2?", ...]
-Make questions realistic and challenging for the experience level. Mix open-ended with specific.''';
+    final companyLine = _company.trim().isEmpty
+        ? 'COMPANY TYPE: Generic top tech company (FAANG-style bar)'
+        : 'COMPANY: ${_company.trim()} — calibrate the difficulty, question style, and focus areas to how THIS company actually interviews (e.g. Meta = behavioral + coding + system design; Google = coding-heavy; startups = pragmatic shipping; Anthropic/OpenAI = research + ethics)';
+
+    final typeGuidance = switch (_type.toLowerCase()) {
+      'behavioral' => 'Questions should target: conflict resolution, leadership, project ownership, dealing with ambiguity, failure stories. Use STAR-answerable format. Reference ${_level.toLowerCase()}-level responsibilities.',
+      'technical' => 'Questions should target: $_role domain depth (ML algorithms, model debugging, evaluation metrics, infra choices, trade-offs). NO coding — this is verbal technical depth. Include at least 1 question that probes "why" not just "how".',
+      'system design' => 'Questions should be ML system design at $_level scope: e.g. "Design a recommendation system", "Design real-time fraud detection". Include constraints (latency, scale, cost). Match complexity to $_level.',
+      _ => 'Mix of ${_type} questions appropriate for $_level level.',
+    };
+
+    final prompt = '''You will do a TWO-PASS generation for $_type interview questions for a $_level $_role role.
+
+$companyLine
+$typeGuidance
+
+PASS 1: Brainstorm 10 candidate questions internally (don't output them).
+PASS 2: Self-critique: rate each by (a) specificity, (b) calibration to $_level, (c) $_type fit, (d) whether a lazy candidate could BS through it.
+PASS 3: Pick the TOP 5 — the ones that would actually reveal skill differences between a 5/10 and 9/10 candidate.
+
+Output ONLY the final 5 as a JSON array of strings, no markdown, no preamble. Example: ["Question 1?", "Question 2?", ...]
+
+Rules:
+- Each question must be SPECIFIC (not "Tell me about yourself"). Include a scenario, constraint, or concrete angle.
+- Mix 2 open-ended + 3 scenario-specific.
+- For $_level: Junior = fundamentals + learning mindset; Mid = production experience + trade-offs; Senior = architectural thinking + mentorship; Lead/Principal = org/business impact.
+- If company is specified: 2 of the 5 must be flavored to that company's known interview style.
+- No canned LeetCode problems — these are conversation questions.
+- No question should be answerable with a single sentence. Each should need a 2-3 min response to do well.''';
 
     try {
       if (cleaned == null) {
-        final response = await http.post(
-          Uri.parse('https://api.anthropic.com/v1/messages'),
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-          },
-          body: json.encode({
+        final response = await ClaudeHttp.post(
+          apiKey: apiKey,
+          timeout: const Duration(seconds: 45),
+          body: {
             'model': 'claude-haiku-4-5',
             'max_tokens': 600,
             'messages': [{'role': 'user', 'content': prompt}],
-          }),
-        ).timeout(const Duration(seconds: 30));
+          },
+        );
 
         if (response.statusCode != 200) {
           throw Exception(claudeError(response.statusCode, response.body));
@@ -312,19 +345,15 @@ RED FLAGS TO AVOID
 Keep it concise, direct, and tailored. No fluff. No generic advice. Reference $_role and $_level specifics throughout.''';
 
     try {
-      final response = await http.post(
-        Uri.parse('https://api.anthropic.com/v1/messages'),
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: json.encode({
+      final response = await ClaudeHttp.post(
+        apiKey: apiKey,
+        timeout: const Duration(seconds: 60),
+        body: {
           'model': 'claude-haiku-4-5',
           'max_tokens': 1400,
           'messages': [{'role': 'user', 'content': prompt}],
-        }),
-      ).timeout(const Duration(seconds: 30));
+        },
+      );
 
       if (response.statusCode != 200) {
         throw Exception(claudeError(response.statusCode, response.body));
@@ -368,31 +397,43 @@ Keep it concise, direct, and tailored. No fluff. No generic advice. Reference $_
     setState(() => _loading = true);
 
     const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
-    final prompt = '''You are an expert $_role interviewer. Score this candidate's answer on a scale of 1-10 and give 2-3 sentences of specific, actionable feedback.
+    final companyLine = _company.trim().isEmpty
+        ? 'COMPANY: Top tech company (FAANG-style bar)'
+        : 'COMPANY: ${_company.trim()} — score as if this company\'s interviewer was evaluating';
+    final prompt = '''You are a senior $_role interviewer evaluating a candidate's answer. Score using a rubric and give SPECIFIC feedback with a concrete example of a stronger answer.
 
 ROLE: $_level $_role
 TYPE: $_type interview
+$companyLine
 QUESTION: ${_turns[_idx].question}
 CANDIDATE'S ANSWER: $answer
 
-Respond in this exact format:
-SCORE: <number 1-10>
-FEEDBACK: <2-3 sentences>''';
+Respond with ONLY a JSON object, no markdown, no preamble:
+{
+  "communication": <0-5 score for structure, clarity, conciseness>,
+  "technical": <0-5 score for accuracy, depth, domain knowledge>,
+  "approach": <0-5 score for problem-solving framework, trade-off analysis>,
+  "completeness": <0-5 score for covering all parts of the question>,
+  "overall_10": <weighted overall 1-10 = (communication + technical + approach + completeness) / 2>,
+  "feedback": "2-3 sentences. Be SPECIFIC: quote what they said and say why it's weak/strong. Don't say 'add more depth' — say 'You said X. Better: Y, because Z.'",
+  "better_answer": "One paragraph (40-70 words) showing a model answer for this question at $_level level. Use specific tools, numbers, or frameworks. Must be concrete, not templated."
+}
+
+Rules:
+- Calibrate to $_level: Junior = basic correctness OK, Senior = depth + trade-offs required, Principal = systems thinking + business impact.
+- If answer is <20 words or off-topic, communication/approach can be 0-1.
+- better_answer should be realistic — not inflated — what a strong $_level candidate would actually say.''';
 
     try {
-      final response = await http.post(
-        Uri.parse('https://api.anthropic.com/v1/messages'),
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: json.encode({
+      final response = await ClaudeHttp.post(
+        apiKey: apiKey,
+        timeout: const Duration(seconds: 45),
+        body: {
           'model': 'claude-haiku-4-5',
-          'max_tokens': 300,
+          'max_tokens': 600,
           'messages': [{'role': 'user', 'content': prompt}],
-        }),
-      ).timeout(const Duration(seconds: 30));
+        },
+      );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -400,10 +441,27 @@ FEEDBACK: <2-3 sentences>''';
         final text = (contentList != null && contentList.isNotEmpty
             ? (contentList[0]['text'] as String? ?? '')
             : '').trim();
-        final scoreMatch = RegExp(r'SCORE:\s*(\d+)').firstMatch(text);
-        final feedbackMatch = RegExp(r'FEEDBACK:\s*(.+)', dotAll: true).firstMatch(text);
-        _turns[_idx].score = scoreMatch != null ? int.tryParse(scoreMatch.group(1)!) : null;
-        _turns[_idx].feedback = feedbackMatch?.group(1)?.trim() ?? text;
+        try {
+          // Strip any accidental code fences
+          final cleaned = text
+              .replaceFirst(RegExp(r'^```json\s*'), '')
+              .replaceFirst(RegExp(r'^```\s*'), '')
+              .replaceFirst(RegExp(r'\s*```$'), '').trim();
+          final parsed = json.decode(cleaned) as Map<String, dynamic>;
+          _turns[_idx].communicationScore = (parsed['communication'] as num?)?.toInt();
+          _turns[_idx].technicalScore = (parsed['technical'] as num?)?.toInt();
+          _turns[_idx].approachScore = (parsed['approach'] as num?)?.toInt();
+          _turns[_idx].completenessScore = (parsed['completeness'] as num?)?.toInt();
+          _turns[_idx].score = (parsed['overall_10'] as num?)?.toInt();
+          _turns[_idx].feedback = parsed['feedback'] as String? ?? '';
+          _turns[_idx].betterAnswer = parsed['better_answer'] as String?;
+        } catch (_) {
+          // Fallback: regex-extract old format — safely handle null group
+          final scoreMatch = RegExp(r'(?:SCORE|overall_10)[:\s"]*\s*(\d+)').firstMatch(text);
+          final scoreStr = scoreMatch?.group(1);
+          _turns[_idx].score = scoreStr != null ? int.tryParse(scoreStr) : null;
+          _turns[_idx].feedback = text;
+        }
       } else {
         _turns[_idx].feedback = 'Feedback unavailable — ${claudeError(response.statusCode, response.body)}';
       }
@@ -415,6 +473,35 @@ FEEDBACK: <2-3 sentences>''';
     if (isLast) {
       // Auto-save strong answers (score >= 7) to Story Bank
       _autoSaveStories();
+      // Record results into user activity context so future Claude calls
+      // know the user's rubric strengths/weaknesses.
+      final scored = _turns.where((t) => t.score != null).toList();
+      if (scored.isNotEmpty) {
+        final avg = (scored.map((t) => t.score!).reduce((a, b) => a + b) / scored.length).round();
+        // Find weakest rubric area (average across all turns)
+        int sumComm = 0, sumTech = 0, sumAppr = 0, sumCov = 0, n = 0;
+        for (final t in _turns) {
+          if (t.communicationScore == null) continue;
+          sumComm += t.communicationScore!;
+          sumTech += t.technicalScore ?? 0;
+          sumAppr += t.approachScore ?? 0;
+          sumCov += t.completenessScore ?? 0;
+          n++;
+        }
+        String weakest = 'balanced';
+        if (n > 0) {
+          final scores = {
+            'Communication': sumComm / n,
+            'Technical depth': sumTech / n,
+            'Approach/framework': sumAppr / n,
+            'Completeness': sumCov / n,
+          };
+          final min = scores.entries.reduce((a, b) => a.value < b.value ? a : b);
+          weakest = min.key;
+        }
+        UserActivityContext.recordInterviewResult(
+          avgScore10: avg, weakestArea: weakest);
+      }
     }
     setState(() {
       _loading = false;
@@ -528,6 +615,33 @@ FEEDBACK: <2-3 sentences>''';
 
         _label('Interview type'),
         _picker(_types, _type, (v) => setState(() => _type = v)),
+        const SizedBox(height: 20),
+
+        _label('Target company (optional)'),
+        TextField(
+          controller: _companyCtrl,
+          style: GoogleFonts.inter(fontSize: 14, color: t.primary),
+          decoration: InputDecoration(
+            hintText: 'e.g. Meta, Anthropic, early-stage startup',
+            hintStyle: GoogleFonts.inter(fontSize: 13, color: t.muted),
+            filled: true,
+            fillColor: t.surface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: t.divider)),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: t.divider)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: t.primary)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          ),
+          onChanged: (v) => _company = v,
+        ),
+        const SizedBox(height: 6),
+        Text('We\'ll calibrate questions to how this company actually interviews',
+          style: GoogleFonts.inter(fontSize: 11, color: t.muted, fontStyle: FontStyle.italic)),
         const SizedBox(height: 28),
 
         if (_error != null)
@@ -860,6 +974,37 @@ FEEDBACK: <2-3 sentences>''';
     );
   }
 
+  /// Small bar showing rubric score (0-5) with color gradient based on value
+  Widget _rubricBar(String label, int score, AppTheme t) {
+    final pct = (score / 5.0).clamp(0.0, 1.0);
+    final color = score >= 4
+        ? const Color(0xFF10B981)
+        : score >= 3
+            ? const Color(0xFFF59E0B)
+            : const Color(0xFFEF4444);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: GoogleFonts.inter(
+        fontSize: 10, fontWeight: FontWeight.w600, color: t.muted,
+        letterSpacing: 0.3)),
+      const SizedBox(height: 3),
+      Container(
+        height: 4,
+        decoration: BoxDecoration(
+          color: t.divider.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(2)),
+        child: FractionallySizedBox(
+          alignment: Alignment.centerLeft,
+          widthFactor: pct,
+          child: Container(decoration: BoxDecoration(
+            color: color, borderRadius: BorderRadius.circular(2))),
+        ),
+      ),
+      const SizedBox(height: 3),
+      Text('$score/5', style: GoogleFonts.inter(
+        fontSize: 10, fontWeight: FontWeight.w600, color: color)),
+    ]);
+  }
+
   Widget _buildSummary() {
     final scores = _turns.where((t) => t.score != null).map((t) => t.score!).toList();
     final avg = scores.isEmpty ? 0 : (scores.reduce((a, b) => a + b) / scores.length).round();
@@ -922,10 +1067,47 @@ FEEDBACK: <2-3 sentences>''';
               const SizedBox(height: 6),
               Text(turn.question, style: GoogleFonts.inter(
                 fontSize: 13, fontWeight: FontWeight.w600, color: t.primary)),
-              if (turn.feedback != null) ...[
-                const SizedBox(height: 8),
+              // Rubric breakdown (only if we have scores)
+              if (turn.communicationScore != null) ...[
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(child: _rubricBar('Comm', turn.communicationScore!, t)),
+                  const SizedBox(width: 6),
+                  Expanded(child: _rubricBar('Tech', turn.technicalScore ?? 0, t)),
+                  const SizedBox(width: 6),
+                  Expanded(child: _rubricBar('Approach', turn.approachScore ?? 0, t)),
+                  const SizedBox(width: 6),
+                  Expanded(child: _rubricBar('Cover', turn.completenessScore ?? 0, t)),
+                ]),
+              ],
+              if (turn.feedback != null && turn.feedback!.isNotEmpty) ...[
+                const SizedBox(height: 10),
                 Text(turn.feedback!, style: GoogleFonts.inter(
                   fontSize: 12, color: t.secondary, height: 1.5)),
+              ],
+              // Better answer example (expandable)
+              if (turn.betterAnswer != null && turn.betterAnswer!.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.2))),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Icon(Icons.lightbulb_rounded, size: 12, color: const Color(0xFF10B981)),
+                      const SizedBox(width: 5),
+                      Text('Stronger answer', style: GoogleFonts.inter(
+                        fontSize: 11, fontWeight: FontWeight.w700,
+                        color: const Color(0xFF047857), letterSpacing: 0.3)),
+                    ]),
+                    const SizedBox(height: 6),
+                    Text(turn.betterAnswer!, style: GoogleFonts.sourceSerif4(
+                      fontSize: 12.5, fontStyle: FontStyle.italic,
+                      color: const Color(0xFF064E3B), height: 1.5)),
+                  ]),
+                ),
               ],
             ]),
           );
