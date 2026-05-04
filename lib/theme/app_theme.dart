@@ -12,57 +12,57 @@ class AppTheme {
   bool get isKindle => mode == AppMode.kindle;
 
   Color get background {
-    if (isDark) return const Color(0xFF0F172A);
+    if (isDark) return const Color(0xFF121212);
     if (isKindle) return const Color(0xFFF5EDD6);
     return const Color(0xFFFFFFFF);
   }
 
   Color get surface {
-    if (isDark) return const Color(0xFF1E293B);
+    if (isDark) return const Color(0xFF1A1A1A);
     if (isKindle) return const Color(0xFFEDE4C8);
-    return const Color(0xFFF8FAFC);
+    return const Color(0xFFF7F7F5);
   }
 
   Color get edgeDark {
-    if (isDark) return const Color(0xFF0F172A);
+    if (isDark) return const Color(0xFF121212);
     if (isKindle) return const Color(0xFFE8DFC4);
-    return const Color(0xFFF1F5F9);
+    return const Color(0xFFF7F7F5);
   }
 
   Color get primary {
-    if (isDark) return const Color(0xFFF1F5F9);
+    if (isDark) return const Color(0xFFE6E3D3);
     if (isKindle) return const Color(0xFF2C1810);
-    return const Color(0xFF0F172A);
+    return const Color(0xFF242424);
   }
 
   Color get secondary {
-    if (isDark) return const Color(0xFF94A3B8);
+    if (isDark) return const Color(0xFF9E9E9E);
     if (isKindle) return const Color(0xFF6B4C3B);
-    return const Color(0xFF475569);
+    return const Color(0xFF6B6B6B);
   }
 
   Color get muted {
-    if (isDark) return const Color(0xFF64748B);
+    if (isDark) return const Color(0xFF757575);
     if (isKindle) return const Color(0xFF9C7B6B);
-    return const Color(0xFF94A3B8);
+    return const Color(0xFF9E9E9E);
   }
 
   Color get divider {
-    if (isDark) return const Color(0xFF334155);
+    if (isDark) return const Color(0xFF2A2A2A);
     if (isKindle) return const Color(0xFFDDD3B8);
-    return const Color(0xFFE2E8F0);
+    return const Color(0xFFE6E6E6);
   }
 
   Color get border {
-    if (isDark) return const Color(0xFF334155);
+    if (isDark) return const Color(0xFF2A2A2A);
     if (isKindle) return const Color(0xFFCFC3A8);
-    return const Color(0xFFE2E8F0);
+    return const Color(0xFFE6E6E6);
   }
 
   Color get accent {
-    if (isDark) return const Color(0xFF60A5FA);
+    if (isDark) return const Color(0xFF6EBF6E);
     if (isKindle) return const Color(0xFF5A8A5A);
-    return const Color(0xFF2563EB);
+    return const Color(0xFF3D7A3D);
   }
 
   SystemUiOverlayStyle get systemUi =>

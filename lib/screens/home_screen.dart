@@ -30,7 +30,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   int _bottomIndex = 0;
   SortFilter _sortFilter = SortFilter.latest;
   String _searchQuery = '';
-  AppMode _mode = AppMode.light;
+  AppMode _mode = AppMode.dark;
   late AnimationController _modeAnim;
   late Animation<double> _fadeAnim;
 
