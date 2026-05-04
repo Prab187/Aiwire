@@ -108,49 +108,127 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   color: t.primary, letterSpacing: -0.5)),
               )),
 
-              // ── Hero: Career Plan ──
+              // ── Hero 1: Resume upload ──
+              SliverToBoxAdapter(child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft, end: Alignment.bottomRight,
+                      colors: [
+                        _indigo.withValues(alpha: 0.14),
+                        _indigo.withValues(alpha: 0.04),
+                      ]),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: _indigo.withValues(alpha: 0.18))),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Container(
+                          width: 44, height: 44,
+                          decoration: BoxDecoration(
+                            color: _indigo.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12)),
+                          child: const Icon(Icons.auto_awesome_rounded,
+                            size: 22, color: _indigo),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _hasResume ? 'Your AI Career Plan' : 'Get your AI Career Plan',
+                              style: GoogleFonts.sourceSerif4(
+                                fontSize: 18, fontWeight: FontWeight.w700,
+                                color: t.primary, letterSpacing: -0.3)),
+                            const SizedBox(height: 3),
+                            Text(
+                              _hasResume && _userTitle.isNotEmpty
+                                ? '$_userTitle · $_userLevel'
+                                : 'Upload your resume for matches, courses, and a 90-day plan',
+                              style: GoogleFonts.inter(fontSize: 12, color: t.muted),
+                              maxLines: 2, overflow: TextOverflow.ellipsis),
+                          ],
+                        )),
+                      ]),
+                      const SizedBox(height: 16),
+                      Row(children: [
+                        Expanded(child: GestureDetector(
+                          onTap: () => _navTo(ResumeScanScreen(theme: t), feature: 'career_plan_upload'),
+                          child: Container(
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: _indigo,
+                              borderRadius: BorderRadius.circular(10)),
+                            child: Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(Icons.upload_file_rounded, size: 16, color: Colors.white),
+                              const SizedBox(width: 7),
+                              Text('Upload Resume', style: GoogleFonts.inter(
+                                fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white)),
+                            ])),
+                          ),
+                        )),
+                        const SizedBox(width: 10),
+                        Expanded(child: GestureDetector(
+                          onTap: () => _navTo(ResumeScanScreen(theme: t), feature: 'career_plan_sample'),
+                          child: Container(
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: t.surface,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: _indigo.withValues(alpha: 0.3))),
+                            child: Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(Icons.science_outlined, size: 15, color: _indigo),
+                              const SizedBox(width: 7),
+                              Text('Try Sample', style: GoogleFonts.inter(
+                                fontSize: 13, fontWeight: FontWeight.w600, color: _indigo)),
+                            ])),
+                          ),
+                        )),
+                      ]),
+                    ],
+                  ),
+                ),
+              )),
+
+              // ── Hero 2: No resume? ──
               SliverToBoxAdapter(child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
                 child: GestureDetector(
-                  onTap: () => _navTo(ResumeScanScreen(theme: t), feature: 'career_plan'),
+                  onTap: () => _navTo(ResumeScanScreen(theme: t), feature: 'career_plan_manual'),
                   child: Container(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft, end: Alignment.bottomRight,
-                        colors: [
-                          _indigo.withValues(alpha: 0.14),
-                          _indigo.withValues(alpha: 0.04),
-                        ]),
+                      color: t.surface,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: _indigo.withValues(alpha: 0.18))),
+                      border: Border.all(color: t.divider)),
                     child: Row(children: [
                       Container(
-                        width: 44, height: 44,
+                        width: 40, height: 40,
                         decoration: BoxDecoration(
-                          color: _indigo.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12)),
-                        child: const Icon(Icons.auto_awesome_rounded,
-                          size: 22, color: _indigo),
+                          color: t.primary.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(10)),
+                        child: Icon(Icons.lightbulb_outline_rounded,
+                          size: 20, color: t.primary),
                       ),
                       const SizedBox(width: 14),
                       Expanded(child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            _hasResume ? 'Your AI Career Plan' : 'Get Your AI Career Plan',
+                          Text('No resume? No problem',
                             style: GoogleFonts.sourceSerif4(
-                              fontSize: 18, fontWeight: FontWeight.w700,
-                              color: t.primary, letterSpacing: -0.3)),
-                          const SizedBox(height: 3),
-                          Text(
-                            _hasResume && _userTitle.isNotEmpty
-                              ? '$_userTitle · $_userLevel'
-                              : 'AI career roadmap — upload resume or answer 3 questions',
-                            style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
+                              fontSize: 15, fontWeight: FontWeight.w700,
+                              color: t.primary, letterSpacing: -0.2)),
+                          const SizedBox(height: 2),
+                          Text('Answer 3 quick questions — get a 7-day, 30-day & 60-day plan',
+                            style: GoogleFonts.inter(fontSize: 11, color: t.muted),
+                            maxLines: 2, overflow: TextOverflow.ellipsis),
                         ],
                       )),
-                      Icon(Icons.arrow_forward_ios_rounded, size: 14, color: t.muted),
+                      const SizedBox(width: 8),
+                      Icon(Icons.arrow_forward_ios_rounded, size: 13, color: t.muted),
                     ]),
                   ),
                 ),
