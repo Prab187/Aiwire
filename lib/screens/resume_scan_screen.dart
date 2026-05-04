@@ -834,7 +834,7 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
           icon: Icon(Icons.arrow_back_ios_new_rounded, color: t.primary, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Resume Scanner',
+        title: Text('Career Builder',
           style: GoogleFonts.sourceSerif4(
             fontSize: 20, fontWeight: FontWeight.w600, color: t.primary)),
         centerTitle: true,
@@ -2364,7 +2364,8 @@ class _MockInterviewJobCard extends StatelessWidget {
             }
           },
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            height: 32,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
               color: const Color(0xFF8B5CF6),
               borderRadius: BorderRadius.circular(8)),
@@ -3569,33 +3570,34 @@ class _RecCertCard extends StatelessWidget {
               maxLines: 2, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 2),
             Text(cert.provider, style: GoogleFonts.inter(fontSize: 12, color: t.secondary)),
+            const SizedBox(height: 6),
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4)),
+                child: Text(cert.level, style: GoogleFonts.inter(
+                  fontSize: 10, fontWeight: FontWeight.w700, color: accent)),
+              ),
+              if (cert.duration != null) ...[
+                const SizedBox(width: 6),
+                Icon(Icons.schedule_rounded, size: 11, color: t.muted),
+                const SizedBox(width: 3),
+                Flexible(child: Text(cert.duration!, style: GoogleFonts.inter(
+                  fontSize: 11, color: t.muted), overflow: TextOverflow.ellipsis)),
+              ],
+              if (cert.rating != null) ...[
+                const SizedBox(width: 6),
+                Icon(Icons.star_rounded, size: 11, color: t.muted),
+                const SizedBox(width: 2),
+                Text(cert.rating!.toStringAsFixed(1), style: GoogleFonts.inter(
+                  fontSize: 11, color: t.secondary, fontWeight: FontWeight.w500)),
+              ],
+            ]),
           ])),
-        ]),
-        Row(children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(4)),
-            child: Text(cert.level, style: GoogleFonts.inter(
-              fontSize: 10, fontWeight: FontWeight.w700, color: accent)),
-          ),
-          if (cert.duration != null) ...[
-            const SizedBox(width: 6),
-            Icon(Icons.schedule_rounded, size: 11, color: t.muted),
-            const SizedBox(width: 3),
-            Flexible(child: Text(cert.duration!, style: GoogleFonts.inter(
-              fontSize: 11, color: t.muted), overflow: TextOverflow.ellipsis)),
-          ],
-          if (cert.rating != null) ...[
-            const SizedBox(width: 6),
-            Icon(Icons.star_rounded, size: 11, color: t.muted),
-            const SizedBox(width: 2),
-            Text(cert.rating!.toStringAsFixed(1), style: GoogleFonts.inter(
-              fontSize: 11, color: t.secondary, fontWeight: FontWeight.w500)),
-          ],
-          const Spacer(),
-          if (cert.url != null && cert.url!.isNotEmpty)
+          if (cert.url != null && cert.url!.isNotEmpty) ...[
+            const SizedBox(width: 10),
             GestureDetector(
               onTap: () async {
                 HapticFeedback.lightImpact();
@@ -3605,13 +3607,19 @@ class _RecCertCard extends StatelessWidget {
                 }
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                height: 32,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
                 decoration: BoxDecoration(
-                  color: t.primary, borderRadius: BorderRadius.circular(8)),
-                child: Text('Enroll', style: GoogleFonts.inter(
-                  fontSize: 13, fontWeight: FontWeight.w600, color: t.background)),
+                  color: accent, borderRadius: BorderRadius.circular(8)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.school_rounded, size: 13, color: Colors.white),
+                  const SizedBox(width: 5),
+                  Text('Enroll', style: GoogleFonts.inter(
+                    fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
+                ]),
               ),
             ),
+          ],
         ]),
       ]),
     );
@@ -3755,9 +3763,30 @@ class _RecEventCard extends StatelessWidget {
               ],
             ]),
           ])),
-          const SizedBox(width: 8),
-          if (event.registrationUrl != null && event.registrationUrl!.isNotEmpty)
-            Icon(Icons.arrow_forward_ios_rounded, size: 12, color: t.muted),
+          if (event.registrationUrl != null && event.registrationUrl!.isNotEmpty) ...[
+            const SizedBox(width: 10),
+            GestureDetector(
+              onTap: () async {
+                HapticFeedback.lightImpact();
+                final uri = Uri.parse(event.registrationUrl!);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+              child: Container(
+                height: 32,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(
+                  color: _pink, borderRadius: BorderRadius.circular(8)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.event_available_rounded, size: 13, color: Colors.white),
+                  const SizedBox(width: 5),
+                  Text('Enroll', style: GoogleFonts.inter(
+                    fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
+                ]),
+              ),
+            ),
+          ],
         ]),
       ),
     );

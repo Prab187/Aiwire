@@ -10,7 +10,7 @@ class JobService {
       'https://remotive.com/api/remote-jobs?category=software-dev&search=${Uri.encodeComponent(search)}&limit=20'
     );
 
-    final response = await http.get(url).timeout(const Duration(seconds: 10));
+    final response = await http.get(url);
     if (response.statusCode != 200) return [];
 
     final data = json.decode(response.body);
@@ -234,7 +234,7 @@ class JobService {
           postedAt: (j['pubDate'] as String? ?? '').split('T').first,
           companyLogo: j['companyLogo'] as String?,
           applyUrl: j['url'] ?? '',
-          featured: salaryMin != null && (num.tryParse(salaryMin.toString()) ?? 0) > 150000,
+          featured: salaryMin != null && (salaryMin as num) > 150000,
         );
       }).toList();
     } catch (_) {
@@ -298,7 +298,6 @@ class JobService {
     const appId = String.fromEnvironment('ADZUNA_APP_ID');
     const appKey = String.fromEnvironment('ADZUNA_APP_KEY');
     if (appId.isEmpty || appKey.isEmpty) return [];
-    if (country.isEmpty) return []; // unknown country — skip Adzuna
 
     final search = query ?? 'artificial intelligence machine learning';
     final url = Uri.parse(
@@ -310,12 +309,11 @@ class JobService {
     );
 
     try {
-      final response = await http.get(url).timeout(const Duration(seconds: 10));
+      final response = await http.get(url);
       if (response.statusCode != 200) return [];
 
       final data = json.decode(response.body);
       final results = data['results'] as List? ?? [];
-      final sym = _currencySymbol(country);
 
       return results.map((j) {
         final title = j['title'] ?? '';
@@ -323,9 +321,9 @@ class JobService {
         final salaryMax = j['salary_max'];
         String salaryRange = 'Salary not listed';
         if (salaryMin != null && salaryMax != null) {
-          salaryRange = '$sym${_formatSalary(salaryMin)}K – $sym${_formatSalary(salaryMax)}K';
+          salaryRange = '\$${_formatSalary(salaryMin)}K – \$${_formatSalary(salaryMax)}K';
         } else if (salaryMin != null) {
-          salaryRange = 'From $sym${_formatSalary(salaryMin)}K';
+          salaryRange = 'From \$${_formatSalary(salaryMin)}K';
         }
 
         return Job(
@@ -348,242 +346,116 @@ class JobService {
     }
   }
 
-  // ── Greenhouse Boards API (free, no key) ─────────────────────────────────
-  // Top AI companies using Greenhouse
-  static const _greenhouseBoards = [
-    'openai', 'figma', 'ramp', 'databricks', 'nvidiacorporation',
-    'airbnb', 'doordash', 'instacart', 'coinbase', 'duolingo',
-  ];
-
-  static Future<List<Job>> _fetchGreenhouseJobs({String? query}) async {
-    final searchLower = (query ?? 'ai ml machine learning').toLowerCase();
-    final aiFilter = RegExp(
-      r'(machine.?learn|data.?scien|deep.?learn|nlp|llm|computer.?vision|'
-      r'\bai\b|\bml\b|artificial.?intelligence|mlops|neural|python|pytorch)',
-      caseSensitive: false,
-    );
-
-    final allJobs = <Job>[];
-    // Query top 3 boards in parallel for speed
-    final boards = _greenhouseBoards.take(5).toList();
-    final futures = boards.map((board) async {
-      try {
-        final url = Uri.parse('https://boards-api.greenhouse.io/v1/boards/$board/jobs?content=true');
-        final resp = await http.get(url).timeout(const Duration(seconds: 8));
-        if (resp.statusCode != 200) return <Job>[];
-
-        final data = json.decode(resp.body);
-        final jobs = data['jobs'] as List? ?? [];
-        return jobs.where((j) {
-          final title = (j['title'] as String? ?? '').toLowerCase();
-          return aiFilter.hasMatch(title) || title.contains(searchLower.split(' ').first);
-        }).take(5).map((j) {
-          final loc = j['location']?['name'] as String? ?? 'Remote';
-          return Job(
-            id: 'gh_${board}_${j['id']}',
-            title: j['title'] ?? '',
-            company: board[0].toUpperCase() + board.substring(1),
-            location: loc,
-            type: loc.toLowerCase().contains('remote') ? 'Remote' : 'On-site',
-            level: _inferLevel(j['title'] ?? ''),
-            description: _stripHtml(j['content'] ?? '', 300),
-            skills: _extractSkills(j['content'] ?? ''),
-            salaryRange: 'Not disclosed',
-            postedAt: (j['updated_at'] as String? ?? '').split('T').first,
-            applyUrl: j['absolute_url'] ?? '',
-            featured: true,
-          );
-        }).toList();
-      } catch (_) {
-        return <Job>[];
-      }
-    });
-
-    final results = await Future.wait(futures);
-    for (final list in results) {
-      allJobs.addAll(list);
-    }
-    return allJobs;
-  }
-
-  // ── Ashby Job Board API (free, no key) ──────────────────────────────────
-  // Top AI companies using Ashby
-  static const _ashbyBoards = [
-    'anthropic', 'ramp', 'notion', 'vercel', 'dbt-labs',
-  ];
-
-  static Future<List<Job>> _fetchAshbyJobs({String? query}) async {
-    final aiFilter = RegExp(
-      r'(machine.?learn|data.?scien|deep.?learn|nlp|llm|computer.?vision|'
-      r'\bai\b|\bml\b|artificial.?intelligence|mlops|neural|research)',
-      caseSensitive: false,
-    );
-
-    final allJobs = <Job>[];
-    final futures = _ashbyBoards.map((board) async {
-      try {
-        final url = Uri.parse('https://api.ashbyhq.com/posting-api/job-board/$board');
-        final resp = await http.get(url).timeout(const Duration(seconds: 8));
-        if (resp.statusCode != 200) return <Job>[];
-
-        final data = json.decode(resp.body);
-        final jobs = data['jobs'] as List? ?? [];
-        return jobs.where((j) {
-          final title = (j['title'] as String? ?? '').toLowerCase();
-          return aiFilter.hasMatch(title);
-        }).take(5).map((j) {
-          final loc = j['location'] as String? ?? 'Remote';
-          final dept = j['department'] as String? ?? '';
-          return Job(
-            id: 'ash_${board}_${j['id'] ?? j.hashCode}',
-            title: j['title'] ?? '',
-            company: board[0].toUpperCase() + board.substring(1),
-            location: loc,
-            type: loc.toLowerCase().contains('remote') ? 'Remote' : 'On-site',
-            level: _inferLevel(j['title'] ?? ''),
-            description: dept.isNotEmpty ? 'Department: $dept' : 'See job posting for details.',
-            skills: _extractSkills('${j['title']} $dept'),
-            salaryRange: 'Not disclosed',
-            postedAt: (j['publishedDate'] as String? ?? '').split('T').first,
-            applyUrl: j['jobUrl'] ?? j['applyUrl'] ?? '',
-            featured: true,
-          );
-        }).toList();
-      } catch (_) {
-        return <Job>[];
-      }
-    });
-
-    final results = await Future.wait(futures);
-    for (final list in results) {
-      allJobs.addAll(list);
-    }
-    return allJobs;
-  }
-
-  // ── Lever Postings API (free, no key) ───────────────────────────────────
-  // Top AI companies using Lever
-  static const _leverBoards = [
-    'stripe', 'netflix', 'shopify', 'twitch', 'github',
-  ];
-
-  static Future<List<Job>> _fetchLeverJobs({String? query}) async {
-    final aiFilter = RegExp(
-      r'(machine.?learn|data.?scien|deep.?learn|nlp|llm|computer.?vision|'
-      r'\bai\b|\bml\b|artificial.?intelligence|mlops|neural|platform)',
-      caseSensitive: false,
-    );
-
-    final allJobs = <Job>[];
-    final futures = _leverBoards.map((board) async {
-      try {
-        final url = Uri.parse('https://api.lever.co/v0/postings/$board?mode=json');
-        final resp = await http.get(url).timeout(const Duration(seconds: 8));
-        if (resp.statusCode != 200) return <Job>[];
-
-        final data = json.decode(resp.body) as List? ?? [];
-        return data.where((j) {
-          final title = (j['text'] as String? ?? '').toLowerCase();
-          return aiFilter.hasMatch(title);
-        }).take(5).map((j) {
-          final cats = j['categories'] as Map? ?? {};
-          final loc = cats['location'] as String? ?? 'Remote';
-          final commitment = cats['commitment'] as String? ?? '';
-          return Job(
-            id: 'lever_${board}_${j['id'] ?? j.hashCode}',
-            title: j['text'] ?? '',
-            company: board[0].toUpperCase() + board.substring(1),
-            location: loc,
-            type: loc.toLowerCase().contains('remote') ? 'Remote'
-                : commitment.toLowerCase().contains('remote') ? 'Remote' : 'On-site',
-            level: _inferLevel(j['text'] ?? ''),
-            description: _stripHtml(j['descriptionPlain'] ?? j['description'] ?? '', 300),
-            skills: _extractSkills(j['descriptionPlain'] ?? j['description'] ?? ''),
-            salaryRange: 'Not disclosed',
-            postedAt: j['createdAt'] != null
-                ? DateTime.fromMillisecondsSinceEpoch(j['createdAt'] as int)
-                    .toIso8601String().split('T').first
-                : '',
-            applyUrl: j['hostedUrl'] ?? j['applyUrl'] ?? '',
-            featured: true,
-          );
-        }).toList();
-      } catch (_) {
-        return <Job>[];
-      }
-    });
-
-    final results = await Future.wait(futures);
-    for (final list in results) {
-      allJobs.addAll(list);
-    }
-    return allJobs;
-  }
-
-  static const _euCodes = {'de', 'fr', 'nl', 'be', 'at', 'ch', 'es', 'it', 'pl', 'se', 'dk', 'fi', 'no', 'ie', 'pt'};
-
-  static const _countryNames = {
-    'us': 'United States', 'gb': 'United Kingdom', 'uk': 'United Kingdom',
-    'ca': 'Canada', 'au': 'Australia', 'de': 'Germany', 'fr': 'France',
-    'in': 'India', 'nl': 'Netherlands', 'sg': 'Singapore', 'br': 'Brazil',
-    'za': 'South Africa', 'jp': 'Japan', 'kr': 'South Korea',
-    'ae': 'United Arab Emirates', 'se': 'Sweden', 'ie': 'Ireland',
-    'nz': 'New Zealand', 'ch': 'Switzerland', 'es': 'Spain', 'it': 'Italy',
-    'pl': 'Poland', 'at': 'Austria', 'mx': 'Mexico', 'ng': 'Nigeria',
+  // ── Country alias map — all terms that refer to the same country ──────────
+  static const Map<String, List<String>> _countryAliases = {
+    'gb': ['united kingdom', 'uk', 'england', 'scotland', 'wales', 'britain',
+           'great britain', 'london', 'manchester', 'birmingham', 'edinburgh'],
+    'us': ['united states', 'usa', 'u.s.', 'america', 'new york', 'san francisco',
+           'seattle', 'boston', 'chicago', 'austin', 'los angeles'],
+    'au': ['australia', 'sydney', 'melbourne', 'brisbane', 'perth'],
+    'ca': ['canada', 'toronto', 'vancouver', 'montreal', 'calgary'],
+    'de': ['germany', 'berlin', 'munich', 'hamburg', 'frankfurt'],
+    'fr': ['france', 'paris', 'lyon', 'marseille'],
+    'in': ['india', 'bangalore', 'bengaluru', 'mumbai', 'delhi', 'new delhi',
+           'hyderabad', 'pune', 'chennai', 'kolkata', 'noida', 'gurgaon',
+           'gurugram', 'ghaziabad', 'ahmedabad', 'chandigarh', 'coimbatore',
+           'navi mumbai', 'jaipur', 'karnataka', 'maharashtra', 'telangana',
+           'tamil nadu', 'rajasthan', 'uttar pradesh'],
+    'nl': ['netherlands', 'amsterdam', 'rotterdam'],
+    'sg': ['singapore'],
   };
 
-  /// Filters a job list to only keep jobs in the user's country or
-  /// genuinely location-agnostic remote roles.
-  static List<Job> _filterByCountry(List<Job> jobs, String countryCode) {
-    final cc = countryCode.toLowerCase();
-    final name = (_countryNames[cc] ?? '').toLowerCase();
-    if (name.isEmpty) {
-      // Unknown country — reject only obviously-foreign jobs but keep remotes
-      return jobs.where((j) {
+  static bool _jobMatchesCountry(Job job, String countryCode, String city, String country) {
+    final loc = job.location.toLowerCase();
+    final cityLower = city.toLowerCase();
+    final countryLower = country.toLowerCase();
+
+    // Always accept pure remote / worldwide
+    if (job.type == 'Remote' &&
+        (loc.contains('worldwide') || loc.contains('anywhere') ||
+         loc.contains('global') || loc == 'remote' || loc.isEmpty)) {
+      return true;
+    }
+
+    // Accept if location explicitly mentions user's city or country name
+    if (loc.contains(cityLower) || loc.contains(countryLower)) return true;
+
+    // Accept via alias map for user's country
+    final aliases = _countryAliases[countryCode] ?? [];
+    if (aliases.any((a) => loc.contains(a))) return true;
+
+    // Reject: check if location matches a DIFFERENT country's aliases
+    for (final entry in _countryAliases.entries) {
+      if (entry.key == countryCode) continue;
+      if (entry.value.any((a) => loc.contains(a))) return false;
+    }
+
+    // Location is ambiguous (e.g. just "Remote") — keep it
+    return true;
+  }
+
+  // ── Location-aware job search ─────────────────────────────────────────────
+  static Future<List<Job>> fetchNearbyJobs({
+    required String city,
+    required String country,
+    required String countryCode,
+    double? lat,
+    double? lng,
+    int radiusKm = 50,
+    bool includeRemote = true,
+  }) async {
+    final futures = <Future<List<Job>>>[
+      // Adzuna: scoped to the user's country
+      _fetchAdzunaJobs(query: 'artificial intelligence machine learning', country: countryCode)
+          .catchError((_) => <Job>[]),
+      // Reed: UK-specific board
+      _fetchReedJobs(query: 'artificial intelligence machine learning')
+          .catchError((_) => <Job>[]),
+    ];
+
+    if (includeRemote) {
+      futures.addAll([
+        _fetchRemotiveJobs(query: 'machine learning').catchError((_) => <Job>[]),
+        _fetchJobicyJobs(query: 'machine learning').catchError((_) => <Job>[]),
+      ]);
+    }
+
+    final results = await Future.wait(futures);
+    var jobs = results.expand((l) => l).toList();
+
+    // Deduplicate
+    final seen = <String>{};
+    jobs = jobs.where((j) => seen.add('${j.title}|${j.company}')).toList();
+
+    // ── LOCATION FILTER: only keep jobs in the user's country or truly remote ──
+    jobs = jobs.where((j) => _jobMatchesCountry(j, countryCode, city, country)).toList();
+
+    if (jobs.isEmpty) {
+      // Fallback: show remote-only jobs rather than US fallback data
+      jobs = _fallbackJobs
+          .where((j) => j.type == 'Remote' || _jobMatchesCountry(j, countryCode, city, country))
+          .toList();
+    }
+
+    // Sort: local city matches first, then country matches, then remote
+    final cityLower = city.toLowerCase();
+    final countryLower = country.toLowerCase();
+    jobs.sort((a, b) {
+      int score(Job j) {
         final loc = j.location.toLowerCase();
-        return loc.isEmpty
-            || loc.contains('remote')
-            || loc.contains('worldwide')
-            || loc.contains('anywhere')
-            || loc.contains('global');
-      }).toList();
-    }
-
-    // User's country has known aliases (US → "united states", "usa", etc.)
-    final myAliases = <String>{name, cc};
-    if (cc == 'us') myAliases.addAll(['united states', 'usa', 'u.s.']);
-    if (cc == 'gb') myAliases.addAll(['united kingdom', 'uk', 'britain', 'england']);
-
-    // Build a set of all known foreign country names to reject against
-    final foreignNames = <String>{};
-    for (final entry in _countryNames.entries) {
-      if (entry.key != cc) {
-        foreignNames.add(entry.value.toLowerCase());
-        foreignNames.add(entry.key.toLowerCase());
+        if (loc.contains(cityLower)) return 3;
+        if (loc.contains(countryLower)) return 2;
+        if (j.type == 'Remote') return 1;
+        return 0;
       }
-    }
-    // Add US/UK common aliases as foreign if user isn't in them
-    if (cc != 'us') foreignNames.addAll(['united states', 'usa', 'u.s.']);
-    if (cc != 'gb') foreignNames.addAll(['united kingdom', 'uk', 'britain']);
+      final diff = score(b) - score(a);
+      if (diff != 0) return diff;
+      if (a.featured && !b.featured) return -1;
+      if (!a.featured && b.featured) return 1;
+      return b.postedAt.compareTo(a.postedAt);
+    });
 
-    return jobs.where((j) {
-      final loc = j.location.toLowerCase();
-
-      // Keep if location explicitly mentions user's country or its aliases
-      if (myAliases.any((a) => loc.contains(a))) return true;
-
-      // Keep only truly global remote jobs (not foreign-scoped remotes)
-      if (loc.contains('worldwide') || loc.contains('anywhere') ||
-          loc.contains('global') || loc == 'remote' || loc.isEmpty) {
-        return true;
-      }
-
-      // Reject if location mentions any other known country
-      if (foreignNames.any((f) => loc.contains(f))) return false;
-
-      // Reject unknown locations — strict filtering
-      return false;
-    }).toList();
+    return jobs;
   }
 
   // ── Resume-matched jobs: country-aware search ─────────────────────────────
@@ -591,46 +463,26 @@ class JobService {
     required List<String> skills,
     required String countryCode,
     required String jobTitle,
-    String country = '',
+    String? country,
   }) async {
-    final cc = countryCode.toLowerCase();
     final query = '$jobTitle ${skills.take(3).join(' ')}';
-
-    // Source pruning: only call region-specific APIs if user is in that region
-    final futures = <Future<List<Job>>>[
-      // Always: global remote
+    final results = await Future.wait([
       _fetchRemotiveJobs(query: query).catchError((_) => <Job>[]),
       _fetchJobicyJobs(query: query).catchError((_) => <Job>[]),
-      // Always: Adzuna (supports country param)
-      _fetchAdzunaJobs(query: query, country: cc).catchError((_) => <Job>[]),
-      // Always: Direct ATS boards (Greenhouse, Ashby, Lever)
-      _fetchGreenhouseJobs(query: query).catchError((_) => <Job>[]),
-      _fetchAshbyJobs(query: query).catchError((_) => <Job>[]),
-      _fetchLeverJobs(query: query).catchError((_) => <Job>[]),
-    ];
-    // US/CA: The Muse
-    if (cc == 'us' || cc == 'ca') {
-      futures.add(_fetchTheMuseJobs(query: query).catchError((_) => <Job>[]));
-    }
-    // EU: Arbeitnow
-    if (_euCodes.contains(cc)) {
-      futures.add(_fetchArbeitnowJobs(query: query).catchError((_) => <Job>[]));
-    }
-    // UK: Reed
-    if (cc == 'gb') {
-      futures.add(_fetchReedJobs(query: query).catchError((_) => <Job>[]));
-    }
+      _fetchTheMuseJobs(query: query).catchError((_) => <Job>[]),
+      _fetchArbeitnowJobs(query: query).catchError((_) => <Job>[]),
+      _fetchAdzunaJobs(query: query, country: countryCode).catchError((_) => <Job>[]),
+      _fetchReedJobs(query: query).catchError((_) => <Job>[]),
+    ]);
 
-    final results = await Future.wait(futures);
-    var jobs = results.expand((list) => list).toList();
+    var jobs = [
+      ...results[0], ...results[1], ...results[2],
+      ...results[3], ...results[4], ...results[5],
+    ];
     if (jobs.isEmpty) jobs = List.from(_fallbackJobs);
 
-    // Deduplicate
     final seen = <String>{};
     jobs = jobs.where((j) => seen.add('${j.title}|${j.company}')).toList();
-
-    // Filter to prefer country-relevant + remote roles
-    jobs = _filterByCountry(jobs, cc);
 
     jobs.sort((a, b) {
       if (a.featured && !b.featured) return -1;
@@ -640,58 +492,31 @@ class JobService {
     return jobs;
   }
 
-  // ── Public method: fetches from all sources, filtered by country ─────────
+  // ── Public method: fetches from all sources ──────────────────────────────
   static Future<List<Job>> fetchJobs({String? query, String? type, String? level, String country = 'us'}) async {
-    final cc = country.toLowerCase();
-
-    // Source pruning based on country — skip APIs that can't serve this region
-    final futures = <Future<List<Job>>>[
-      // Global sources — always called
+    final results = await Future.wait([
       _fetchRemotiveJobs(query: query).catchError((_) => <Job>[]),
       _fetchJobicyJobs(query: query).catchError((_) => <Job>[]),
-      _fetchAdzunaJobs(query: query, country: cc).catchError((_) => <Job>[]),
-      _fetchGreenhouseJobs(query: query).catchError((_) => <Job>[]),
-      _fetchAshbyJobs(query: query).catchError((_) => <Job>[]),
-      _fetchLeverJobs(query: query).catchError((_) => <Job>[]),
+      _fetchTheMuseJobs(query: query).catchError((_) => <Job>[]),
+      _fetchArbeitnowJobs(query: query).catchError((_) => <Job>[]),
+      _fetchAdzunaJobs(query: query).catchError((_) => <Job>[]),
+      _fetchReedJobs(query: query).catchError((_) => <Job>[]),
+    ]);
+
+    var jobs = [
+      ...results[0], ...results[1], ...results[2],
+      ...results[3], ...results[4], ...results[5],
     ];
-    // US/CA: The Muse
-    if (cc == 'us' || cc == 'ca') {
-      futures.add(_fetchTheMuseJobs(query: query).catchError((_) => <Job>[]));
-    }
-    // EU: Arbeitnow
-    if (_euCodes.contains(cc)) {
-      futures.add(_fetchArbeitnowJobs(query: query).catchError((_) => <Job>[]));
-    }
-    // UK: Reed
-    if (cc == 'gb') {
-      futures.add(_fetchReedJobs(query: query).catchError((_) => <Job>[]));
-    }
-
-    final results = await Future.wait(futures);
-    var jobs = results.expand((list) => list).toList();
-
-    // Reed is UK-only
-    if (countryCode == 'gb') {
-      futures.add(_fetchReedJobs(query: query).catchError((_) => <Job>[]));
-    }
-
-    final results = await Future.wait(futures);
-    var jobs = results.expand((l) => l).toList();
 
     // Deduplicate by title+company
     final seen = <String>{};
     jobs = jobs.where((j) => seen.add('${j.title}|${j.company}')).toList();
 
     if (jobs.isEmpty) {
-      jobs = List<Job>.from(_fallbackJobs);
+      jobs = _fallbackJobs;
     }
 
-    // ⚠️ NEW: Apply country filter — stops foreign jobs leaking through
-    // (Remotive/Jobicy/Greenhouse/Ashby/Lever return global jobs; this post-filter
-    // keeps only ones relevant to user's country + worldwide remote jobs)
-    jobs = _filterByCountry(jobs, cc);
-
-    // Apply user-facing filters
+    // Apply filters
     if (type != null && type != 'All') {
       jobs = jobs.where((j) => j.type == type).toList();
     }
@@ -706,8 +531,6 @@ class JobService {
       return b.postedAt.compareTo(a.postedAt);
     });
 
-    _lastJobCount = jobs.length;
-    _lastFeaturedCount = jobs.where((j) => j.featured).length;
     return jobs;
   }
 
@@ -738,14 +561,9 @@ class JobService {
     return clean.length > maxLength ? '${clean.substring(0, maxLength)}...' : clean;
   }
 
-  // Skills that are substrings of other skills need word-boundary matching
-  static final _wordBoundarySkills = {
-    'java', 'go', 'sql', 'nlp', 'r', 'ai', 'ml', 'c',
-  };
-
   static List<String> _extractSkills(String text) {
     final allSkills = [
-      'Python', 'JavaScript', 'TypeScript', 'Java', 'C++', 'Go', 'Rust', 'SQL',
+      'Python', 'Java', 'C++', 'Go', 'Rust', 'TypeScript', 'JavaScript', 'SQL',
       'TensorFlow', 'PyTorch', 'Keras', 'Scikit-learn', 'Pandas', 'NumPy',
       'AWS', 'GCP', 'Azure', 'Docker', 'Kubernetes', 'MLflow',
       'NLP', 'Computer Vision', 'Deep Learning', 'Machine Learning',
@@ -757,17 +575,8 @@ class JobService {
     final found = <String>[];
     final lower = text.toLowerCase();
     for (final skill in allSkills) {
-      if (found.length >= 5) break;
-      final skillLower = skill.toLowerCase();
-      if (_wordBoundarySkills.contains(skillLower)) {
-        // Use word-boundary regex to avoid "Java" matching "JavaScript" etc.
-        if (RegExp('\\b${RegExp.escape(skillLower)}\\b').hasMatch(lower)) {
-          found.add(skill);
-        }
-      } else {
-        if (lower.contains(skillLower)) {
-          found.add(skill);
-        }
+      if (lower.contains(skill.toLowerCase()) && found.length < 5) {
+        found.add(skill);
       }
     }
     return found.isEmpty ? ['AI/ML'] : found;
@@ -779,11 +588,8 @@ class JobService {
     return (val / 1000).round().toString();
   }
 
-  // Dynamic counts — updated after each fetch
-  static int _lastJobCount = 0;
-  static int _lastFeaturedCount = 0;
-  static int get totalJobs => _lastJobCount > 0 ? _lastJobCount : 12;
-  static int get featuredJobs => _lastFeaturedCount > 0 ? _lastFeaturedCount : 4;
+  static int get totalJobs => 12;
+  static int get featuredJobs => 4;
 
   // ── Fallback data if APIs are unreachable ────────────────────────────────
   static final List<Job> _fallbackJobs = [
@@ -791,7 +597,7 @@ class JobService {
       location: 'London, UK', type: 'Hybrid', level: 'Senior',
       description: 'Build and deploy large-scale machine learning models for next-gen AI products.',
       skills: ['Python', 'TensorFlow', 'PyTorch', 'Transformers', 'MLOps'],
-      salaryRange: '£140K – £220K', postedAt: '2026-03-19', applyUrl: '', featured: true),
+      salaryRange: '\$180K – \$280K', postedAt: '2026-03-19', applyUrl: '', featured: true),
     Job(id: 'f2', title: 'LLM Research Scientist', company: 'Anthropic',
       location: 'San Francisco, CA', type: 'Hybrid', level: 'Senior',
       description: 'Conduct foundational research on large language model alignment and safety.',
@@ -816,6 +622,6 @@ class JobService {
       location: 'Stockholm, Sweden', type: 'Remote', level: 'Mid',
       description: 'Design and maintain ML infrastructure for recommendation systems.',
       skills: ['Kubernetes', 'Docker', 'Python', 'MLflow', 'AWS'],
-      salaryRange: 'SEK 85K – 120K/mo', postedAt: '2026-03-15', applyUrl: ''),
+      salaryRange: '\$130K – \$190K', postedAt: '2026-03-15', applyUrl: ''),
   ];
 }

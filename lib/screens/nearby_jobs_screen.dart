@@ -6,7 +6,6 @@ import '../theme/app_theme.dart';
 import '../models/job.dart';
 import '../services/job_service.dart';
 import '../services/location_service.dart';
-import 'package:geolocator/geolocator.dart';
 
 enum _LocState { idle, locating, loading, results, denied, error }
 
@@ -424,9 +423,7 @@ class _NearbyJobsScreenState extends State<NearbyJobsScreen> {
             ),
             const SizedBox(height: 24),
             GestureDetector(
-              onTap: () async {
-                await Geolocator.openAppSettings();
-              },
+              onTap: () {},
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 decoration: BoxDecoration(
