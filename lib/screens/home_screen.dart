@@ -139,11 +139,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   void _onNavTap(int i) {
-    if (i == 1) {
-      Navigator.push(context, MaterialPageRoute(
-          builder: (_) => DiscoverScreen(theme: AppTheme(_mode))));
-      return;
-    }
     if (i == 2) {
       Navigator.push(context, MaterialPageRoute(
           builder: (_) => BookmarksScreen(theme: AppTheme(_mode))));
@@ -165,7 +160,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       opacity: Tween<double>(begin: 0.9, end: 1.0).animate(_fadeAnim),
       child: Scaffold(
         backgroundColor: t.background,
-        body: SafeArea(
+        body: _bottomIndex == 0
+          ? DiscoverScreen(theme: t)
+          : SafeArea(
           child: _loading
             ? ArticleShimmer(theme: t)
             : _error != null
@@ -305,8 +302,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             showSelectedLabels: false, showUnselectedLabels: false,
             type: BottomNavigationBarType.fixed,
             items: const [
-              BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home_rounded), label: 'Home'),
               BottomNavigationBarItem(icon: Icon(Icons.explore_outlined), activeIcon: Icon(Icons.explore_rounded), label: 'Discover'),
+              BottomNavigationBarItem(icon: Icon(Icons.article_outlined), activeIcon: Icon(Icons.article_rounded), label: 'News'),
               BottomNavigationBarItem(icon: Icon(Icons.bookmark_border_rounded), activeIcon: Icon(Icons.bookmark_rounded), label: 'Bookmarks'),
               BottomNavigationBarItem(icon: Icon(Icons.person_outline_rounded), activeIcon: Icon(Icons.person_rounded), label: 'Profile'),
             ],
