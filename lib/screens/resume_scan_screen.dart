@@ -1835,54 +1835,22 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
                       : 'Needs work — expand below for fixes',
                     style: GoogleFonts.inter(fontSize: 11, color: t.muted)),
                 ])),
-                // Expand arrow for details
-                GestureDetector(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (_) => DraggableScrollableSheet(
-                        expand: false,
-                        initialChildSize: 0.5,
-                        minChildSize: 0.3,
-                        maxChildSize: 0.8,
-                        builder: (_, ctrl) => Container(
-                          decoration: BoxDecoration(
-                            color: t.background,
-                            borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(20))),
-                          child: Column(children: [
-                            Center(child: Container(
-                              margin: const EdgeInsets.only(top: 12, bottom: 8),
-                              width: 36, height: 4,
-                              decoration: BoxDecoration(
-                                color: t.muted.withValues(alpha: 0.25),
-                                borderRadius: BorderRadius.circular(2)))),
-                            Expanded(child: SingleChildScrollView(
-                              controller: ctrl,
-                              padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-                              child: _AtsScoreCard(
-                                score: _profile!.atsScore,
-                                issues: _profile!.atsIssues,
-                                add: _profile!.atsAdd,
-                                remove: _profile!.atsRemove,
-                                theme: t),
-                            )),
-                          ]),
-                        ),
-                      ),
-                    );
-                  },
-                  child: Icon(Icons.chevron_right_rounded,
-                    size: 18, color: t.muted),
-                ),
               ]),
             ],
           ]),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
+
+        // Full ATS analysis inline (Add / Remove / Before-After)
+        if (_profile != null && _profile!.atsScore > 0) ...[
+          _AtsScoreCard(
+            score: _profile!.atsScore,
+            issues: _profile!.atsIssues,
+            add: _profile!.atsAdd,
+            remove: _profile!.atsRemove,
+            theme: t),
+          const SizedBox(height: 8),
+        ],
 
         // ── GROUP 2: YOUR PLAN ───────────────────────────────────────────
         if (_recLoading) ...[
