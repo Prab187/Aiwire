@@ -44,8 +44,8 @@ Education:
 
   /// Analyze the picked file with Claude and return a ResumeProfile.
   static Future<ResumeProfile> analyzeResume(PlatformFile file) async {
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
-    if (apiKey.isEmpty) throw Exception('ANTHROPIC_API_KEY not configured');
+    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: 'proxy');
+    // Proxy injects key server-side; local check skipped.
 
     final bytes = file.bytes;
     if (bytes == null || bytes.isEmpty) throw Exception('Could not read file');
@@ -69,7 +69,7 @@ Education:
 Determine the country from: address, phone country code (+44 = gb, +1 = us/ca, +91 = in, +61 = au, +49 = de, etc.), or any location mention.''';
 
     final response = await http.post(
-      Uri.parse('https://api.anthropic.com/v1/messages'),
+      Uri.parse('https://aiwire-proxy.prab187.workers.dev'),
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,

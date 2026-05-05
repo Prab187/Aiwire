@@ -272,7 +272,7 @@ Get yours: aiwire.app''';
   Future<void> _generateRecommendation({String? manualContext}) async {
     setState(() { _recLoading = true; _recommendation = null; });
 
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: 'proxy');
     if (apiKey.isEmpty) {
       setState(() { _recLoading = false; _recommendation = 'API key not configured.'; });
       return;
@@ -406,7 +406,7 @@ Address by first name. Direct. Complete sentences.''';
       final client = http.Client();
       try {
         response = await client.post(
-          Uri.parse('https://api.anthropic.com/v1/messages'),
+          Uri.parse('https://aiwire-proxy.prab187.workers.dev'),
           headers: {
             'Content-Type': 'application/json',
             'x-api-key': apiKey,
@@ -3932,7 +3932,7 @@ class _NewsArticleSheetState extends State<_NewsArticleSheet> {
   }
 
   Future<void> _fetchSummary() async {
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: 'proxy');
     if (apiKey.isEmpty) {
       if (mounted) setState(() {
         _loading = false;
@@ -3964,7 +3964,7 @@ ${description.isNotEmpty ? description : "(no extended description — infer fro
 
     try {
       final response = await http.post(
-        Uri.parse('https://api.anthropic.com/v1/messages'),
+        Uri.parse('https://aiwire-proxy.prab187.workers.dev'),
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,

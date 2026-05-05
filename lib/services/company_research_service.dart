@@ -57,8 +57,8 @@ class CompanyResearchService {
         ttl: const Duration(days: 7)); // shorter cache since news changes
     if (cached != null) return cached;
 
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
-    if (apiKey.isEmpty) throw Exception('API key not configured');
+    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: 'proxy');
+    // Proxy injects key server-side.
 
     // Pull real news BEFORE calling Claude so it has current grounding
     final recentNews = await _fetchRecentNews(company);

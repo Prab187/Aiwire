@@ -91,7 +91,7 @@ class _SalaryCalculatorScreenState extends State<SalaryCalculatorScreen> {
       _marketTrend = null; _dataCaveat = null;
     });
 
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: 'proxy');
     if (apiKey.isEmpty) {
       setState(() { _error = 'API key not configured'; _loading = false; });
       return;
