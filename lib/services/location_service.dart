@@ -1,3 +1,9 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+import 'location_service_stub.dart'
+    if (dart.library.js_interop) 'location_service_web.dart';
+
 class LocationResult {
   final double lat;
   final double lng;
@@ -18,7 +24,58 @@ class LocationResult {
 
 class LocationService {
   static Future<LocationResult> getCurrentLocation() async {
-    throw Exception('Location is not available on this platform.');
+    final coords = await nativeGetCoords();
+    return _reverseGeocode(coords.lat, coords.lng);
+  }
+
+  static Future<LocationResult> _reverseGeocode(double lat, double lng) async {
+    try {
+      final url = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse'
+        '?lat=$lat&lon=$lng&format=json&addressdetails=1',
+      );
+      final response = await http.get(url, headers: {
+        'User-Agent': 'AIWire/1.0 (web; location lookup)',
+      }).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        final address = data['address'] as Map<String, dynamic>? ?? {};
+        final city = (address['city'] ??
+            address['town'] ??
+            address['village'] ??
+            address['county'] ??
+            address['state'] ??
+            'Unknown City') as String;
+        final country = (address['country'] ?? 'Unknown Country') as String;
+        final rawCode = ((address['country_code'] as String?) ?? '').toLowerCase();
+        return LocationResult(
+          lat: lat,
+          lng: lng,
+          city: city,
+          country: country,
+          countryCode: _toAdzunaCode(rawCode),
+          displayName: '$city, $country',
+        );
+      }
+    } catch (_) {}
+
+    return LocationResult(
+      lat: lat,
+      lng: lng,
+      city: 'Your Location',
+      country: 'Unknown',
+      countryCode: '',
+      displayName: '${lat.toStringAsFixed(3)}, ${lng.toStringAsFixed(3)}',
+    );
+  }
+
+  static String _toAdzunaCode(String iso) {
+    const supported = {
+      'us', 'gb', 'au', 'ca', 'de', 'fr', 'in', 'nl', 'sg', 'br',
+      'za', 'pl', 'es', 'it', 'at', 'be', 'ch', 'nz', 'mx',
+    };
+    return supported.contains(iso) ? iso : '';
   }
 
   static double distanceKm(double lat1, double lng1, double lat2, double lng2) {
@@ -38,7 +95,9 @@ class LocationService {
   static double _sqrt(double x) {
     if (x <= 0) return 0;
     double g = x / 2;
-    for (int i = 0; i < 20; i++) { g = (g + x / g) / 2; }
+    for (int i = 0; i < 20; i++) {
+      g = (g + x / g) / 2;
+    }
     return g;
   }
 }
