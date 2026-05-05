@@ -57,8 +57,8 @@ class AIService {
     String? cacheKey,
     ResumeProfile? personalizeFor,
   }) async {
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
-    if (apiKey.isEmpty) throw Exception('ANTHROPIC_API_KEY not configured');
+    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: 'proxy');
+    // Proxy injects key server-side; local check skipped.
     final context = description ?? content ?? '';
 
     final isPersonalized = personalizeFor != null;

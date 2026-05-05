@@ -44,7 +44,10 @@ enum _ScanState { idle, analyzing, results, error }
 
 class ResumeScanScreen extends StatefulWidget {
   final AppTheme theme;
-  const ResumeScanScreen({super.key, required this.theme});
+  /// Optional kickoff action: 'upload' opens the file picker on first frame,
+  /// 'sample' loads the built-in sample resume. null shows the idle screen.
+  final String? autoStart;
+  const ResumeScanScreen({super.key, required this.theme, this.autoStart});
 
   @override
   State<ResumeScanScreen> createState() => _ResumeScanScreenState();
@@ -125,6 +128,16 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
     _pulse = Tween<double>(begin: 0.85, end: 1.0).animate(
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
     _tabCtrl = TabController(length: 2, vsync: this);
+
+    // Honor the autoStart hint from callers (e.g. the home page's
+    // Upload Resume / Try Sample buttons).
+    final action = widget.autoStart;
+    if (action == 'upload' || action == 'sample') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _pickAndScan(useSample: action == 'sample');
+      });
+    }
   }
 
   @override
@@ -272,7 +285,7 @@ Get yours: aiwire.app''';
   Future<void> _generateRecommendation({String? manualContext}) async {
     setState(() { _recLoading = true; _recommendation = null; });
 
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: 'proxy');
     if (apiKey.isEmpty) {
       setState(() { _recLoading = false; _recommendation = 'API key not configured.'; });
       return;
@@ -406,7 +419,7 @@ Address by first name. Direct. Complete sentences.''';
       final client = http.Client();
       try {
         response = await client.post(
-          Uri.parse('https://api.anthropic.com/v1/messages'),
+          Uri.parse('https://aiwire-proxy.prab187.workers.dev'),
           headers: {
             'Content-Type': 'application/json',
             'x-api-key': apiKey,
@@ -834,7 +847,7 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
           icon: Icon(Icons.arrow_back_ios_new_rounded, color: t.primary, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Resume Scanner',
+        title: Text('Career Builder',
           style: GoogleFonts.sourceSerif4(
             fontSize: 20, fontWeight: FontWeight.w600, color: t.primary)),
         centerTitle: true,
@@ -1822,52 +1835,48 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
                       : 'Needs work — expand below for fixes',
                     style: GoogleFonts.inter(fontSize: 11, color: t.muted)),
                 ])),
-                // Expand arrow for details
-                GestureDetector(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (_) => DraggableScrollableSheet(
-                        expand: false,
-                        initialChildSize: 0.5,
-                        minChildSize: 0.3,
-                        maxChildSize: 0.8,
-                        builder: (_, ctrl) => Container(
-                          decoration: BoxDecoration(
-                            color: t.background,
-                            borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(20))),
-                          child: Column(children: [
-                            Center(child: Container(
-                              margin: const EdgeInsets.only(top: 12, bottom: 8),
-                              width: 36, height: 4,
-                              decoration: BoxDecoration(
-                                color: t.muted.withValues(alpha: 0.25),
-                                borderRadius: BorderRadius.circular(2)))),
-                            Expanded(child: SingleChildScrollView(
-                              controller: ctrl,
-                              padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-                              child: _AtsScoreCard(
-                                score: _profile!.atsScore,
-                                issues: _profile!.atsIssues,
-                                theme: t),
-                            )),
-                          ]),
-                        ),
-                      ),
-                    );
-                  },
-                  child: Icon(Icons.chevron_right_rounded,
-                    size: 18, color: t.muted),
-                ),
               ]),
             ],
           ]),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
+
+        // Full ATS analysis inline (Add / Remove / Before-After) — collapsed by default
+        if (_profile != null && _profile!.atsScore > 0) ...[
+          Container(
+            decoration: BoxDecoration(
+              color: t.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: t.divider, width: 0.5)),
+            child: Theme(
+              data: Theme.of(context).copyWith(
+                dividerColor: Colors.transparent,
+                splashColor: Colors.transparent,
+                highlightColor: Colors.transparent,
+              ),
+              child: ExpansionTile(
+                tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                iconColor: t.muted,
+                collapsedIconColor: t.muted,
+                leading: Icon(Icons.fact_check_outlined, size: 20, color: t.primary),
+                title: Text('ATS Scanner Details', style: GoogleFonts.inter(
+                  fontSize: 14, fontWeight: FontWeight.w700, color: t.primary)),
+                subtitle: Text('What to add, what to remove, before/after',
+                  style: GoogleFonts.inter(fontSize: 11, color: t.muted)),
+                children: [
+                  _AtsScoreCard(
+                    score: _profile!.atsScore,
+                    issues: _profile!.atsIssues,
+                    add: _profile!.atsAdd,
+                    remove: _profile!.atsRemove,
+                    theme: t),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
 
         // ── GROUP 2: YOUR PLAN ───────────────────────────────────────────
         if (_recLoading) ...[
@@ -2364,7 +2373,8 @@ class _MockInterviewJobCard extends StatelessWidget {
             }
           },
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            height: 32,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
               color: const Color(0xFF8B5CF6),
               borderRadius: BorderRadius.circular(8)),
@@ -2469,14 +2479,14 @@ class _RecommendationContent extends StatelessWidget {
       ]);
     }
 
-    // Collapsible mode — polished accordion, first section expanded
+    // Collapsible mode — polished accordion, all sections collapsed by default
     return Column(children: [
       for (var i = 0; i < sections.length; i++)
         _AccordionSection(
           theme: t,
           section: sections[i],
           index: i,
-          initiallyExpanded: i == 0,
+          initiallyExpanded: false,
         ),
     ]);
   }
@@ -3416,8 +3426,16 @@ class _CollapsibleRowState extends State<_CollapsibleRow> {
 class _AtsScoreCard extends StatelessWidget {
   final int score;
   final List<String> issues;
+  final List<String> add;
+  final List<String> remove;
   final AppTheme theme;
-  const _AtsScoreCard({required this.score, required this.issues, required this.theme});
+  const _AtsScoreCard({
+    required this.score,
+    required this.issues,
+    this.add = const [],
+    this.remove = const [],
+    required this.theme,
+  });
 
   Color get _color => score >= 80
       ? const Color(0xFF10B981) : score >= 60
@@ -3478,26 +3496,140 @@ class _AtsScoreCard extends StatelessWidget {
               style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
           ])),
         ]),
+
+        // ── What to ADD ──
+        if (add.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Divider(height: 1, color: t.divider),
+          const SizedBox(height: 12),
+          Row(children: [
+            Container(
+              width: 18, height: 18,
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4)),
+              child: const Icon(Icons.add_rounded, size: 12, color: Color(0xFF10B981)),
+            ),
+            const SizedBox(width: 8),
+            Text('What to add', style: GoogleFonts.inter(
+              fontSize: 12, fontWeight: FontWeight.w700,
+              color: const Color(0xFF10B981), letterSpacing: 0.3)),
+          ]),
+          const SizedBox(height: 10),
+          ...add.map((item) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Icon(Icons.add_circle_rounded, size: 13, color: Color(0xFF10B981)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: Text(item, style: GoogleFonts.inter(
+                fontSize: 13, color: t.primary.withValues(alpha: 0.9), height: 1.5))),
+            ]),
+          )),
+        ],
+
+        // ── What to REMOVE ──
+        if (remove.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Divider(height: 1, color: t.divider),
+          const SizedBox(height: 12),
+          Row(children: [
+            Container(
+              width: 18, height: 18,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4)),
+              child: const Icon(Icons.remove_rounded, size: 12, color: Color(0xFFEF4444)),
+            ),
+            const SizedBox(width: 8),
+            Text('What to remove', style: GoogleFonts.inter(
+              fontSize: 12, fontWeight: FontWeight.w700,
+              color: const Color(0xFFEF4444), letterSpacing: 0.3)),
+          ]),
+          const SizedBox(height: 10),
+          ...remove.map((item) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Icon(Icons.remove_circle_rounded, size: 13, color: Color(0xFFEF4444)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: Text(item, style: GoogleFonts.inter(
+                fontSize: 13, color: t.primary.withValues(alpha: 0.9), height: 1.5))),
+            ]),
+          )),
+        ],
+
         if (issues.isNotEmpty) ...[
           const SizedBox(height: 14),
           Divider(height: 1, color: t.divider),
           const SizedBox(height: 12),
-          Text('How to improve', style: GoogleFonts.inter(
+          Text('Before → After rewrites', style: GoogleFonts.inter(
             fontSize: 11, fontWeight: FontWeight.w700, color: t.muted, letterSpacing: 0.4)),
-          const SizedBox(height: 8),
-          ...issues.map((issue) => Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Container(
-                margin: const EdgeInsets.only(top: 6),
-                width: 4, height: 4,
-                decoration: BoxDecoration(color: _color, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 8),
-              Expanded(child: Text(issue, style: GoogleFonts.inter(
-                fontSize: 13, color: t.primary.withValues(alpha: 0.85), height: 1.5))),
-            ]),
-          )),
+          const SizedBox(height: 10),
+          ...issues.map((issue) {
+            final parts = issue.split(' → ');
+            final hasBeforeAfter = parts.length == 2;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: hasBeforeAfter
+                ? Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: t.background,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: t.divider, width: 0.5)),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(4)),
+                          child: Text('Before', style: GoogleFonts.inter(
+                            fontSize: 9, fontWeight: FontWeight.w700,
+                            color: const Color(0xFFEF4444), letterSpacing: 0.3)),
+                        ),
+                      ]),
+                      const SizedBox(height: 6),
+                      Text(parts[0], style: GoogleFonts.inter(
+                        fontSize: 12.5, color: t.primary.withValues(alpha: 0.6),
+                        height: 1.45,
+                        decoration: TextDecoration.lineThrough,
+                        decorationColor: t.primary.withValues(alpha: 0.35))),
+                      const SizedBox(height: 10),
+                      Row(children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4)),
+                          child: Text('After', style: GoogleFonts.inter(
+                            fontSize: 9, fontWeight: FontWeight.w700,
+                            color: const Color(0xFF10B981), letterSpacing: 0.3)),
+                        ),
+                      ]),
+                      const SizedBox(height: 6),
+                      Text(parts[1], style: GoogleFonts.inter(
+                        fontSize: 12.5, color: t.primary, height: 1.45,
+                        fontWeight: FontWeight.w500)),
+                    ]),
+                  )
+                : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Container(
+                      margin: const EdgeInsets.only(top: 6),
+                      width: 4, height: 4,
+                      decoration: BoxDecoration(color: _color, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(issue, style: GoogleFonts.inter(
+                      fontSize: 13, color: t.primary.withValues(alpha: 0.85), height: 1.5))),
+                  ]),
+            );
+          }),
         ],
       ]),
     );
@@ -3569,33 +3701,34 @@ class _RecCertCard extends StatelessWidget {
               maxLines: 2, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 2),
             Text(cert.provider, style: GoogleFonts.inter(fontSize: 12, color: t.secondary)),
+            const SizedBox(height: 6),
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4)),
+                child: Text(cert.level, style: GoogleFonts.inter(
+                  fontSize: 10, fontWeight: FontWeight.w700, color: accent)),
+              ),
+              if (cert.duration != null) ...[
+                const SizedBox(width: 6),
+                Icon(Icons.schedule_rounded, size: 11, color: t.muted),
+                const SizedBox(width: 3),
+                Flexible(child: Text(cert.duration!, style: GoogleFonts.inter(
+                  fontSize: 11, color: t.muted), overflow: TextOverflow.ellipsis)),
+              ],
+              if (cert.rating != null) ...[
+                const SizedBox(width: 6),
+                Icon(Icons.star_rounded, size: 11, color: t.muted),
+                const SizedBox(width: 2),
+                Text(cert.rating!.toStringAsFixed(1), style: GoogleFonts.inter(
+                  fontSize: 11, color: t.secondary, fontWeight: FontWeight.w500)),
+              ],
+            ]),
           ])),
-        ]),
-        Row(children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(4)),
-            child: Text(cert.level, style: GoogleFonts.inter(
-              fontSize: 10, fontWeight: FontWeight.w700, color: accent)),
-          ),
-          if (cert.duration != null) ...[
-            const SizedBox(width: 6),
-            Icon(Icons.schedule_rounded, size: 11, color: t.muted),
-            const SizedBox(width: 3),
-            Flexible(child: Text(cert.duration!, style: GoogleFonts.inter(
-              fontSize: 11, color: t.muted), overflow: TextOverflow.ellipsis)),
-          ],
-          if (cert.rating != null) ...[
-            const SizedBox(width: 6),
-            Icon(Icons.star_rounded, size: 11, color: t.muted),
-            const SizedBox(width: 2),
-            Text(cert.rating!.toStringAsFixed(1), style: GoogleFonts.inter(
-              fontSize: 11, color: t.secondary, fontWeight: FontWeight.w500)),
-          ],
-          const Spacer(),
-          if (cert.url != null && cert.url!.isNotEmpty)
+          if (cert.url != null && cert.url!.isNotEmpty) ...[
+            const SizedBox(width: 10),
             GestureDetector(
               onTap: () async {
                 HapticFeedback.lightImpact();
@@ -3605,13 +3738,19 @@ class _RecCertCard extends StatelessWidget {
                 }
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                height: 32,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
                 decoration: BoxDecoration(
-                  color: t.primary, borderRadius: BorderRadius.circular(8)),
-                child: Text('Enroll', style: GoogleFonts.inter(
-                  fontSize: 13, fontWeight: FontWeight.w600, color: t.background)),
+                  color: accent, borderRadius: BorderRadius.circular(8)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.school_rounded, size: 13, color: Colors.white),
+                  const SizedBox(width: 5),
+                  Text('Enroll', style: GoogleFonts.inter(
+                    fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
+                ]),
               ),
             ),
+          ],
         ]),
       ]),
     );
@@ -3755,9 +3894,30 @@ class _RecEventCard extends StatelessWidget {
               ],
             ]),
           ])),
-          const SizedBox(width: 8),
-          if (event.registrationUrl != null && event.registrationUrl!.isNotEmpty)
-            Icon(Icons.arrow_forward_ios_rounded, size: 12, color: t.muted),
+          if (event.registrationUrl != null && event.registrationUrl!.isNotEmpty) ...[
+            const SizedBox(width: 10),
+            GestureDetector(
+              onTap: () async {
+                HapticFeedback.lightImpact();
+                final uri = Uri.parse(event.registrationUrl!);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+              child: Container(
+                height: 32,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(
+                  color: _pink, borderRadius: BorderRadius.circular(8)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.event_available_rounded, size: 13, color: Colors.white),
+                  const SizedBox(width: 5),
+                  Text('Enroll', style: GoogleFonts.inter(
+                    fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
+                ]),
+              ),
+            ),
+          ],
         ]),
       ),
     );
@@ -3903,7 +4063,7 @@ class _NewsArticleSheetState extends State<_NewsArticleSheet> {
   }
 
   Future<void> _fetchSummary() async {
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: 'proxy');
     if (apiKey.isEmpty) {
       if (mounted) setState(() {
         _loading = false;
@@ -3935,7 +4095,7 @@ ${description.isNotEmpty ? description : "(no extended description — infer fro
 
     try {
       final response = await http.post(
-        Uri.parse('https://api.anthropic.com/v1/messages'),
+        Uri.parse('https://aiwire-proxy.prab187.workers.dev'),
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,

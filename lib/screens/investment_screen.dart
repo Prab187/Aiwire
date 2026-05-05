@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -620,11 +621,15 @@ class _FundingNewsFeedState extends State<_FundingNewsFeed> {
     final collected = <Map<String, String>>[];
     final seenTitles = <String>{};
 
-    // Fetch all feeds in parallel, but collect successfully parsed items
+    // Fetch all feeds in parallel, but collect successfully parsed items.
+    // Web builds route through the Cloudflare proxy to bypass browser CORS.
     await Future.wait(_feeds.map((feedUrl) async {
       try {
+        final fetchUrl = kIsWeb
+            ? 'https://aiwire-proxy.prab187.workers.dev/rss?url=${Uri.encodeComponent(feedUrl)}'
+            : feedUrl;
         final response = await http.get(
-          Uri.parse(feedUrl),
+          Uri.parse(fetchUrl),
           headers: {'User-Agent': 'Mozilla/5.0 (AIWire)'},
         ).timeout(const Duration(seconds: 10));
         if (response.statusCode != 200) return;
@@ -872,7 +877,7 @@ class _InvestmentArticleSheetState extends State<_InvestmentArticleSheet> {
   }
 
   Future<void> _fetchSummary() async {
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: 'proxy');
     if (apiKey.isEmpty) {
       if (mounted) setState(() {
         _loading = false;

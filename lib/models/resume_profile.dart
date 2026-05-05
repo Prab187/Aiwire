@@ -60,6 +60,8 @@ class ResumeProfile {
   final List<SkillGap> structuredGaps;  // New: detailed gaps with severity + resources
   final int atsScore;
   final List<String> atsIssues;
+  final List<String> atsAdd;
+  final List<String> atsRemove;
 
   const ResumeProfile({
     required this.name,
@@ -78,7 +80,31 @@ class ResumeProfile {
     this.structuredGaps = const [],
     this.atsScore = 0,
     this.atsIssues = const [],
+    this.atsAdd = const [],
+    this.atsRemove = const [],
   });
+
+  static const List<String> _atsAddDefaults = [
+    "Add a 'Skills' section near the top with comma-separated keywords — ATS parsers index this first",
+    "Add quantified impact (% improved, time saved, dollars) on every bullet",
+    "Add 1-2 cloud or MLOps keywords (AWS / Docker / Kubernetes) that match common JDs",
+    "Add a 'Projects' section with 2-4 concrete examples and outcomes",
+  ];
+
+  static const List<String> _atsRemoveDefaults = [
+    "Remove the 'Objective' or 'Summary of intent' paragraph — most ATS strip it",
+    "Remove icons, photos, and multi-column layouts — they break Workday/Greenhouse parsers",
+    "Remove vague phrases like 'responsible for' / 'worked on' — replace with action verbs",
+    "Remove unrelated old experience that no longer supports your target role",
+  ];
+
+  /// Returns the model's list if non-empty, otherwise a sensible default
+  /// so users always see actionable suggestions on the ATS card.
+  static List<String> _atsFallback(dynamic raw, List<String> defaults) {
+    final parsed = _toStringList(raw);
+    if (parsed.isNotEmpty) return parsed;
+    return List<String>.from(defaults);
+  }
 
   /// Defensive string-list extractor: handles Strings, Maps (common keys:
   /// name, title, text, description, before/after), and raw toString() fallback.
@@ -156,6 +182,8 @@ class ResumeProfile {
       structuredGaps: structured,
       atsScore: (json['ats_score'] as num?)?.toInt() ?? 0,
       atsIssues: _toStringList(json['ats_issues']),
+      atsAdd: _atsFallback(json['ats_add'], _atsAddDefaults),
+      atsRemove: _atsFallback(json['ats_remove'], _atsRemoveDefaults),
     );
   }
 

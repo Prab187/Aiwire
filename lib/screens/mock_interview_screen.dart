@@ -192,7 +192,7 @@ class _MockInterviewScreenState extends State<MockInterviewScreen>
     // if (!await checkAiQuotaOrShowPaywall(context, t)) return;
     setState(() { _loading = true; _error = null; });
 
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: 'proxy');
     if (apiKey.isEmpty) {
       setState(() { _error = 'API key not configured'; _loading = false; });
       return;
@@ -293,7 +293,7 @@ Rules:
       _prepGuide = null;
     });
 
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: 'proxy');
     if (apiKey.isEmpty) {
       setState(() {
         _prepError = 'API key not configured';
@@ -396,7 +396,7 @@ Keep it concise, direct, and tailored. No fluff. No generic advice. Reference $_
 
     setState(() => _loading = true);
 
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: 'proxy');
     final companyLine = _company.trim().isEmpty
         ? 'COMPANY: Top tech company (FAANG-style bar)'
         : 'COMPANY: ${_company.trim()} — score as if this company\'s interviewer was evaluating';
