@@ -3496,22 +3496,69 @@ class _AtsScoreCard extends StatelessWidget {
           const SizedBox(height: 14),
           Divider(height: 1, color: t.divider),
           const SizedBox(height: 12),
-          Text('How to improve', style: GoogleFonts.inter(
+          Text('Before → After rewrites', style: GoogleFonts.inter(
             fontSize: 11, fontWeight: FontWeight.w700, color: t.muted, letterSpacing: 0.4)),
-          const SizedBox(height: 8),
-          ...issues.map((issue) => Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Container(
-                margin: const EdgeInsets.only(top: 6),
-                width: 4, height: 4,
-                decoration: BoxDecoration(color: _color, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 8),
-              Expanded(child: Text(issue, style: GoogleFonts.inter(
-                fontSize: 13, color: t.primary.withValues(alpha: 0.85), height: 1.5))),
-            ]),
-          )),
+          const SizedBox(height: 10),
+          ...issues.map((issue) {
+            final parts = issue.split(' → ');
+            final hasBeforeAfter = parts.length == 2;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: hasBeforeAfter
+                ? Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: t.background,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: t.divider, width: 0.5)),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(4)),
+                          child: Text('Before', style: GoogleFonts.inter(
+                            fontSize: 9, fontWeight: FontWeight.w700,
+                            color: const Color(0xFFEF4444), letterSpacing: 0.3)),
+                        ),
+                      ]),
+                      const SizedBox(height: 6),
+                      Text(parts[0], style: GoogleFonts.inter(
+                        fontSize: 12.5, color: t.primary.withValues(alpha: 0.6),
+                        height: 1.45,
+                        decoration: TextDecoration.lineThrough,
+                        decorationColor: t.primary.withValues(alpha: 0.35))),
+                      const SizedBox(height: 10),
+                      Row(children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4)),
+                          child: Text('After', style: GoogleFonts.inter(
+                            fontSize: 9, fontWeight: FontWeight.w700,
+                            color: const Color(0xFF10B981), letterSpacing: 0.3)),
+                        ),
+                      ]),
+                      const SizedBox(height: 6),
+                      Text(parts[1], style: GoogleFonts.inter(
+                        fontSize: 12.5, color: t.primary, height: 1.45,
+                        fontWeight: FontWeight.w500)),
+                    ]),
+                  )
+                : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Container(
+                      margin: const EdgeInsets.only(top: 6),
+                      width: 4, height: 4,
+                      decoration: BoxDecoration(color: _color, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(issue, style: GoogleFonts.inter(
+                      fontSize: 13, color: t.primary.withValues(alpha: 0.85), height: 1.5))),
+                  ]),
+            );
+          }),
         ],
       ]),
     );

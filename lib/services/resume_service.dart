@@ -55,18 +55,30 @@ Education:
         ? _pdfContent(bytes)
         : _textContent(bytes);
 
-    final prompt = '''Analyze this resume/CV and respond with ONLY a valid JSON object — no markdown, no explanation:
+    final prompt = '''Analyze this resume/CV thoroughly and respond with ONLY a valid JSON object — no markdown, no explanation:
 {
   "name": "candidate full name or null if not found",
-  "skills": ["up to 8 most important technical skills"],
+  "skills": ["up to 10 most important technical skills found in the resume"],
   "experience_level": "Junior|Mid|Senior|Lead|Principal",
+  "years_of_experience": 0,
   "country": "full country name where the candidate is located",
   "country_code": "2-letter lowercase Adzuna country code — choose from: us gb au ca de fr in nl sg br za pl es it at be ch nz mx — use us if unsure",
   "job_title": "best matching job title to search for (e.g. ML Engineer, Data Scientist)",
-  "summary": "1-2 sentence professional summary"
+  "summary": "2-3 sentence professional summary highlighting their strongest qualifications",
+  "projects": ["up to 4 notable projects or work achievements — short 1-line each"],
+  "certifications": ["all certifications or courses mentioned"],
+  "education": "highest education: degree, institution, year if available",
+  "strengths": ["3 key strengths based on what stands out"],
+  "gaps": ["2-3 skill gaps based on current AI/ML market demands"],
+  "ats_score": <integer 0-100 estimating how well this resume would pass an ATS scanner — based on keywords, structure, action verbs, quantified achievements, formatting>,
+  "ats_issues": [
+    {"before": "Worked on machine learning projects", "after": "Built and deployed 3 ML models that improved fraud detection accuracy by 24%"},
+    {"before": "Led a team", "after": "Led a team of 5 engineers to ship the recommendation engine, increasing CTR by 18%"}
+  ]
 }
 
-Determine the country from: address, phone country code (+44 = gb, +1 = us/ca, +91 = in, +61 = au, +49 = de, etc.), or any location mention.''';
+For ats_issues, return 2-4 objects, each with "before" (a real or representative weak bullet from this resume) and "after" (a stronger rewrite that adds quantified impact, action verbs, and ATS-friendly keywords).
+Determine country from: address, phone country code (+44=gb, +1=us/ca, +91=in, +61=au, +49=de, etc.), or any location mention.''';
 
     final response = await http.post(
       Uri.parse('https://aiwire-proxy.prab187.workers.dev'),
@@ -78,7 +90,7 @@ Determine the country from: address, phone country code (+44 = gb, +1 = us/ca, +
       },
       body: json.encode({
         'model': 'claude-haiku-4-5',
-        'max_tokens': 400,
+        'max_tokens': 1400,
         'messages': [
           {
             'role': 'user',
