@@ -103,9 +103,19 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               // ── Header ──
               SliverToBoxAdapter(child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
-                child: Text('Discover', style: GoogleFonts.sourceSerif4(
-                  fontSize: 30, fontWeight: FontWeight.w700,
-                  color: t.primary, letterSpacing: -0.5)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('AIWIRE', style: GoogleFonts.sourceSerif4(
+                      fontSize: 32, fontWeight: FontWeight.w700,
+                      color: t.primary, letterSpacing: -0.5)),
+                    const SizedBox(height: 4),
+                    Text('Adapt your career with AI',
+                      style: GoogleFonts.inter(
+                        fontSize: 14, fontWeight: FontWeight.w500,
+                        color: t.muted, letterSpacing: 0.1)),
+                  ],
+                ),
               )),
 
               // ── Hero 1: Resume upload ──
