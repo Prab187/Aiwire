@@ -87,9 +87,12 @@ Education:
   ]
 }
 
-For ats_add: 2-4 specific items the user should ADD (missing keywords from typical job descriptions for their target role, missing sections, missing quantified metrics, missing certifications). Be specific about WHY (e.g. "appears in 70% of JDs").
-For ats_remove: 2-4 specific items to DELETE or REMOVE (weak filler phrases, formatting that breaks ATS parsers, outdated/irrelevant content, photos/graphics).
-For ats_issues: 2-4 objects, each with "before" (a real or representative weak bullet) and "after" (a stronger rewrite with quantified impact + action verbs).
+CRITICAL — these three arrays MUST be populated, never empty, even for strong resumes:
+- ats_add: REQUIRED. 3-4 specific items to ADD (missing keywords from typical JDs for their target role, missing sections like "Skills" or "Projects", missing quantified metrics, missing certifications). Always be specific about WHY (e.g. "appears in 70% of JDs", "ATS parsers expect this header"). If the resume is strong, suggest higher-bar additions (advanced certs, leadership metrics, system design impact).
+- ats_remove: REQUIRED. 3-4 specific items to DELETE (weak filler phrases like "responsible for"/"worked on", formatting that breaks ATS parsers like icons/headshots/columns, outdated/irrelevant content, generic objectives, repetitive content, low-impact bullets).
+- ats_issues: REQUIRED. 2-4 objects, each with "before" (a real or representative weak bullet from THIS resume) and "after" (a stronger rewrite with quantified impact + action verbs).
+
+Do NOT return empty arrays for any of these — every resume has things to improve.
 Determine country from: address, phone country code (+44=gb, +1=us/ca, +91=in, +61=au, +49=de, etc.), or any location mention.''';
 
     final response = await http.post(
