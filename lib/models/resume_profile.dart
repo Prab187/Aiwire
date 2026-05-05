@@ -60,6 +60,8 @@ class ResumeProfile {
   final List<SkillGap> structuredGaps;  // New: detailed gaps with severity + resources
   final int atsScore;
   final List<String> atsIssues;
+  final List<String> atsAdd;
+  final List<String> atsRemove;
 
   const ResumeProfile({
     required this.name,
@@ -78,6 +80,8 @@ class ResumeProfile {
     this.structuredGaps = const [],
     this.atsScore = 0,
     this.atsIssues = const [],
+    this.atsAdd = const [],
+    this.atsRemove = const [],
   });
 
   /// Defensive string-list extractor: handles Strings, Maps (common keys:
@@ -156,6 +160,8 @@ class ResumeProfile {
       structuredGaps: structured,
       atsScore: (json['ats_score'] as num?)?.toInt() ?? 0,
       atsIssues: _toStringList(json['ats_issues']),
+      atsAdd: _toStringList(json['ats_add']),
+      atsRemove: _toStringList(json['ats_remove']),
     );
   }
 

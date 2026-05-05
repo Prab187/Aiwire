@@ -1866,6 +1866,8 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
                               child: _AtsScoreCard(
                                 score: _profile!.atsScore,
                                 issues: _profile!.atsIssues,
+                                add: _profile!.atsAdd,
+                                remove: _profile!.atsRemove,
                                 theme: t),
                             )),
                           ]),
@@ -3430,8 +3432,16 @@ class _CollapsibleRowState extends State<_CollapsibleRow> {
 class _AtsScoreCard extends StatelessWidget {
   final int score;
   final List<String> issues;
+  final List<String> add;
+  final List<String> remove;
   final AppTheme theme;
-  const _AtsScoreCard({required this.score, required this.issues, required this.theme});
+  const _AtsScoreCard({
+    required this.score,
+    required this.issues,
+    this.add = const [],
+    this.remove = const [],
+    required this.theme,
+  });
 
   Color get _color => score >= 80
       ? const Color(0xFF10B981) : score >= 60
@@ -3492,6 +3502,73 @@ class _AtsScoreCard extends StatelessWidget {
               style: GoogleFonts.inter(fontSize: 12, color: t.muted)),
           ])),
         ]),
+
+        // ── What to ADD ──
+        if (add.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Divider(height: 1, color: t.divider),
+          const SizedBox(height: 12),
+          Row(children: [
+            Container(
+              width: 18, height: 18,
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4)),
+              child: const Icon(Icons.add_rounded, size: 12, color: Color(0xFF10B981)),
+            ),
+            const SizedBox(width: 8),
+            Text('What to add', style: GoogleFonts.inter(
+              fontSize: 12, fontWeight: FontWeight.w700,
+              color: const Color(0xFF10B981), letterSpacing: 0.3)),
+          ]),
+          const SizedBox(height: 10),
+          ...add.map((item) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Icon(Icons.add_circle_rounded, size: 13, color: Color(0xFF10B981)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: Text(item, style: GoogleFonts.inter(
+                fontSize: 13, color: t.primary.withValues(alpha: 0.9), height: 1.5))),
+            ]),
+          )),
+        ],
+
+        // ── What to REMOVE ──
+        if (remove.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Divider(height: 1, color: t.divider),
+          const SizedBox(height: 12),
+          Row(children: [
+            Container(
+              width: 18, height: 18,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4)),
+              child: const Icon(Icons.remove_rounded, size: 12, color: Color(0xFFEF4444)),
+            ),
+            const SizedBox(width: 8),
+            Text('What to remove', style: GoogleFonts.inter(
+              fontSize: 12, fontWeight: FontWeight.w700,
+              color: const Color(0xFFEF4444), letterSpacing: 0.3)),
+          ]),
+          const SizedBox(height: 10),
+          ...remove.map((item) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Icon(Icons.remove_circle_rounded, size: 13, color: Color(0xFFEF4444)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: Text(item, style: GoogleFonts.inter(
+                fontSize: 13, color: t.primary.withValues(alpha: 0.9), height: 1.5))),
+            ]),
+          )),
+        ],
+
         if (issues.isNotEmpty) ...[
           const SizedBox(height: 14),
           Divider(height: 1, color: t.divider),

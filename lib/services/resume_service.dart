@@ -71,13 +71,25 @@ Education:
   "strengths": ["3 key strengths based on what stands out"],
   "gaps": ["2-3 skill gaps based on current AI/ML market demands"],
   "ats_score": <integer 0-100 estimating how well this resume would pass an ATS scanner — based on keywords, structure, action verbs, quantified achievements, formatting>,
+  "ats_add": [
+    "Add 'Kubernetes' — appears in 70% of MLE job descriptions and is missing here",
+    "Add a Skills section with comma-separated keywords near the top so ATS extracts them quickly",
+    "Add quantified impact (% / dollars / time saved) on every bullet"
+  ],
+  "ats_remove": [
+    "Remove the 'Objective' paragraph — most ATS strip it and recruiters skim past it",
+    "Remove the headshot / icons — they break parsing on Workday and Greenhouse",
+    "Remove vague phrases like 'responsible for' and 'worked on' — replace with action verbs"
+  ],
   "ats_issues": [
     {"before": "Worked on machine learning projects", "after": "Built and deployed 3 ML models that improved fraud detection accuracy by 24%"},
     {"before": "Led a team", "after": "Led a team of 5 engineers to ship the recommendation engine, increasing CTR by 18%"}
   ]
 }
 
-For ats_issues, return 2-4 objects, each with "before" (a real or representative weak bullet from this resume) and "after" (a stronger rewrite that adds quantified impact, action verbs, and ATS-friendly keywords).
+For ats_add: 2-4 specific items the user should ADD (missing keywords from typical job descriptions for their target role, missing sections, missing quantified metrics, missing certifications). Be specific about WHY (e.g. "appears in 70% of JDs").
+For ats_remove: 2-4 specific items to DELETE or REMOVE (weak filler phrases, formatting that breaks ATS parsers, outdated/irrelevant content, photos/graphics).
+For ats_issues: 2-4 objects, each with "before" (a real or representative weak bullet) and "after" (a stronger rewrite with quantified impact + action verbs).
 Determine country from: address, phone country code (+44=gb, +1=us/ca, +91=in, +61=au, +49=de, etc.), or any location mention.''';
 
     final response = await http.post(
@@ -90,7 +102,7 @@ Determine country from: address, phone country code (+44=gb, +1=us/ca, +91=in, +
       },
       body: json.encode({
         'model': 'claude-haiku-4-5',
-        'max_tokens': 1400,
+        'max_tokens': 1800,
         'messages': [
           {
             'role': 'user',
