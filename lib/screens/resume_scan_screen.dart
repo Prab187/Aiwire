@@ -1841,14 +1841,40 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
         ),
         const SizedBox(height: 12),
 
-        // Full ATS analysis inline (Add / Remove / Before-After)
+        // Full ATS analysis inline (Add / Remove / Before-After) — collapsed by default
         if (_profile != null && _profile!.atsScore > 0) ...[
-          _AtsScoreCard(
-            score: _profile!.atsScore,
-            issues: _profile!.atsIssues,
-            add: _profile!.atsAdd,
-            remove: _profile!.atsRemove,
-            theme: t),
+          Container(
+            decoration: BoxDecoration(
+              color: t.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: t.divider, width: 0.5)),
+            child: Theme(
+              data: Theme.of(context).copyWith(
+                dividerColor: Colors.transparent,
+                splashColor: Colors.transparent,
+                highlightColor: Colors.transparent,
+              ),
+              child: ExpansionTile(
+                tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                iconColor: t.muted,
+                collapsedIconColor: t.muted,
+                leading: Icon(Icons.fact_check_outlined, size: 20, color: t.primary),
+                title: Text('ATS Scanner Details', style: GoogleFonts.inter(
+                  fontSize: 14, fontWeight: FontWeight.w700, color: t.primary)),
+                subtitle: Text('What to add, what to remove, before/after',
+                  style: GoogleFonts.inter(fontSize: 11, color: t.muted)),
+                children: [
+                  _AtsScoreCard(
+                    score: _profile!.atsScore,
+                    issues: _profile!.atsIssues,
+                    add: _profile!.atsAdd,
+                    remove: _profile!.atsRemove,
+                    theme: t),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 8),
         ],
 
@@ -2453,14 +2479,14 @@ class _RecommendationContent extends StatelessWidget {
       ]);
     }
 
-    // Collapsible mode — polished accordion, first section expanded
+    // Collapsible mode — polished accordion, all sections collapsed by default
     return Column(children: [
       for (var i = 0; i < sections.length; i++)
         _AccordionSection(
           theme: t,
           section: sections[i],
           index: i,
-          initiallyExpanded: i == 0,
+          initiallyExpanded: false,
         ),
     ]);
   }
