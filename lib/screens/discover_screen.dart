@@ -156,7 +156,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       const SizedBox(height: 16),
                       Row(children: [
                         Expanded(child: GestureDetector(
-                          onTap: () => _navTo(ResumeScanScreen(theme: t), feature: 'career_plan_upload'),
+                          onTap: () => _navTo(ResumeScanScreen(theme: t, autoStart: 'upload'), feature: 'career_plan_upload'),
                           child: Container(
                             height: 44,
                             decoration: BoxDecoration(
@@ -172,7 +172,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         )),
                         const SizedBox(width: 10),
                         Expanded(child: GestureDetector(
-                          onTap: () => _navTo(ResumeScanScreen(theme: t), feature: 'career_plan_sample'),
+                          onTap: () => _navTo(ResumeScanScreen(theme: t, autoStart: 'sample'), feature: 'career_plan_sample'),
                           child: Container(
                             height: 44,
                             decoration: BoxDecoration(

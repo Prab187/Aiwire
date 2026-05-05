@@ -44,7 +44,10 @@ enum _ScanState { idle, analyzing, results, error }
 
 class ResumeScanScreen extends StatefulWidget {
   final AppTheme theme;
-  const ResumeScanScreen({super.key, required this.theme});
+  /// Optional kickoff action: 'upload' opens the file picker on first frame,
+  /// 'sample' loads the built-in sample resume. null shows the idle screen.
+  final String? autoStart;
+  const ResumeScanScreen({super.key, required this.theme, this.autoStart});
 
   @override
   State<ResumeScanScreen> createState() => _ResumeScanScreenState();
@@ -125,6 +128,16 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
     _pulse = Tween<double>(begin: 0.85, end: 1.0).animate(
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
     _tabCtrl = TabController(length: 2, vsync: this);
+
+    // Honor the autoStart hint from callers (e.g. the home page's
+    // Upload Resume / Try Sample buttons).
+    final action = widget.autoStart;
+    if (action == 'upload' || action == 'sample') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _pickAndScan(useSample: action == 'sample');
+      });
+    }
   }
 
   @override
