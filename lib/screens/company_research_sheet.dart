@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -23,10 +24,18 @@ class CompanyResearchSheet extends StatefulWidget {
   State<CompanyResearchSheet> createState() => _CompanyResearchSheetState();
 }
 
-class _CompanyResearchSheetState extends State<CompanyResearchSheet> {
+class _CompanyResearchSheetState extends State<CompanyResearchSheet>
+    with SingleTickerProviderStateMixin {
   String? _result;
   String? _error;
   bool _loading = true;
+  String _statusMessage = '';
+  Timer? _statusRotator;
+
+  // Pulse animation for the research icon while loading — mirrors the
+  // brain animation used on the resume-analysis screen.
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulse;
 
   static const _sections = [
     ('AI STRATEGY', 'AI Strategy', Icons.smart_toy_outlined, Color(0xFF3B82F6)),
@@ -37,10 +46,57 @@ class _CompanyResearchSheetState extends State<CompanyResearchSheet> {
     ('HOW TO POSITION YOURSELF', 'How to Position Yourself', Icons.person_pin_outlined, Color(0xFF6366F1)),
   ];
 
+  // Rotating status messages that name what the research is actually doing.
+  // {company} is replaced with the company name at runtime.
+  static const List<String> _researchSteps = [
+    'Connecting to the research desk…',
+    'Reading recent news about {company}…',
+    'Mapping {company}\'s AI strategy…',
+    'Tracking their recent moves & launches…',
+    'Surveying engineering culture & stack…',
+    'Spotting key challenges they\'re facing…',
+    'Sizing up the competitive landscape…',
+    'Drafting your positioning angle…',
+    'Polishing the brief…',
+    'Almost there…',
+  ];
+
   @override
   void initState() {
     super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1200))
+      ..repeat(reverse: true);
+    _pulse = Tween<double>(begin: 0.85, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
+    _startStatusRotator();
     _fetch();
+  }
+
+  @override
+  void dispose() {
+    _statusRotator?.cancel();
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  void _startStatusRotator() {
+    _statusRotator?.cancel();
+    var i = 0;
+    setState(() => _statusMessage = _renderStep(_researchSteps[0]));
+    _statusRotator = Timer.periodic(const Duration(milliseconds: 1800), (_) {
+      if (!mounted) return;
+      i = (i + 1) % _researchSteps.length;
+      setState(() => _statusMessage = _renderStep(_researchSteps[i]));
+    });
+  }
+
+  String _renderStep(String template) =>
+      template.replaceAll('{company}', widget.company);
+
+  void _stopStatusRotator() {
+    _statusRotator?.cancel();
+    _statusRotator = null;
   }
 
   Future<void> _fetch() async {
@@ -50,8 +106,10 @@ class _CompanyResearchSheetState extends State<CompanyResearchSheet> {
         jobTitle: widget.jobTitle,
         profile: widget.profile,
       );
+      _stopStatusRotator();
       if (mounted) setState(() { _result = text; _loading = false; });
     } catch (e) {
+      _stopStatusRotator();
       if (mounted) setState(() {
         _error = e.toString().replaceFirst('Exception: ', '');
         _loading = false;
@@ -174,13 +232,42 @@ class _CompanyResearchSheetState extends State<CompanyResearchSheet> {
 
           // Content
           Expanded(child: _loading
-            ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                SizedBox(width: 28, height: 28, child: CircularProgressIndicator(
-                  strokeWidth: 2.5, color: t.accent)),
-                const SizedBox(height: 16),
-                Text('Researching ${widget.company}...', style: GoogleFonts.inter(
-                  fontSize: 14, color: t.muted)),
-              ]))
+            ? Center(child: Padding(
+                padding: const EdgeInsets.all(40),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  // Pulsing research icon — visually matches the Analyzing
+                  // screen (same size, same B&W tint via t.primary, same
+                  // motion); only the glyph differs to signal "research".
+                  ScaleTransition(
+                    scale: _pulse,
+                    child: Container(
+                      width: 72, height: 72,
+                      decoration: BoxDecoration(
+                        color: t.primary.withValues(alpha: 0.08),
+                        shape: BoxShape.circle),
+                      child: Icon(Icons.travel_explore_rounded,
+                        size: 32, color: t.primary),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Text('Researching…',
+                    style: GoogleFonts.sourceSerif4(
+                      fontSize: 22, fontWeight: FontWeight.w700,
+                      color: t.primary)),
+                  const SizedBox(height: 10),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 350),
+                    child: Text(
+                      _statusMessage.isEmpty
+                          ? 'Reading up on ${widget.company}…'
+                          : _statusMessage,
+                      key: ValueKey(_statusMessage),
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.inter(
+                        fontSize: 14, color: t.muted, height: 1.45)),
+                  ),
+                ]),
+              ))
             : _error != null
               ? Center(child: Padding(
                   padding: const EdgeInsets.all(32),
@@ -191,7 +278,11 @@ class _CompanyResearchSheetState extends State<CompanyResearchSheet> {
                       style: GoogleFonts.inter(fontSize: 14, color: t.muted)),
                     const SizedBox(height: 16),
                     GestureDetector(
-                      onTap: () { setState(() { _loading = true; _error = null; }); _fetch(); },
+                      onTap: () {
+                        setState(() { _loading = true; _error = null; });
+                        _startStatusRotator();
+                        _fetch();
+                      },
                       child: Text('Try again', style: GoogleFonts.inter(
                         fontSize: 14, fontWeight: FontWeight.w600, color: t.accent)),
                     ),

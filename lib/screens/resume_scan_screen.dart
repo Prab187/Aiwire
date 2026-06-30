@@ -17,6 +17,7 @@ import '../models/article.dart';
 import '../models/event.dart';
 import '../services/resume_service.dart';
 import '../services/job_service.dart';
+import '../services/web_unload_guard.dart';
 import '../services/certification_service.dart';
 import '../services/events_service.dart';
 import '../services/news_service.dart';
@@ -68,9 +69,53 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
   late final Animation<double> _pulse;
   late TabController _tabCtrl;
 
+  Timer? _statusRotator;
+  static const List<String> _analyzingMessages = [
+    'Reading your resume…',
+    'Extracting your skills…',
+    'Spotting experience…',
+    'Decoding job titles…',
+    'Tallying years of impact…',
+    'Sniffing for keywords…',
+    'Cross-referencing the job market…',
+    'Hunting for hidden strengths…',
+    'Measuring ATS-friendliness…',
+    'Connecting the dots…',
+    'Polishing the profile…',
+    'Almost there…',
+  ];
+
   // Career recommendation
   String? _recommendation;
   bool _recLoading = false;
+  String _recStatusMessage = '';
+  Timer? _recStatusRotator;
+  static const List<String> _planMessages = [
+    'Crafting your roadmap…',
+    'Mapping skills to market demand…',
+    'Researching opportunities…',
+    'Pinpointing high-impact next moves…',
+    'Drafting your 90-day plan…',
+    'Pulling together resources…',
+    'Sharpening the recommendations…',
+    'Almost done…',
+  ];
+
+  void _startRecStatusRotator() {
+    _recStatusRotator?.cancel();
+    var i = 0;
+    setState(() => _recStatusMessage = _planMessages[0]);
+    _recStatusRotator = Timer.periodic(const Duration(milliseconds: 1800), (_) {
+      if (!mounted) return;
+      i = (i + 1) % _planMessages.length;
+      setState(() => _recStatusMessage = _planMessages[i]);
+    });
+  }
+
+  void _stopRecStatusRotator() {
+    _recStatusRotator?.cancel();
+    _recStatusRotator = null;
+  }
 
   // Recommended courses + news (resume-based)
   List<Certification> _recommendedCerts = [];
@@ -82,6 +127,10 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
   bool _eventsLoading = false;
   bool _newsLoading = false;
   bool _videosLoading = false;
+  String? _certsError;
+  String? _eventsError;
+  String? _newsError;
+  String? _videosError;
 
   // Manual input (no resume)
   String _manualName = '';
@@ -125,10 +174,18 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
     _pulse = Tween<double>(begin: 0.85, end: 1.0).animate(
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
     _tabCtrl = TabController(length: 2, vsync: this);
+    // Auto-restore the last session if the user reloaded the page / reopened
+    // the app. No-op when there's no saved blob.
+    unawaited(_restorePersistedSession());
   }
 
   @override
   void dispose() {
+    _statusRotator?.cancel();
+    _recStatusRotator?.cancel();
+    // Drop the browser unload guard when this screen goes away so other
+    // screens don't inherit a stale prompt.
+    setUnloadGuard(enabled: false);
     _pulseCtrl.dispose();
     _tabCtrl.dispose();
     _nameCtrl.dispose();
@@ -136,6 +193,22 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
     _starterRoleCtrl.dispose();
     _starterYearsCtrl.dispose();
     super.dispose();
+  }
+
+  void _startStatusRotator() {
+    _statusRotator?.cancel();
+    var i = 0;
+    setState(() => _statusMessage = _analyzingMessages[0]);
+    _statusRotator = Timer.periodic(const Duration(milliseconds: 1500), (_) {
+      if (!mounted) return;
+      i = (i + 1) % _analyzingMessages.length;
+      setState(() => _statusMessage = _analyzingMessages[i]);
+    });
+  }
+
+  void _stopStatusRotator() {
+    _statusRotator?.cancel();
+    _statusRotator = null;
   }
 
   Future<void> _pickAndScan({bool useSample = false}) async {
@@ -149,44 +222,40 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
 
     setState(() {
       _state = _ScanState.analyzing;
-      _statusMessage = useSample ? 'Loading sample resume\u2026' : 'Reading your resume\u2026';
       _errorMessage = null;
     });
+    _startStatusRotator();
 
     try {
-      await Future.delayed(const Duration(milliseconds: 600));
-      if (!mounted) return;
-      setState(() => _statusMessage = 'Extracting skills & experience\u2026');
-
       final profile = await ResumeService.analyzeResume(file);
-      if (!mounted) return;
+      if (!mounted) {
+        _stopStatusRotator();
+        return;
+      }
 
-      // Save skills + country for other screens
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList('user_skills', profile.skills);
-      await prefs.setString('user_job_title', profile.jobTitle);
-      await prefs.setString('user_level', profile.experienceLevel);
-      await prefs.setString('user_country', profile.country);
-      await prefs.setString('user_country_code', profile.countryCode);
-
-      // Save full profile to multi-profile storage
-      await ProfileStorageService.save(SavedProfile(
-        id: 'profile_${DateTime.now().millisecondsSinceEpoch}',
-        label: profile.jobTitle,
-        profile: profile,
-        createdAt: DateTime.now().toIso8601String(),
-      ));
-
-      if (!mounted) return;
-      setState(() => _statusMessage = 'Finding jobs in ${profile.country}\u2026');
-
-      final jobs = await JobService.fetchJobsForResume(
-        skills: profile.skills,
-        countryCode: profile.countryCode,
-        jobTitle: profile.jobTitle,
-        country: profile.country,
-      );
-      if (!mounted) return;
+      // Persist profile data in parallel \u2014 don't block the UI on disk writes.
+      // Wrap in try/catch so failures (rare but possible) are logged rather
+      // than silently swallowed; the parsed profile is still in memory.
+      unawaited(() async {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await Future.wait([
+            prefs.setStringList('user_skills', profile.skills),
+            prefs.setString('user_job_title', profile.jobTitle),
+            prefs.setString('user_level', profile.experienceLevel),
+            prefs.setString('user_country', profile.country),
+            prefs.setString('user_country_code', profile.countryCode),
+            ProfileStorageService.save(SavedProfile(
+              id: 'profile_${DateTime.now().millisecondsSinceEpoch}',
+              label: profile.jobTitle,
+              profile: profile,
+              createdAt: DateTime.now().toIso8601String(),
+            )),
+          ]);
+        } catch (e) {
+          debugPrint('AIWire: profile persistence failed \u2014 $e');
+        }
+      }());
 
       // Premium gate disabled during testing
       // await AiQuotaGuard.record();
@@ -198,13 +267,25 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
       // downstream Claude calls — saves API cost and prevents confusing UX.
       final readable = !_profileIsWeak(profile);
 
+      // Flip UI to results immediately so the user sees their parsed profile
+      // right away. Jobs and downstream features populate in the background.
+      _stopStatusRotator();
       setState(() {
         _profile = profile;
-        _jobs = readable ? jobs : <Job>[];
-        _legitimacyMap = readable ? GhostJobDetector.evaluateAll(jobs) : {};
+        _jobs = <Job>[];
+        _legitimacyMap = {};
         _profileReadable = readable;
         _state = _ScanState.results;
       });
+
+      // Arm the browser's beforeunload guard so an accidental refresh / back
+      // doesn't wipe the parsed profile + plan. No-op on iOS/Android.
+      setUnloadGuard(enabled: true);
+
+      // Persist the parsed profile JSON so reloading the page restores it
+      // without re-uploading the resume. Stored in SharedPreferences (which
+      // maps to localStorage on web).
+      unawaited(_persistLastSession());
 
       // Track in analytics
       if (useSample) {
@@ -215,21 +296,38 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
 
       // Only fire downstream features if the resume was actually readable
       if (readable) {
-        // Fire non-Claude features first (certs/events/news/videos use public
-        // APIs, not Claude) — they won't eat into the TPM budget.
+        // Non-Claude features (public APIs) fire right away — no TPM impact.
         _loadRecommendedCerts();
         _loadRecommendedEvents();
         _loadRecommendedNews();
         _loadRecommendedVideos();
-        // Delay the Claude recommendation call by 3 seconds so the resume
-        // analysis tokens (~3500) have time to "drain" from the 60-second
-        // rolling window before the recommendation (~2800 more tokens) fires.
-        // Reduces chance of hitting 10K TPM limit on resume scan.
-        Future.delayed(const Duration(seconds: 3), () {
-          if (mounted) _generateRecommendation();
-        });
+
+        // Fetch jobs in the background; once they arrive, update the UI and
+        // kick off the Claude recommendation. The jobs API round-trip naturally
+        // spaces this Claude call out from the resume-analysis call, so the
+        // previous artificial 3s TPM-drain delay is no longer needed.
+        unawaited(JobService.fetchJobsForResume(
+          skills: profile.skills,
+          countryCode: profile.countryCode,
+          jobTitle: profile.jobTitle,
+          country: profile.country,
+        ).then((jobs) {
+          if (!mounted) return;
+          setState(() {
+            _jobs = jobs;
+            _legitimacyMap = GhostJobDetector.evaluateAll(jobs);
+          });
+          _generateRecommendation();
+        }).catchError((e, st) {
+          // Critical: if the jobs API fails, still fire the recommendation
+          // (with no job context) so the Career Plan tab doesn't hang silently.
+          debugPrint('AIWire: jobs fetch failed — $e');
+          if (!mounted) return;
+          _generateRecommendation();
+        }));
       }
     } catch (e) {
+      _stopStatusRotator();
       if (!mounted) return;
       setState(() {
         _state = _ScanState.error;
@@ -240,6 +338,20 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
 
   Future<void> _shareCareerPlan() async {
     if (_profile == null) return;
+    // Don't share a half-loaded plan — bail with a friendly toast instead.
+    if (_recommendation == null || _recLoading) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+            _recLoading
+              ? 'Career plan is still generating — try again in a moment.'
+              : 'Generate your career plan first, then share it.',
+            style: GoogleFonts.inter(fontSize: 13)),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2)));
+      }
+      return;
+    }
     HapticFeedback.lightImpact();
     final p = _profile!;
     final text = '''My AI Career Plan — built with AIWire
@@ -249,7 +361,7 @@ ${p.name ?? "I"} · ${p.jobTitle} · ${p.experienceLevel} (${p.yearsOfExperience
 Top skills: ${p.skills.take(5).join(", ")}
 ATS Score: ${p.atsScore}/100
 
-${_recommendation ?? "Career plan loading..."}
+$_recommendation
 
 Get yours: aiwire.app''';
     await SharePlus.instance.share(ShareParams(text: text));
@@ -271,9 +383,11 @@ Get yours: aiwire.app''';
 
   Future<void> _generateRecommendation({String? manualContext}) async {
     setState(() { _recLoading = true; _recommendation = null; });
+    _startRecStatusRotator();
 
     const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
     if (apiKey.isEmpty) {
+      _stopRecStatusRotator();
       setState(() { _recLoading = false; _recommendation = 'API key not configured.'; });
       return;
     }
@@ -285,6 +399,7 @@ Get yours: aiwire.app''';
       // Upstream gate (_profileReadable check in _analyzeResume) already
       // prevented this from firing for unreadable resumes. Defensive re-check:
       if (!_profileReadable) {
+        _stopRecStatusRotator();
         setState(() { _recLoading = false; _recommendation = null; });
         return;
       }
@@ -292,11 +407,6 @@ Get yours: aiwire.app''';
 
       // Use qualified matches (fuzzy, ≥10%) for both the prompt and avg score
       final qualified = _qualifiedMatches;
-      debugPrint('AIWire DEBUG: _jobs.length=${_jobs.length}, qualified.length=${qualified.length}');
-      for (final m in qualified.take(5)) {
-        debugPrint('AIWire DEBUG: ${m.job.title} @ ${m.job.company} = ${m.grade.letter} (${m.grade.composite}%) | skills: ${m.job.skills.join(", ")}');
-      }
-      debugPrint('AIWire DEBUG: user skills = ${_profile!.skills.join(", ")}');
 
       final matchScores = qualified.take(5).map((m) =>
         '${m.job.title} at ${m.job.company}: Grade ${m.grade.letter} (${m.grade.composite}%)'
@@ -338,8 +448,6 @@ Get yours: aiwire.app''';
         avgMatch = null;
         matchStatus = 'No open jobs found in ${p.country} for your role right now';
       }
-      debugPrint('AIWire DEBUG: avgMatch=${avgMatch ?? "unavailable"}, status=$matchStatus');
-
       // Trimmed prompt — ~40% fewer tokens than before, same output quality
       final readinessLine1 = avgMatch != null
           ? '1. Start EXACTLY with: "You match $avgMatch% of AI/ML roles in ${p.country}."'
@@ -406,7 +514,7 @@ Address by first name. Direct. Complete sentences.''';
       final client = http.Client();
       try {
         response = await client.post(
-          Uri.parse('https://api.anthropic.com/v1/messages'),
+          Uri.parse('https://aiwire-proxy.prab187.workers.dev'),
           headers: {
             'Content-Type': 'application/json',
             'x-api-key': apiKey,
@@ -451,17 +559,22 @@ Address by first name. Direct. Complete sentences.''';
         final text = (contentList != null && contentList.isNotEmpty)
             ? (contentList[0]['text'] as String?) ?? 'No recommendation available.'
             : 'No recommendation available.';
+        _stopRecStatusRotator();
         if (mounted) setState(() { _recommendation = text; _recLoading = false; });
+        unawaited(_persistLastSession()); // refresh saved blob with the plan
       } else {
         final errMsg = claudeError(response.statusCode, response.body);
+        _stopRecStatusRotator();
         if (mounted) setState(() {
           _recommendation = friendlyError(errMsg);
           _recLoading = false;
         });
       }
     } on TimeoutException {
+      _stopRecStatusRotator();
       if (mounted) setState(() { _recommendation = 'Request timed out. Please try again.'; _recLoading = false; });
     } catch (e) {
+      _stopRecStatusRotator();
       final msg = e.toString().replaceFirst('Exception: ', '');
       // Convert technical errors into friendlier messages
       final friendly = msg.toLowerCase().contains('bad file descriptor')
@@ -675,8 +788,12 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
           _certsLoading = false;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() => _certsLoading = false);
+    } catch (e) {
+      debugPrint('AIWire: certifications fetch failed — $e');
+      if (mounted) setState(() {
+        _certsLoading = false;
+        _certsError = 'Couldn\'t load certifications. Pull to retry.';
+      });
     }
   }
 
@@ -725,8 +842,12 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
           _eventsLoading = false;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() => _eventsLoading = false);
+    } catch (e) {
+      debugPrint('AIWire: events fetch failed — $e');
+      if (mounted) setState(() {
+        _eventsLoading = false;
+        _eventsError = 'Couldn\'t load events. Pull to retry.';
+      });
     }
   }
 
@@ -750,8 +871,12 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
           _videosLoading = false;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() => _videosLoading = false);
+    } catch (e) {
+      debugPrint('AIWire: videos fetch failed — $e');
+      if (mounted) setState(() {
+        _videosLoading = false;
+        _videosError = 'Couldn\'t load videos. Pull to retry.';
+      });
     }
   }
 
@@ -800,28 +925,108 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
           _newsLoading = false;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() => _newsLoading = false);
+    } catch (e) {
+      debugPrint('AIWire: news fetch failed — $e');
+      if (mounted) setState(() {
+        _newsLoading = false;
+        _newsError = 'Couldn\'t load news. Pull to retry.';
+      });
     }
   }
 
-  void _reset() => setState(() {
-    _state = _ScanState.idle;
-    _profile = null;
-    _jobs = [];
-    _errorMessage = null;
-    _recommendation = null;
-    _recLoading = false;
-    _recommendedCerts = [];
-    _recommendedCourses = [];
-    _recommendedEvents = [];
-    _recommendedNews = [];
-    _recommendedVideos = [];
-    _certsLoading = false;
-    _eventsLoading = false;
-    _newsLoading = false;
-    _videosLoading = false;
-  });
+  void _reset() {
+    // User explicitly cleared the session — drop the browser-refresh guard
+    // and wipe the persisted session so reload doesn't re-restore.
+    setUnloadGuard(enabled: false);
+    unawaited(_clearPersistedSession());
+    setState(() {
+      _state = _ScanState.idle;
+      _profile = null;
+      _jobs = [];
+      _errorMessage = null;
+      _recommendation = null;
+      _recLoading = false;
+      _recommendedCerts = [];
+      _recommendedCourses = [];
+      _recommendedEvents = [];
+      _recommendedNews = [];
+      _recommendedVideos = [];
+      _certsLoading = false;
+      _eventsLoading = false;
+      _newsLoading = false;
+      _videosLoading = false;
+      _certsError = null;
+      _eventsError = null;
+      _newsError = null;
+      _videosError = null;
+    });
+  }
+
+  // ── Session persistence (per Arundhathi's feedback — don't lose results
+  //    on refresh / browser close / accidental nav)
+  static const _kSessionKey = 'last_resume_session_v1';
+
+  Future<void> _persistLastSession() async {
+    try {
+      if (_profile == null) return;
+      final prefs = await SharedPreferences.getInstance();
+      final blob = json.encode({
+        'savedAt': DateTime.now().toIso8601String(),
+        'profile': _profile!.toJson(),
+        'recommendation': _recommendation,
+      });
+      await prefs.setString(_kSessionKey, blob);
+    } catch (e) {
+      debugPrint('AIWire: persist session failed — $e');
+    }
+  }
+
+  Future<void> _clearPersistedSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_kSessionKey);
+    } catch (_) {}
+  }
+
+  Future<void> _restorePersistedSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final blob = prefs.getString(_kSessionKey);
+      if (blob == null) return;
+      final data = json.decode(blob) as Map<String, dynamic>;
+      final profileJson = data['profile'] as Map<String, dynamic>?;
+      if (profileJson == null) return;
+      final profile = ResumeProfile.fromJson(profileJson);
+      if (!mounted) return;
+      setState(() {
+        _profile = profile;
+        _profileReadable = !_profileIsWeak(profile);
+        _recommendation = data['recommendation'] as String?;
+        _state = _ScanState.results;
+      });
+      setUnloadGuard(enabled: true);
+      // Re-fetch jobs in the background — those weren't persisted (they go
+      // stale fast anyway). The recommendation we restore as-is.
+      if (_profileReadable) {
+        unawaited(JobService.fetchJobsForResume(
+          skills: profile.skills,
+          countryCode: profile.countryCode,
+          jobTitle: profile.jobTitle,
+          country: profile.country,
+        ).then((jobs) {
+          if (!mounted) return;
+          setState(() {
+            _jobs = jobs;
+            _legitimacyMap = GhostJobDetector.evaluateAll(jobs);
+          });
+        }).catchError((e, st) {
+          debugPrint('AIWire: jobs re-fetch after restore failed — $e');
+        }));
+      }
+    } catch (e) {
+      debugPrint('AIWire: restore session failed — $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1190,8 +1395,18 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
                     color: canGenerate ? t.primary : t.muted.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12)),
                   child: Center(child: _recLoading
-                    ? SizedBox(width: 18, height: 18,
-                      child: CircularProgressIndicator(color: t.background, strokeWidth: 2))
+                    ? Row(mainAxisSize: MainAxisSize.min, children: [
+                        SizedBox(width: 16, height: 16,
+                          child: CircularProgressIndicator(
+                            color: t.background, strokeWidth: 2)),
+                        const SizedBox(width: 12),
+                        Flexible(child: Text(
+                          _recStatusMessage.isEmpty ? 'Working…' : _recStatusMessage,
+                          style: GoogleFonts.inter(
+                            fontSize: 14, fontWeight: FontWeight.w600,
+                            color: t.background),
+                          overflow: TextOverflow.ellipsis)),
+                      ])
                     : Text('Get AI Career Plan', style: GoogleFonts.inter(
                       fontSize: 15, fontWeight: FontWeight.w700,
                       color: canGenerate ? t.background : t.muted))),
@@ -1872,6 +2087,19 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
         // ── GROUP 2: YOUR PLAN ───────────────────────────────────────────
         if (_recLoading) ...[
           _groupHeader(t, 'YOUR AI ROADMAP'),
+          // Rotating status caption so the long wait isn't silent
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 10),
+            child: Row(children: [
+              SizedBox(width: 14, height: 14,
+                child: CircularProgressIndicator(color: t.muted, strokeWidth: 2)),
+              const SizedBox(width: 10),
+              Expanded(child: Text(
+                _recStatusMessage.isEmpty ? 'Working…' : _recStatusMessage,
+                style: GoogleFonts.inter(
+                  fontSize: 13, color: t.muted, fontStyle: FontStyle.italic))),
+            ]),
+          ),
           // Shimmer skeleton — mimics 4 collapsed rows
           ...List.generate(4, (i) => Shimmer.fromColors(
             baseColor: t.surface,
@@ -2453,9 +2681,9 @@ class _RecommendationContent extends StatelessWidget {
       sections.add(_makeSection(currentTitle, buffer.toString().trim()));
     }
 
-    // Fallback: if parsing failed, show raw text
+    // Fallback: if parsing failed, show stripped text (no raw ###/**)
     if (sections.isEmpty) {
-      return Text(text, style: GoogleFonts.inter(
+      return Text(_SectionCard._stripMarkdown(text), style: GoogleFonts.inter(
         fontSize: 14, color: t.primary, height: 1.6));
     }
 
@@ -2469,14 +2697,14 @@ class _RecommendationContent extends StatelessWidget {
       ]);
     }
 
-    // Collapsible mode — polished accordion, first section expanded
+    // Collapsible mode — all sections start collapsed; user taps to expand.
     return Column(children: [
       for (var i = 0; i < sections.length; i++)
         _AccordionSection(
           theme: t,
           section: sections[i],
           index: i,
-          initiallyExpanded: i == 0,
+          initiallyExpanded: false,
         ),
     ]);
   }
@@ -2603,7 +2831,7 @@ class _SectionCard extends StatelessWidget {
 
   /// Default editorial paragraph style — used for Career Path
   Widget _buildProse(AppTheme t) {
-    return Text(section.body, style: GoogleFonts.sourceSerif4(
+    return Text(_stripMarkdown(section.body), style: GoogleFonts.sourceSerif4(
       fontSize: 15, color: t.primary.withValues(alpha: 0.88),
       height: 1.65, letterSpacing: 0.05));
   }
@@ -2777,7 +3005,7 @@ class _SectionCard extends StatelessWidget {
           ]),
         ))
       else
-        Text(section.body, style: GoogleFonts.sourceSerif4(
+        Text(_stripMarkdown(section.body), style: GoogleFonts.sourceSerif4(
           fontSize: 14, color: t.primary.withValues(alpha: 0.88),
           height: 1.65, letterSpacing: 0.05)),
     ]);
@@ -2879,9 +3107,28 @@ class _SectionCard extends StatelessWidget {
     ]);
   }
 
-  /// Strips markdown bold/italic markers and leading/trailing whitespace
+  /// Strips markdown formatting markers so raw model output renders cleanly.
+  /// Handles: # / ## / ### / etc. headers (at line start OR mid-paragraph
+  /// when the LLM joins them inline), **bold**, *italic*, _underline_,
+  /// --- horizontal rules, > blockquotes, `inline code`, and trims.
+  /// Carefully avoids breaking things like "C#" or "issue #5".
   static String _stripMarkdown(String s) {
-    return s.replaceAll(RegExp(r'\*{1,3}'), '').replaceAll(RegExp(r'_{1,3}'), '').trim();
+    return s
+        // Heading markers at line start (## / ### / etc. + whitespace)
+        .replaceAll(RegExp(r'^\s{0,3}#{1,6}\s+', multiLine: true), '')
+        // Heading markers appearing mid-paragraph after the LLM joined lines.
+        // Requires whitespace on BOTH sides so "C# .NET" or "issue #5" are safe.
+        .replaceAll(RegExp(r'\s+#{1,6}\s+'), ' ')
+        // Horizontal rules — a line of --- or *** or ___
+        .replaceAll(RegExp(r'^\s*(?:-{3,}|\*{3,}|_{3,})\s*$', multiLine: true), '')
+        // Blockquote markers at line start
+        .replaceAll(RegExp(r'^\s*>\s?', multiLine: true), '')
+        // Bold/italic markers (** *** _ __ ___)
+        .replaceAll(RegExp(r'\*{1,3}'), '')
+        .replaceAll(RegExp(r'_{1,3}'), '')
+        // Inline code backticks
+        .replaceAll('`', '')
+        .trim();
   }
 
   /// Splits a body string into list items based on common patterns:
@@ -3935,7 +4182,7 @@ ${description.isNotEmpty ? description : "(no extended description — infer fro
 
     try {
       final response = await http.post(
-        Uri.parse('https://api.anthropic.com/v1/messages'),
+        Uri.parse('https://aiwire-proxy.prab187.workers.dev'),
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,

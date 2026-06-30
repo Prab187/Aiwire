@@ -88,22 +88,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: t.background,
       body: SafeArea(
         child: Column(children: [
-          // Header
+          // Header — no back button: Profile is a bottom-nav tab root,
+          // so there's nothing to pop. Tap a different tab to leave.
           Container(
             color: t.background,
-            padding: const EdgeInsets.fromLTRB(4, 12, 20, 12),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
             child: Row(children: [
-              IconButton(
-                icon: Icon(Icons.arrow_back_ios_new_rounded, color: t.primary, size: 18),
-                onPressed: () => Navigator.pop(context),
-                padding: const EdgeInsets.all(8),
-                constraints: const BoxConstraints(),
-              ),
-              const SizedBox(width: 2),
               Text('Profile',
-                style: GoogleFonts.inter(
-                  fontSize: 15, fontWeight: FontWeight.w600,
-                  color: t.primary, letterSpacing: -0.2)),
+                style: GoogleFonts.sourceSerif4(
+                  fontSize: 22, fontWeight: FontWeight.w700,
+                  color: t.primary, letterSpacing: -0.3)),
             ]),
           ),
           Divider(height: 1, color: t.divider),

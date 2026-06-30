@@ -81,7 +81,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     if (feature != null) AnalyticsService.featureTapped(feature: feature);
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen))
         .then((_) => _loadResumeState())
-        .catchError((_) {});
+        .catchError((e, st) {
+          // Log instead of silently swallowing so debug builds can spot
+          // breakage in the resume-state refresh after returning from a
+          // pushed screen.
+          debugPrint('AIWire: _loadResumeState() after pop failed — $e');
+        });
   }
 
   @override
@@ -103,7 +108,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               // ── Header ──
               SliverToBoxAdapter(child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
-                child: Text('Discover', style: GoogleFonts.sourceSerif4(
+                child: Text('AIWire', style: GoogleFonts.sourceSerif4(
                   fontSize: 30, fontWeight: FontWeight.w700,
                   color: t.primary, letterSpacing: -0.5)),
               )),

@@ -36,13 +36,10 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
       backgroundColor: t.background,
       body: SafeArea(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Container(
+          // No back button — Bookmarks is a bottom-nav tab root.
           color: t.background,
           padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
           child: Row(children: [
-            GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Icon(Icons.arrow_back, color: t.primary)),
-            const SizedBox(width: 16),
             Text('Saved', style: GoogleFonts.sourceSerif4(
                 fontSize: 22, fontWeight: FontWeight.w600, color: t.primary)),
           ]),

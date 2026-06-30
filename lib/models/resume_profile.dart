@@ -159,6 +159,30 @@ class ResumeProfile {
     );
   }
 
+  /// Round-trippable JSON for session persistence (used to save + restore
+  /// the parsed profile across browser refreshes / app restarts).
+  /// Keys mirror the wire format from the LLM prompt so fromJson can read
+  /// either real LLM output or a previously-persisted blob.
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'skills': skills,
+    'experience_level': experienceLevel,
+    'country': country,
+    'country_code': countryCode,
+    'job_title': jobTitle,
+    'summary': summary,
+    'years_of_experience': yearsOfExperience,
+    'projects': projects,
+    'certifications': certifications,
+    'education': education,
+    'strengths': strengths,
+    'gaps': structuredGaps.isNotEmpty
+        ? structuredGaps.map((g) => g.toJson()).toList()
+        : gaps,
+    'ats_score': atsScore,
+    'ats_issues': atsIssues,
+  };
+
   String get flagEmoji {
     final code = countryCode.toUpperCase();
     if (code.length != 2) return '🌍';

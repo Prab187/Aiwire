@@ -43,7 +43,7 @@ class ClaudeHttp {
       final client = http.Client();
       try {
         final response = await client.post(
-          Uri.parse('https://api.anthropic.com/v1/messages'),
+          Uri.parse('https://aiwire-proxy.prab187.workers.dev'),
           headers: {
             'Content-Type': 'application/json',
             'x-api-key': apiKey,

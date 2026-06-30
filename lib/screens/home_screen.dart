@@ -139,21 +139,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   void _onNavTap(int i) {
-    if (i == 1) {
-      Navigator.push(context, MaterialPageRoute(
-          builder: (_) => DiscoverScreen(theme: AppTheme(_mode))));
-      return;
-    }
-    if (i == 2) {
-      Navigator.push(context, MaterialPageRoute(
-          builder: (_) => BookmarksScreen(theme: AppTheme(_mode))));
-      return;
-    }
-    if (i == 3) {
-      Navigator.push(context, MaterialPageRoute(
-          builder: (_) => ProfileScreen(theme: AppTheme(_mode))));
-      return;
-    }
+    HapticFeedback.selectionClick();
     setState(() => _bottomIndex = i);
   }
 
@@ -161,134 +147,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     final t = AppTheme(_mode);
 
+    // Tab children — IndexedStack keeps each tab's state alive across switches.
+    // Order: 0=Home (Explore/Discover), 1=News, 2=Bookmarks, 3=Profile.
+    final tabs = <Widget>[
+      DiscoverScreen(theme: t),
+      _buildNewsTab(t),
+      BookmarksScreen(theme: t),
+      ProfileScreen(theme: t),
+    ];
+
     return FadeTransition(
       opacity: Tween<double>(begin: 0.9, end: 1.0).animate(_fadeAnim),
       child: Scaffold(
         backgroundColor: t.background,
-        body: SafeArea(
-          child: _loading
-            ? ArticleShimmer(theme: t)
-            : _error != null
-              ? Center(child: Padding(padding: const EdgeInsets.all(40),
-                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Text('Something went wrong', style: GoogleFonts.sourceSerif4(
-                        fontSize: 20, fontWeight: FontWeight.w600, color: t.primary)),
-                    const SizedBox(height: 10),
-                    Text(_error!, style: GoogleFonts.inter(color: t.muted, fontSize: 13),
-                        textAlign: TextAlign.center),
-                    const SizedBox(height: 28),
-                    GestureDetector(onTap: _loadNews,
-                      child: Text('Try again', style: GoogleFonts.inter(
-                          color: t.accent, fontSize: 14, fontWeight: FontWeight.w500))),
-                  ])))
-              : RefreshIndicator(
-                  color: t.primary,
-                  backgroundColor: t.surface,
-                  onRefresh: _loadNews,
-                  child: CustomScrollView(
-                    slivers: [
-
-                      // ── Title (scrolls away) ─────────
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                          child: Row(children: [
-                            GestureDetector(
-                              onTap: _cycleMode,
-                              child: Text(
-                                'AIWire',
-                                style: GoogleFonts.sourceSerif4(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w600,
-                                  color: t.primary,
-                                ),
-                              ),
-                            ),
-                            const Spacer(),
-                            FilterIcon(selected: _sortFilter, onChanged: _applyFilter,
-                                onSearch: _onSearch, theme: t),
-                          ]),
-                        ),
-                      ),
-
-                      // ── Sticky section label ─────────
-                      SliverPersistentHeader(
-                        pinned: true,
-                        delegate: _StickyLabelDelegate(
-                          child: Container(
-                            color: t.background,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-                                  child: Row(children: [
-                                    Text(
-                                      _searchQuery.isNotEmpty
-                                          ? 'Results for "$_searchQuery"'
-                                          : '${_sortFilter.label} Stories',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: t.muted,
-                                        letterSpacing: 0.3,
-                                      ),
-                                    ),
-                                    if (_searchQuery.isNotEmpty) ...[
-                                      const Spacer(),
-                                      GestureDetector(
-                                        onTap: () { setState(() => _searchQuery = ''); _applyFilter(_sortFilter); },
-                                        child: Text('Clear', style: GoogleFonts.inter(
-                                            fontSize: 13, color: t.muted,
-                                            decoration: TextDecoration.underline,
-                                            decorationColor: t.muted)),
-                                      ),
-                                    ],
-                                  ]),
-                                ),
-                                Divider(height: 1, color: t.divider),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      // ── Articles ─────────────────────
-                      _filtered.isEmpty
-                        ? SliverFillRemaining(
-                            child: Center(child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.search_off_rounded, size: 48, color: t.muted.withValues(alpha: 0.5)),
-                                const SizedBox(height: 16),
-                                Text('No stories found', style: GoogleFonts.sourceSerif4(
-                                  fontSize: 18, fontWeight: FontWeight.w600, color: t.primary)),
-                                const SizedBox(height: 6),
-                                Text('Try a different search or filter', style: GoogleFonts.inter(
-                                  fontSize: 13, color: t.muted)),
-                              ],
-                            )))
-                        : SliverList(
-                            delegate: SliverChildBuilderDelegate(
-                              (context, i) => AnimationConfiguration.staggeredList(
-                                position: i,
-                                duration: const Duration(milliseconds: 375),
-                                child: SlideAnimation(
-                                  verticalOffset: 30,
-                                  child: FadeInAnimation(
-                                    child: ArticleCard(article: _filtered[i], theme: t),
-                                  ),
-                                ),
-                              ),
-                              childCount: _filtered.length,
-                            ),
-                          ),
-
-                      const SliverToBoxAdapter(child: SizedBox(height: 40)),
-                    ],
-                  ),
-                ),
-        ),
+        body: IndexedStack(index: _bottomIndex, children: tabs),
 
         // ── Bottom nav ──────────────────────
         bottomNavigationBar: Container(
@@ -305,14 +177,131 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             showSelectedLabels: false, showUnselectedLabels: false,
             type: BottomNavigationBarType.fixed,
             items: const [
-              BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home_rounded), label: 'Home'),
-              BottomNavigationBarItem(icon: Icon(Icons.explore_outlined), activeIcon: Icon(Icons.explore_rounded), label: 'Discover'),
+              BottomNavigationBarItem(icon: Icon(Icons.explore_outlined), activeIcon: Icon(Icons.explore_rounded), label: 'Home'),
+              BottomNavigationBarItem(icon: Icon(Icons.newspaper_outlined), activeIcon: Icon(Icons.newspaper_rounded), label: 'News'),
               BottomNavigationBarItem(icon: Icon(Icons.bookmark_border_rounded), activeIcon: Icon(Icons.bookmark_rounded), label: 'Bookmarks'),
               BottomNavigationBarItem(icon: Icon(Icons.person_outline_rounded), activeIcon: Icon(Icons.person_rounded), label: 'Profile'),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  /// News tab — extracted from the previous home body so it can live as one
+  /// IndexedStack child while Home (index 0) shows the Resume Scanner.
+  Widget _buildNewsTab(AppTheme t) {
+    return SafeArea(
+      child: _loading
+        ? ArticleShimmer(theme: t)
+        : _error != null
+          ? Center(child: Padding(padding: const EdgeInsets.all(40),
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Text('Something went wrong', style: GoogleFonts.sourceSerif4(
+                    fontSize: 20, fontWeight: FontWeight.w600, color: t.primary)),
+                const SizedBox(height: 10),
+                Text(_error!, style: GoogleFonts.inter(color: t.muted, fontSize: 13),
+                    textAlign: TextAlign.center),
+                const SizedBox(height: 28),
+                GestureDetector(onTap: _loadNews,
+                  child: Text('Try again', style: GoogleFonts.inter(
+                      color: t.accent, fontSize: 14, fontWeight: FontWeight.w500))),
+              ])))
+          : RefreshIndicator(
+              color: t.primary,
+              backgroundColor: t.surface,
+              onRefresh: _loadNews,
+              child: CustomScrollView(
+                slivers: [
+                  // ── Title (scrolls away) ─────────
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                      child: Row(children: [
+                        GestureDetector(
+                          onTap: _cycleMode,
+                          child: Text('AIWire',
+                            style: GoogleFonts.sourceSerif4(
+                              fontSize: 28, fontWeight: FontWeight.w600,
+                              color: t.primary)),
+                        ),
+                        const Spacer(),
+                        FilterIcon(selected: _sortFilter, onChanged: _applyFilter,
+                            onSearch: _onSearch, theme: t),
+                      ]),
+                    ),
+                  ),
+                  // ── Sticky section label ─────────
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _StickyLabelDelegate(
+                      child: Container(
+                        color: t.background,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                              child: Row(children: [
+                                Text(
+                                  _searchQuery.isNotEmpty
+                                      ? 'Results for "$_searchQuery"'
+                                      : '${_sortFilter.label} Stories',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13, fontWeight: FontWeight.w600,
+                                    color: t.muted, letterSpacing: 0.3)),
+                                if (_searchQuery.isNotEmpty) ...[
+                                  const Spacer(),
+                                  GestureDetector(
+                                    onTap: () { setState(() => _searchQuery = ''); _applyFilter(_sortFilter); },
+                                    child: Text('Clear', style: GoogleFonts.inter(
+                                        fontSize: 13, color: t.muted,
+                                        decoration: TextDecoration.underline,
+                                        decorationColor: t.muted)),
+                                  ),
+                                ],
+                              ]),
+                            ),
+                            Divider(height: 1, color: t.divider),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // ── Articles ─────────────────────
+                  _filtered.isEmpty
+                    ? SliverFillRemaining(
+                        child: Center(child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.search_off_rounded, size: 48, color: t.muted.withValues(alpha: 0.5)),
+                            const SizedBox(height: 16),
+                            Text('No stories found', style: GoogleFonts.sourceSerif4(
+                              fontSize: 18, fontWeight: FontWeight.w600, color: t.primary)),
+                            const SizedBox(height: 6),
+                            Text('Try a different search or filter', style: GoogleFonts.inter(
+                              fontSize: 13, color: t.muted)),
+                          ],
+                        )))
+                    : SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, i) => AnimationConfiguration.staggeredList(
+                            position: i,
+                            duration: const Duration(milliseconds: 375),
+                            child: SlideAnimation(
+                              verticalOffset: 30,
+                              child: FadeInAnimation(
+                                child: ArticleCard(article: _filtered[i], theme: t),
+                              ),
+                            ),
+                          ),
+                          childCount: _filtered.length,
+                        ),
+                      ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                ],
+              ),
+            ),
     );
   }
 }

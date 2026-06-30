@@ -1,49 +1,12 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
-import 'package:xml/xml.dart';
 import '../models/resume_profile.dart';
-import 'claude_cache.dart';
-import 'claude_error.dart';
-import 'claude_http.dart';
 import 'curated_resources.dart';
 
-const _sampleResumeText = '''ALEX MORGAN
-ML Engineer · San Francisco, CA · alex.morgan@email.com · +1 (415) 555-0142
-
-PROFESSIONAL SUMMARY
-Machine learning engineer with 4 years of experience building production ML systems at consumer-tech companies. Specialized in recommendation systems, NLP, and MLOps. Improved core engagement metrics by 18% through model iteration and rigorous offline/online evaluation.
-
-EXPERIENCE
-
-Senior ML Engineer · Lumen Labs · 2023 — Present (San Francisco, CA)
-• Led the redesign of the personalized feed ranker, lifting click-through rate by 18% and watch-time by 12%
-• Built a real-time feature store on GCP serving 200M predictions/day with p99 latency under 80ms
-• Mentored 3 junior engineers and ran weekly ML reading group on transformer architectures
-
-ML Engineer · Sift Inc · 2021 — 2023 (Remote)
-• Developed a fraud-detection model using gradient boosted trees that reduced false positives by 30%
-• Owned the ML evaluation pipeline using MLflow and Airflow on AWS
-• Shipped a BERT-based ticket triage classifier saving 1,200 hours/month of manual work
-
-EDUCATION
-M.S. Computer Science (Machine Learning) · UC Berkeley · 2021
-B.S. Computer Science · UCLA · 2019
-
-SKILLS
-Python, PyTorch, TensorFlow, scikit-learn, SQL, AWS, GCP, Docker, Kubernetes, MLflow, Airflow, Spark, BigQuery, Transformers, NLP, Recommendation Systems
-
-CERTIFICATIONS
-AWS Certified Machine Learning – Specialty (2023)
-Deep Learning Specialization, DeepLearning.AI / Coursera (2022)
-
-PROJECTS
-Open-source contributor to Hugging Face Datasets (3 merged PRs)
-Built a personal ML dashboard tracking 50+ Kaggle competitions
-''';
-
 class ResumeService {
-  /// Pick a resume file from device.
+  /// Pick a resume file from device (PDF or TXT).
   static Future<PlatformFile?> pickResumeFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -53,10 +16,26 @@ class ResumeService {
     return result?.files.firstOrNull;
   }
 
-  /// Returns an in-memory PlatformFile containing a built-in sample resume,
-  /// so users can try the scanner without uploading their own.
+  /// Built-in sample resume so users can try the flow without uploading.
   static PlatformFile sampleResumeFile() {
-    final bytes = Uint8List.fromList(utf8.encode(_sampleResumeText));
+    const sample = '''Sample Resume
+
+Jane Doe
+Software Engineer
+
+Skills: Python, TensorFlow, PyTorch, AWS, Docker, Kubernetes,
+NLP, LLM, MLOps, REST APIs, Git
+
+Experience:
+- ML Engineer, Acme AI (2022-present)
+  Built and shipped LLM-powered features at scale.
+- Software Engineer, Beta Co. (2019-2022)
+  Backend services in Python and Go.
+
+Education:
+- B.S. Computer Science, State University (2019)
+''';
+    final bytes = Uint8List.fromList(utf8.encode(sample));
     return PlatformFile(
       name: 'sample_resume.txt',
       size: bytes.length,
@@ -65,33 +44,12 @@ class ResumeService {
   }
 
   /// Analyze the picked file with Claude and return a ResumeProfile.
-  /// Results are cached by file-byte hash for 30 days — re-scanning
-  /// the same file returns the cached profile without hitting Claude.
   static Future<ResumeProfile> analyzeResume(PlatformFile file) async {
     const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
     if (apiKey.isEmpty) throw Exception('ANTHROPIC_API_KEY not configured');
 
     final bytes = file.bytes;
-    if (bytes == null || bytes.isEmpty) {
-      throw Exception('Could not read the file. Please try uploading again.');
-    }
-
-    // Cache lookup keyed on file hash
-    final cacheKey = ClaudeCache.keyFrom([
-      file.extension,
-      bytes.length,
-      bytes.take(128).join(','),
-      bytes.skip(bytes.length - 128).take(128).join(','),
-    ]);
-    // Cache disabled temporarily to debug 0% job readiness issue
-    // final cached = await ClaudeCache.get('resume', cacheKey,
-    //     ttl: const Duration(days: 30));
-    // if (cached != null) {
-    //   try {
-    //     final parsed = json.decode(cached) as Map<String, dynamic>;
-    //     return ResumeProfile.fromJson(parsed);
-    //   } catch (_) {}
-    // }
+    if (bytes == null || bytes.isEmpty) throw Exception('Could not read file');
 
     final isPdf = file.extension?.toLowerCase() == 'pdf';
     final content = isPdf
@@ -140,13 +98,21 @@ Extract years_of_experience by calculating from work history dates. If dates unc
 Determine country from: address, phone country code, or any location mention.
 For strengths: identify what makes this candidate competitive.''';
 
-    final response = await ClaudeHttp.post(
-      apiKey: apiKey,
-      extraHeaders: isPdf ? {'anthropic-beta': 'pdfs-2024-09-25'} : null,
-      timeout: const Duration(seconds: 60),
-      body: {
+    final response = await http.post(
+      Uri.parse('https://aiwire-proxy.prab187.workers.dev'),
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        if (isPdf) 'anthropic-beta': 'pdfs-2024-09-25',
+      },
+      body: json.encode({
         'model': 'claude-haiku-4-5',
         'max_tokens': 2000,
+        // temperature: 0 = greedy decoding → deterministic output for the
+        // same resume. Without this, the API defaults to 1.0 and the ATS
+        // score (and other parsed fields) drift between identical uploads.
+        'temperature': 0,
         'messages': [
           {
             'role': 'user',
@@ -156,20 +122,15 @@ For strengths: identify what makes this candidate competitive.''';
             ],
           }
         ],
-      },
-    );
+      }),
+    ).timeout(const Duration(seconds: 60));
 
     if (response.statusCode != 200) {
-      throw Exception('Resume analysis failed — ${claudeError(response.statusCode, response.body)}');
+      throw Exception('Claude API error: ${response.statusCode}');
     }
 
     final data = json.decode(response.body);
-    final contentList = data['content'] as List?;
-    if (contentList == null || contentList.isEmpty) {
-      throw Exception('Empty response from resume analysis');
-    }
-    final text = ((contentList[0]['text'] as String?) ?? '').trim();
-    if (text.isEmpty) throw Exception('Resume analysis returned empty text');
+    final text = (data['content'][0]['text'] as String).trim();
 
     // Strip markdown code fences if present
     final jsonText = text
@@ -178,59 +139,8 @@ For strengths: identify what makes this candidate competitive.''';
         .replaceFirst(RegExp(r'\s*```$'), '')
         .trim();
 
-    // Try direct parse, fall back to repair for truncated responses
-    Map<String, dynamic>? parsed;
-    try {
-      parsed = json.decode(jsonText) as Map<String, dynamic>;
-    } catch (_) {
-      // Attempt to repair truncated JSON (common when max_tokens hits)
-      parsed = _repairTruncatedJson(jsonText);
-      if (parsed == null) {
-        throw Exception('AI response was cut off. Please try again — if it keeps happening, the resume may be too long.');
-      }
-    }
-    // Store in cache for 30 days
-    await ClaudeCache.set('resume', cacheKey, jsonText);
+    final parsed = json.decode(jsonText) as Map<String, dynamic>;
     return ResumeProfile.fromJson(parsed);
-  }
-
-  /// Best-effort repair of truncated JSON. Common failure modes:
-  ///   1. Trailing comma + no closing brace
-  ///   2. Unclosed string (no trailing quote)
-  ///   3. Truncated mid-array
-  /// Returns null if unrepairable.
-  static Map<String, dynamic>? _repairTruncatedJson(String raw) {
-    var s = raw.trim();
-    // Pass 1: Close any unterminated string at end of text
-    final quoteCount = RegExp('"').allMatches(s).length;
-    if (quoteCount.isOdd) s = '$s"';
-    // Pass 2: Drop trailing comma
-    s = s.replaceAll(RegExp(r',\s*$'), '');
-    // Pass 3: Count unbalanced brackets and close them
-    int openObj = 0, openArr = 0;
-    bool inString = false;
-    bool escape = false;
-    for (var i = 0; i < s.length; i++) {
-      final c = s[i];
-      if (escape) { escape = false; continue; }
-      if (c == '\\') { escape = true; continue; }
-      if (c == '"') { inString = !inString; continue; }
-      if (inString) continue;
-      if (c == '{') openObj++;
-      else if (c == '}') openObj--;
-      else if (c == '[') openArr++;
-      else if (c == ']') openArr--;
-    }
-    // Close any remaining open array/object
-    s = s + (']' * openArr.clamp(0, 10)) + ('}' * openObj.clamp(0, 10));
-    // Drop any content after last valid closing brace
-    final lastBrace = s.lastIndexOf('}');
-    if (lastBrace > 0) s = s.substring(0, lastBrace + 1);
-    try {
-      return json.decode(s) as Map<String, dynamic>;
-    } catch (_) {
-      return null;
-    }
   }
 
   static Map<String, dynamic> _pdfContent(Uint8List bytes) {
@@ -244,105 +154,15 @@ For strengths: identify what makes this candidate competitive.''';
     };
   }
 
-  static Map<String, dynamic> _plainTextContent(Uint8List bytes) {
+  static Map<String, dynamic> _textContent(Uint8List bytes) {
     String text;
     try {
       text = utf8.decode(bytes, allowMalformed: true);
     } catch (_) {
       text = String.fromCharCodes(bytes);
     }
-    if (text.length > 12000) text = text.substring(0, 12000);
+    // Trim to avoid hitting token limits
+    if (text.length > 8000) text = text.substring(0, 8000);
     return {'type': 'text', 'text': text};
-  }
-
-  // ── DOCX text extraction ──────────────────────────────────────────────────
-  // DOCX is a ZIP archive containing word/document.xml with the main text.
-
-  static String _extractDocxText(Uint8List bytes) {
-    try {
-      final archive = ZipDecoder().decodeBytes(bytes);
-
-      final docFile = archive.files.firstWhere(
-        (f) => f.name == 'word/document.xml',
-        orElse: () => throw Exception('No document.xml found'),
-      );
-
-      final xmlContent = utf8.decode(docFile.content as List<int>);
-      final document = XmlDocument.parse(xmlContent);
-
-      // Extract text from all <w:t> elements (Word text runs)
-      final buffer = StringBuffer();
-      final paragraphs = document.findAllElements('w:p');
-
-      for (final para in paragraphs) {
-        final texts = para.findAllElements('w:t');
-        for (final t in texts) {
-          buffer.write(t.innerText);
-        }
-        buffer.writeln(); // paragraph break
-      }
-
-      var text = buffer.toString().trim();
-      if (text.length > 12000) text = text.substring(0, 12000);
-      return text;
-    } catch (e) {
-      // If ZIP extraction fails, the file is corrupted or not a real DOCX
-      return '';
-    }
-  }
-
-  // ── DOC text extraction (legacy binary format) ────────────────────────────
-  // DOC files store text in the binary stream. We extract readable ASCII/UTF
-  // strings by scanning for runs of printable characters. This won't get
-  // perfect formatting but captures the actual resume text content.
-
-  static String _extractDocText(Uint8List bytes) {
-    try {
-      final buffer = StringBuffer();
-      final currentRun = StringBuffer();
-
-      for (var i = 0; i < bytes.length; i++) {
-        final b = bytes[i];
-        // Printable ASCII + common extended chars
-        if ((b >= 0x20 && b <= 0x7E) || b == 0x0A || b == 0x0D || b == 0x09) {
-          currentRun.writeCharCode(b);
-        } else {
-          // End of a text run — keep it if it's long enough to be real content
-          if (currentRun.length >= 4) {
-            buffer.write(currentRun.toString());
-            buffer.write(' ');
-          }
-          currentRun.clear();
-        }
-      }
-      // Flush last run
-      if (currentRun.length >= 4) {
-        buffer.write(currentRun.toString());
-      }
-
-      // Clean up: collapse whitespace, remove control sequences
-      var text = buffer.toString()
-          .replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F]'), '')
-          .replaceAll(RegExp(r' {3,}'), '\n')  // large gaps → line breaks
-          .replaceAll(RegExp(r'\n{3,}'), '\n\n')
-          .trim();
-
-      // DOC binary often has junk headers — try to find where real content starts
-      // by looking for common resume patterns
-      final resumeStart = RegExp(
-        r'(experience|education|summary|objective|skills|profile|contact|phone|email|address)',
-        caseSensitive: false,
-      ).firstMatch(text);
-      if (resumeStart != null && resumeStart.start > 200) {
-        // Grab some context before the first resume keyword
-        final start = (resumeStart.start - 200).clamp(0, text.length);
-        text = text.substring(start);
-      }
-
-      if (text.length > 12000) text = text.substring(0, 12000);
-      return text;
-    } catch (_) {
-      return '';
-    }
   }
 }

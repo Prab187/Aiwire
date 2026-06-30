@@ -36,8 +36,13 @@ class _ApplicationTrackerScreenState extends State<ApplicationTrackerScreen>
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final all = await ApplicationTrackerService.all();
-    if (mounted) setState(() { _all = all; _loading = false; });
+    try {
+      final all = await ApplicationTrackerService.all();
+      if (mounted) setState(() { _all = all; _loading = false; });
+    } catch (e) {
+      debugPrint('AIWire: ApplicationTracker load failed — $e');
+      if (mounted) setState(() { _loading = false; });
+    }
   }
 
   List<TrackedApplication> _filtered(AppStatus status) =>
@@ -98,7 +103,11 @@ class _ApplicationTrackerScreenState extends State<ApplicationTrackerScreen>
                     if (s == AppStatus.interviewing && app.interviewAt == null) {
                       app.interviewAt = DateTime.now().toIso8601String();
                     }
-                    await ApplicationTrackerService.update(app);
+                    try {
+                      await ApplicationTrackerService.update(app);
+                    } catch (e) {
+                      debugPrint('AIWire: status update failed — $e');
+                    }
                     setSheet(() {});
                     _load();
                   },
@@ -140,7 +149,11 @@ class _ApplicationTrackerScreenState extends State<ApplicationTrackerScreen>
                 ),
                 onChanged: (v) async {
                   app.notes = v;
-                  await ApplicationTrackerService.update(app);
+                  try {
+                    await ApplicationTrackerService.update(app);
+                  } catch (e) {
+                    debugPrint('AIWire: notes save failed — $e');
+                  }
                 },
               ),
               const SizedBox(height: 20),
@@ -165,7 +178,11 @@ class _ApplicationTrackerScreenState extends State<ApplicationTrackerScreen>
                 GestureDetector(
                   onTap: () async {
                     HapticFeedback.mediumImpact();
-                    await ApplicationTrackerService.remove(app.id);
+                    try {
+                      await ApplicationTrackerService.remove(app.id);
+                    } catch (e) {
+                      debugPrint('AIWire: application remove failed — $e');
+                    }
                     if (mounted) Navigator.pop(ctx);
                     _load();
                   },
