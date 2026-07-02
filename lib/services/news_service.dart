@@ -90,12 +90,18 @@ class NewsService {
     return _filterAndScore(allArticles);
   }
 
+  static String _proxiedUrl(String url) {
+    if (kIsWeb) return 'https://corsproxy.io/?url=${Uri.encodeComponent(url)}';
+    return url;
+  }
+
   static Future<List<Article>> _fetchRssFeed(String feedUrl, String sourceName) async {
     try {
+      final requestUrl = _proxiedUrl(feedUrl);
       final response = await http.get(
-        Uri.parse(feedUrl),
-        headers: {'User-Agent': 'AIWire/1.0 (Flutter RSS Reader)'},
-      ).timeout(const Duration(seconds: 10));
+        Uri.parse(requestUrl),
+        headers: kIsWeb ? {} : {'User-Agent': 'AIWire/1.0 (Flutter RSS Reader)'},
+      ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) return [];
 
@@ -138,11 +144,10 @@ class NewsService {
     const apiKey = String.fromEnvironment('NEWS_API_KEY');
     if (apiKey.isEmpty) return [];
 
-    final url = Uri.parse(
-      'https://newsapi.org/v2/everything?q=artificial+intelligence+AI+LLM&sortBy=publishedAt&language=en&pageSize=50&apiKey=$apiKey'
-    );
+    const newsApiUrl = 'https://newsapi.org/v2/everything?q=artificial+intelligence+AI+LLM&sortBy=publishedAt&language=en&pageSize=50&apiKey=$apiKey';
+    final url = Uri.parse(_proxiedUrl(newsApiUrl));
 
-    final response = await http.get(url).timeout(const Duration(seconds: 10));
+    final response = await http.get(url).timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
