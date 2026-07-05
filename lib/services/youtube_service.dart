@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import '../models/resume_profile.dart';
 import 'claude_cache.dart';
+import 'cors_proxy.dart';
 import 'claude_error.dart';
 import 'claude_http.dart';
 
@@ -90,7 +91,7 @@ class YouTubeService {
       try {
         // Search: returns video IDs, published dates, basic metadata
         // Cost: 100 units per call. 15-day window ordered by viewCount.
-        final searchUrl = Uri.parse(
+        final searchUrl = corsUri(
           'https://www.googleapis.com/youtube/v3/search'
           '?part=snippet'
           '&q=${Uri.encodeComponent(query)}'
@@ -121,7 +122,7 @@ class YouTubeService {
         if (videoIds.isEmpty) continue;
 
         // Fetch statistics + duration in one batched call (cost: 1 unit)
-        final detailsUrl = Uri.parse(
+        final detailsUrl = corsUri(
           'https://www.googleapis.com/youtube/v3/videos'
           '?part=statistics,contentDetails'
           '&id=${videoIds.join(",")}'

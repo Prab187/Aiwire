@@ -1,11 +1,11 @@
 {
-    "name": "aiwire",
-    "short_name": "aiwire",
+    "name": "AIWire",
+    "short_name": "AIWire",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "AIWire — AI news, jobs, events, and career tools in one app.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

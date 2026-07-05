@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 import '../models/event.dart';
+import 'cors_proxy.dart';
 
 class EventsService {
   // ── AI Conference RSS feeds (free, no key) ───────────────────────────────
@@ -35,7 +36,7 @@ class EventsService {
     await Future.wait(_eventRssFeeds.map((feed) async {
       try {
         final response = await http.get(
-          Uri.parse(feed['url']!),
+          corsUri(feed['url']!),
           headers: {'User-Agent': 'AIWire/1.0 (Flutter RSS Reader)'},
         ).timeout(const Duration(seconds: 8));
         if (response.statusCode != 200) return;
@@ -128,7 +129,7 @@ class EventsService {
     final startDate = now.toIso8601String().split('T').first;
     final endDate = now.add(const Duration(days: 180)).toIso8601String().split('T').first;
 
-    final url = Uri.parse(
+    final url = corsUri(
       'https://api.predicthq.com/v1/events/'
       '?category=conferences,expos,community'
       '&q=artificial+intelligence+machine+learning+AI'
@@ -189,7 +190,7 @@ class EventsService {
     const token = String.fromEnvironment('EVENTBRITE_TOKEN');
     if (token.isEmpty) return [];
 
-    final url = Uri.parse(
+    final url = corsUri(
       'https://www.eventbriteapi.com/v3/events/search/'
       '?q=artificial+intelligence+machine+learning'
       '&categories=102' // Science & Tech
@@ -260,7 +261,7 @@ class EventsService {
 
     for (final year in years) {
       try {
-        final url = Uri.parse(
+        final url = corsUri(
           'https://raw.githubusercontent.com/tech-conferences/'
           'conference-data/main/conferences/$year/data.json',
         );
@@ -336,7 +337,7 @@ class EventsService {
     final start = '${now.toIso8601String().split('.').first}Z';
     final end = '${now.add(const Duration(days: 180)).toIso8601String().split('.').first}Z';
 
-    final url = Uri.parse(
+    final url = corsUri(
       'https://app.ticketmaster.com/discovery/v2/events.json'
       '?apikey=$apiKey'
       '&keyword=${Uri.encodeComponent("artificial intelligence machine learning")}'

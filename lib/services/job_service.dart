@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/job.dart';
+import 'cors_proxy.dart';
 
 class JobService {
   // ── Primary: Remotive API (free, no key needed) ──────────────────────────
   static Future<List<Job>> _fetchRemotiveJobs({String? query}) async {
     final search = query ?? 'machine learning';
-    final url = Uri.parse(
+    final url = corsUri(
       'https://remotive.com/api/remote-jobs?category=software-dev&search=${Uri.encodeComponent(search)}&limit=20'
     );
 
@@ -41,7 +42,7 @@ class JobService {
   // ── The Muse API (free, no key — tech & data science jobs) ─────────────
   static Future<List<Job>> _fetchTheMuseJobs({String? query}) async {
     // The Muse has a "Data Science" category — no auth required
-    final url = Uri.parse(
+    final url = corsUri(
       'https://www.themuse.com/api/public/jobs'
       '?category=Data+Science&category=Software+Engineer&page=0',
     );
@@ -107,7 +108,7 @@ class JobService {
 
   // ── Arbeitnow API (free, no key — EU remote tech jobs) ───────────────────
   static Future<List<Job>> _fetchArbeitnowJobs({String? query}) async {
-    final url = Uri.parse('https://arbeitnow.com/api/job-board-api');
+    final url = corsUri('https://arbeitnow.com/api/job-board-api');
 
     try {
       final response = await http.get(url,
@@ -166,7 +167,7 @@ class JobService {
 
   // ── Jobicy API (free, no key — remote jobs with salary & logo) ──────────
   static Future<List<Job>> _fetchJobicyJobs({String? query}) async {
-    final url = Uri.parse(
+    final url = corsUri(
       'https://jobicy.com/api/v2/remote-jobs?count=50',
     );
 
@@ -249,7 +250,7 @@ class JobService {
 
     final search =
         Uri.encodeComponent(query ?? 'artificial intelligence machine learning');
-    final url = Uri.parse(
+    final url = corsUri(
       'https://www.reed.co.uk/api/1.0/search'
       '?keywords=$search&resultsToTake=15',
     );
@@ -300,7 +301,7 @@ class JobService {
     if (appId.isEmpty || appKey.isEmpty) return [];
 
     final search = query ?? 'artificial intelligence machine learning';
-    final url = Uri.parse(
+    final url = corsUri(
       'https://api.adzuna.com/v1/api/jobs/$country/search/1'
       '?app_id=$appId&app_key=$appKey'
       '&what=${Uri.encodeComponent(search)}'

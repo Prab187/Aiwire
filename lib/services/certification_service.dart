@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/certification.dart';
+import 'cors_proxy.dart';
 
 class CertificationService {
   // ── Coursera public catalog (no auth needed) ─────────────────────────────
   static Future<List<Certification>> _fetchCourseraCourses() async {
-    final url = Uri.parse(
+    final url = corsUri(
       'https://api.coursera.org/api/courses.v1'
       '?q=search&query=artificial+intelligence+machine+learning'
       '&includes=partnerIds'
@@ -55,7 +56,7 @@ class CertificationService {
     final allCerts = <Certification>[];
 
     for (final query in queries) {
-      final url = Uri.parse(
+      final url = corsUri(
         'https://api.coursera.org/api/courses.v1'
         '?q=search&query=$query'
         '&fields=name,description,slug'
@@ -112,7 +113,7 @@ class CertificationService {
     for (final query in queries) {
       try {
         final credentials = base64Encode(utf8.encode('$clientId:$clientSecret'));
-        final uri = Uri.parse(
+        final uri = corsUri(
           'https://www.udemy.com/api-2.0/courses/'
           '?search=$query&page_size=10&ordering=highest-rated&language=en'
           '&fields[course]=id,title,headline,url,price,avg_rating,num_reviews,image_480x270,visible_instructors',

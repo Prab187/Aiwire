@@ -127,10 +127,6 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
   bool _eventsLoading = false;
   bool _newsLoading = false;
   bool _videosLoading = false;
-  String? _certsError;
-  String? _eventsError;
-  String? _newsError;
-  String? _videosError;
 
   // Manual input (no resume)
   String _manualName = '';
@@ -792,7 +788,6 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
       debugPrint('AIWire: certifications fetch failed — $e');
       if (mounted) setState(() {
         _certsLoading = false;
-        _certsError = 'Couldn\'t load certifications. Pull to retry.';
       });
     }
   }
@@ -846,7 +841,6 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
       debugPrint('AIWire: events fetch failed — $e');
       if (mounted) setState(() {
         _eventsLoading = false;
-        _eventsError = 'Couldn\'t load events. Pull to retry.';
       });
     }
   }
@@ -875,7 +869,6 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
       debugPrint('AIWire: videos fetch failed — $e');
       if (mounted) setState(() {
         _videosLoading = false;
-        _videosError = 'Couldn\'t load videos. Pull to retry.';
       });
     }
   }
@@ -929,7 +922,6 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
       debugPrint('AIWire: news fetch failed — $e');
       if (mounted) setState(() {
         _newsLoading = false;
-        _newsError = 'Couldn\'t load news. Pull to retry.';
       });
     }
   }
@@ -955,10 +947,6 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
       _eventsLoading = false;
       _newsLoading = false;
       _videosLoading = false;
-      _certsError = null;
-      _eventsError = null;
-      _newsError = null;
-      _videosError = null;
     });
   }
 

@@ -183,8 +183,8 @@ class _ApplicationTrackerScreenState extends State<ApplicationTrackerScreen>
                     } catch (e) {
                       debugPrint('AIWire: application remove failed — $e');
                     }
-                    if (mounted) Navigator.pop(ctx);
-                    _load();
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    if (mounted) _load();
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/udemy_course.dart';
+import 'cors_proxy.dart';
 
 class UdemyService {
   static const String _baseUrl = 'https://www.udemy.com/api-2.0/courses/';
@@ -13,7 +14,7 @@ class UdemyService {
   }
 
   static Future<List<UdemyCourse>> fetchAICourses({String search = 'artificial intelligence'}) async {
-    final uri = Uri.parse(_baseUrl).replace(queryParameters: {
+    final rawUri = Uri.parse(_baseUrl).replace(queryParameters: {
       'search': search,
       'page_size': '20',
       'ordering': 'highest-rated',
@@ -21,6 +22,7 @@ class UdemyService {
       'fields[course]': 'id,title,headline,url,price,avg_rating,num_reviews,image_480x270,visible_instructors',
       'fields[user]': 'display_name',
     });
+    final uri = corsUri(rawUri.toString());
 
     try {
       final response = await http.get(uri, headers: {

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'claude_cache.dart';
+import 'cors_proxy.dart';
 import 'claude_error.dart';
 import 'claude_http.dart';
 import 'user_activity_context.dart';
@@ -18,7 +19,7 @@ class CompanyResearchService {
           .subtract(const Duration(days: 30))
           .toIso8601String()
           .split('T').first;
-      final url = Uri.parse(
+      final url = corsUri(
         'https://newsapi.org/v2/everything'
         '?q=${Uri.encodeComponent('"$company"')}'
         '&from=$fromDate'
