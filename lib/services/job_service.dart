@@ -465,6 +465,7 @@ class JobService {
     required String countryCode,
     required String jobTitle,
     String? country,
+    String city = '',
   }) async {
     final query = '$jobTitle ${skills.take(3).join(' ')}';
     final results = await Future.wait([
@@ -480,16 +481,48 @@ class JobService {
       ...results[0], ...results[1], ...results[2],
       ...results[3], ...results[4], ...results[5],
     ];
-    if (jobs.isEmpty) jobs = List.from(_fallbackJobs);
 
     final seen = <String>{};
     jobs = jobs.where((j) => seen.add('${j.title}|${j.company}')).toList();
 
+    final countryStr = country ?? '';
+
+    // Filter: user's country first, truly remote worldwide jobs, reject others
+    final localJobs = jobs.where((j) => _jobMatchesCountry(j, countryCode, city, countryStr)).toList();
+    final remoteJobs = jobs.where((j) =>
+        !localJobs.contains(j) &&
+        j.type == 'Remote' &&
+        (j.location.toLowerCase().contains('worldwide') ||
+         j.location.toLowerCase().contains('anywhere') ||
+         j.location.toLowerCase().contains('global') ||
+         j.location.isEmpty)).toList();
+
+    jobs = [...localJobs, ...remoteJobs];
+    if (jobs.isEmpty) {
+      jobs = _fallbackJobs
+          .where((j) => j.type == 'Remote' || _jobMatchesCountry(j, countryCode, city, countryStr))
+          .toList();
+    }
+
+    // Sort: city match → country match → remote → featured → date
+    final cityLower = city.toLowerCase();
+    final countryLower = countryStr.toLowerCase();
     jobs.sort((a, b) {
-      if (a.featured && !b.featured) return -1;
-      if (!a.featured && b.featured) return 1;
+      int score(Job j) {
+        final loc = j.location.toLowerCase();
+        if (cityLower.isNotEmpty && loc.contains(cityLower)) return 5;
+        if (countryLower.isNotEmpty && loc.contains(countryLower)) return 4;
+        final aliases = _countryAliases[countryCode] ?? [];
+        if (aliases.any((a) => loc.contains(a))) return 3;
+        if (j.type == 'Remote') return 2;
+        if (j.featured) return 1;
+        return 0;
+      }
+      final diff = score(b) - score(a);
+      if (diff != 0) return diff;
       return b.postedAt.compareTo(a.postedAt);
     });
+
     return jobs;
   }
 

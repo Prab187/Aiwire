@@ -307,6 +307,7 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
           countryCode: profile.countryCode,
           jobTitle: profile.jobTitle,
           country: profile.country,
+          city: profile.city,
         ).then((jobs) {
           if (!mounted) return;
           setState(() {
@@ -1001,6 +1002,7 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
           countryCode: profile.countryCode,
           jobTitle: profile.jobTitle,
           country: profile.country,
+          city: profile.city,
         ).then((jobs) {
           if (!mounted) return;
           setState(() {

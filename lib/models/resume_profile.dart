@@ -49,6 +49,7 @@ class ResumeProfile {
   final String experienceLevel;
   final String country;
   final String countryCode;
+  final String city;
   final String jobTitle;
   final String summary;
   final int yearsOfExperience;
@@ -67,6 +68,7 @@ class ResumeProfile {
     required this.experienceLevel,
     required this.country,
     required this.countryCode,
+    this.city = '',
     required this.jobTitle,
     required this.summary,
     this.yearsOfExperience = 0,
@@ -145,6 +147,7 @@ class ResumeProfile {
       experienceLevel: json['experience_level'] as String? ?? 'Mid',
       country: json['country'] as String? ?? 'United States',
       countryCode: (json['country_code'] as String? ?? 'us').toLowerCase(),
+      city: json['city'] as String? ?? '',
       jobTitle: json['job_title'] as String? ?? 'AI/ML Engineer',
       summary: json['summary'] as String? ?? '',
       yearsOfExperience: (json['years_of_experience'] as num?)?.toInt() ?? 0,
@@ -169,6 +172,7 @@ class ResumeProfile {
     'experience_level': experienceLevel,
     'country': country,
     'country_code': countryCode,
+    'city': city,
     'job_title': jobTitle,
     'summary': summary,
     'years_of_experience': yearsOfExperience,
