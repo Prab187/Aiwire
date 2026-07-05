@@ -1,3 +1,4 @@
+import '../config/secrets.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -141,7 +142,7 @@ class NewsService {
   }
 
   static Future<List<Article>> _fetchNewsApi() async {
-    const apiKey = String.fromEnvironment('NEWS_API_KEY');
+    const apiKey = Secrets.newsApiKey;
     if (apiKey.isEmpty) return [];
 
     const newsApiUrl = 'https://newsapi.org/v2/everything?q=artificial+intelligence+AI+LLM&sortBy=publishedAt&language=en&pageSize=50&apiKey=$apiKey';

@@ -1,3 +1,4 @@
+import '../config/secrets.dart';
 import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -872,7 +873,7 @@ class _InvestmentArticleSheetState extends State<_InvestmentArticleSheet> {
   }
 
   Future<void> _fetchSummary() async {
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    const apiKey = Secrets.anthropicApiKey;
     if (apiKey.isEmpty) {
       if (mounted) setState(() {
         _loading = false;

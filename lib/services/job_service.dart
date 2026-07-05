@@ -1,3 +1,4 @@
+import '../config/secrets.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/job.dart';
@@ -245,7 +246,7 @@ class JobService {
 
   // ── Reed.co.uk API (free key — reed.co.uk/developers/jobseeker) ──────────
   static Future<List<Job>> _fetchReedJobs({String? query}) async {
-    const apiKey = String.fromEnvironment('REED_API_KEY');
+    const apiKey = Secrets.reedApiKey;
     if (apiKey.isEmpty) return [];
 
     final search =
@@ -296,8 +297,8 @@ class JobService {
 
   // ── Secondary: Adzuna API (free tier — 250 req/day) ──────────────────────
   static Future<List<Job>> _fetchAdzunaJobs({String? query, String country = 'us'}) async {
-    const appId = String.fromEnvironment('ADZUNA_APP_ID');
-    const appKey = String.fromEnvironment('ADZUNA_APP_KEY');
+    const appId = Secrets.adzunaAppId;
+    const appKey = Secrets.adzunaAppKey;
     if (appId.isEmpty || appKey.isEmpty) return [];
 
     final search = query ?? 'artificial intelligence machine learning';

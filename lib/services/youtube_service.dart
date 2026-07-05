@@ -1,3 +1,4 @@
+import '../config/secrets.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -78,7 +79,7 @@ class YouTubeService {
   /// Needs YOUTUBE_API_KEY in .env.
   static Future<List<YouTubeVideo>> _fetchViaYouTubeDataApi(
       List<String> queries, int maxResults) async {
-    const apiKey = String.fromEnvironment('YOUTUBE_API_KEY');
+    const apiKey = Secrets.youtubeApiKey;
     if (apiKey.isEmpty) return [];
 
     final candidates = <YouTubeVideo>[];
@@ -483,7 +484,7 @@ class YouTubeService {
     /// (the default), returns a GENERIC summary for all users.
     ResumeProfile? personalizeFor,
   }) async {
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    const apiKey = Secrets.anthropicApiKey;
     if (apiKey.isEmpty) throw Exception('ANTHROPIC_API_KEY not configured');
 
     // Build an explicit context object — ONLY when the caller asks for it.

@@ -1,3 +1,4 @@
+import '../config/secrets.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -330,7 +331,7 @@ class EventsService {
 
   // ── Ticketmaster Discovery API (free — 5,000/day, developer.ticketmaster.com)
   static Future<List<AIEvent>> _fetchTicketmasterEvents() async {
-    const apiKey = String.fromEnvironment('TICKETMASTER_API_KEY');
+    const apiKey = Secrets.ticketmasterApiKey;
     if (apiKey.isEmpty) return [];
 
     final now = DateTime.now();

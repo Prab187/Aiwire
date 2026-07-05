@@ -36,3 +36,6 @@ ios/Flutter/Flutter.podspec
 .env
 .env.json
 .claude/
+
+# API keys — never commit
+lib/config/secrets.dart

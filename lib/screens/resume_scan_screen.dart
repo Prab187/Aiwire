@@ -1,3 +1,4 @@
+import '../config/secrets.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -382,7 +383,7 @@ Get yours: aiwire.app''';
     setState(() { _recLoading = true; _recommendation = null; });
     _startRecStatusRotator();
 
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    const apiKey = Secrets.anthropicApiKey;
     if (apiKey.isEmpty) {
       _stopRecStatusRotator();
       setState(() { _recLoading = false; _recommendation = 'API key not configured.'; });
@@ -4140,7 +4141,7 @@ class _NewsArticleSheetState extends State<_NewsArticleSheet> {
   }
 
   Future<void> _fetchSummary() async {
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    const apiKey = Secrets.anthropicApiKey;
     if (apiKey.isEmpty) {
       if (mounted) setState(() {
         _loading = false;

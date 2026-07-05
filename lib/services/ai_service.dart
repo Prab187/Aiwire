@@ -1,3 +1,4 @@
+import '../config/secrets.dart';
 import 'dart:convert';
 import '../models/resume_profile.dart';
 import 'claude_error.dart';
@@ -57,7 +58,7 @@ class AIService {
     String? cacheKey,
     ResumeProfile? personalizeFor,
   }) async {
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    const apiKey = Secrets.anthropicApiKey;
     if (apiKey.isEmpty) throw Exception('ANTHROPIC_API_KEY not configured');
     final context = description ?? content ?? '';
 

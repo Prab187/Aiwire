@@ -1,3 +1,4 @@
+import '../config/secrets.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
@@ -45,7 +46,7 @@ Education:
 
   /// Analyze the picked file with Claude and return a ResumeProfile.
   static Future<ResumeProfile> analyzeResume(PlatformFile file) async {
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    const apiKey = Secrets.anthropicApiKey;
     if (apiKey.isEmpty) throw Exception('ANTHROPIC_API_KEY not configured');
 
     final bytes = file.bytes;

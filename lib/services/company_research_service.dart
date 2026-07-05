@@ -1,3 +1,4 @@
+import '../config/secrets.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -12,7 +13,7 @@ class CompanyResearchService {
   /// Fetch recent news about a company via NewsAPI (last 30 days, top 5 hits).
   /// Returns a concise text block to feed Claude as grounding context.
   static Future<String> _fetchRecentNews(String company) async {
-    const apiKey = String.fromEnvironment('NEWS_API_KEY');
+    const apiKey = Secrets.newsApiKey;
     if (apiKey.isEmpty) return '';
     try {
       final fromDate = DateTime.now()
@@ -58,7 +59,7 @@ class CompanyResearchService {
         ttl: const Duration(days: 7)); // shorter cache since news changes
     if (cached != null) return cached;
 
-    const apiKey = String.fromEnvironment('ANTHROPIC_API_KEY');
+    const apiKey = Secrets.anthropicApiKey;
     if (apiKey.isEmpty) throw Exception('API key not configured');
 
     // Pull real news BEFORE calling Claude so it has current grounding
