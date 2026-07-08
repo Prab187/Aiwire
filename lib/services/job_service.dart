@@ -12,7 +12,8 @@ class JobService {
       'https://remotive.com/api/remote-jobs?category=software-dev&search=${Uri.encodeComponent(search)}&limit=20'
     );
 
-    final response = await http.get(url);
+    try {
+    final response = await http.get(url).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) return [];
 
     final data = json.decode(response.body);
@@ -38,6 +39,9 @@ class JobService {
     }).toList() ?? [];
 
     return jobs;
+    } catch (_) {
+      return [];
+    }
   }
 
   // ── The Muse API (free, no key — tech & data science jobs) ─────────────

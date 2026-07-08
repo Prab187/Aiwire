@@ -36,9 +36,8 @@ import '../models/job_legitimacy.dart';
 import '../widgets/bullet_summary.dart';
 import '../widgets/beginner_starter_plan.dart';
 import 'company_research_sheet.dart';
-// Premium gate disabled during testing — re-enable before App Store launch
-// import '../widgets/quota_paywall.dart';
-// import '../services/ai_quota_guard.dart';
+import '../widgets/quota_paywall.dart';
+import '../services/ai_quota_guard.dart';
 import 'mock_interview_screen.dart';
 import '../services/analytics_service.dart';
 
@@ -254,9 +253,8 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
         }
       }());
 
-      // Premium gate disabled during testing
-      // await AiQuotaGuard.record();
-      // await AiQuotaGuard.record();
+      await AiQuotaGuard.record();
+      await AiQuotaGuard.record();
 
       // ⚠️ GLOBAL GATE: If the resume parse returned too little signal,
       // set _profileReadable=false so EVERY tab shows the honest "can't read

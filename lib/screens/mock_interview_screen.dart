@@ -13,9 +13,9 @@ import '../services/claude_http.dart';
 import '../services/star_story_service.dart';
 import '../services/user_activity_context.dart';
 import '../models/star_story.dart';
-// Premium gate disabled during testing
-// import '../services/ai_quota_guard.dart';
-// import '../widgets/quota_paywall.dart';
+
+import '../services/ai_quota_guard.dart';
+import '../widgets/quota_paywall.dart';
 
 enum _IvState { setup, prepGuide, asking, feedback }
 
@@ -189,7 +189,7 @@ class _MockInterviewScreenState extends State<MockInterviewScreen>
 
   Future<void> _startInterview() async {
     HapticFeedback.lightImpact();
-    // Premium gate disabled during testing
+    
     // if (!await checkAiQuotaOrShowPaywall(context, t)) return;
     setState(() { _loading = true; _error = null; });
 
@@ -270,7 +270,7 @@ Rules:
       for (final q in questions) {
         _turns.add(_Turn(q));
       }
-      // await AiQuotaGuard.record();
+      await AiQuotaGuard.record();
       AnalyticsService.interviewStarted(role: _role, type: _type);
       setState(() {
         _state = _IvState.asking;

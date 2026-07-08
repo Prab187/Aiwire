@@ -71,6 +71,7 @@ class TtsService {
   }
 
   Future<void> resume() async {
+    await _tts.stop();
     await _tts.speak(currentText ?? '');
   }
 

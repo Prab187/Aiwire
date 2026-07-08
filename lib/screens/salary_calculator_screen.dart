@@ -8,9 +8,9 @@ import '../theme/app_theme.dart';
 import '../services/claude_cache.dart';
 import '../services/claude_error.dart';
 import '../services/claude_http.dart';
-// Premium gate disabled during testing
-// import '../services/ai_quota_guard.dart';
-// import '../widgets/quota_paywall.dart';
+
+import '../services/ai_quota_guard.dart';
+import '../widgets/quota_paywall.dart';
 
 class SalaryCalculatorScreen extends StatefulWidget {
   final AppTheme theme;
@@ -80,7 +80,7 @@ class _SalaryCalculatorScreenState extends State<SalaryCalculatorScreen> {
     // Prevent double-tap race: if we're already calculating, ignore.
     if (_loading) return;
     HapticFeedback.lightImpact();
-    // Premium gate disabled during testing
+    
     // if (!await checkAiQuotaOrShowPaywall(context, t)) return;
     setState(() {
       _loading = true; _error = null;
@@ -175,7 +175,7 @@ CRITICAL:
           .replaceFirst(RegExp(r'\s*```$'), '');
       final parsed = json.decode(cleaned) as Map<String, dynamic>;
       await ClaudeCache.set('salary', cacheKey, cleaned);
-      // await AiQuotaGuard.record();
+      await AiQuotaGuard.record();
       _applyParsed(parsed);
     } catch (e) {
       if (!mounted) return;

@@ -138,8 +138,11 @@ class SubscriptionService {
       });
 
       await _iap.restorePurchases();
-      // Wait for restore to deliver all transactions
-      await Future.delayed(const Duration(seconds: 4));
+      // Wait up to 8s for StoreKit to deliver transactions; complete early if found
+      await completer.future.timeout(
+        const Duration(seconds: 8),
+        onTimeout: () => foundActive,
+      ).catchError((_) => foundActive);
       await validateSub.cancel();
 
       final prefs = await SharedPreferences.getInstance();
@@ -147,7 +150,9 @@ class SubscriptionService {
         await prefs.setBool(_keyIsPremium, true);
         debugPrint('IAP: Active subscription confirmed');
       } else {
-        await prefs.setBool(_keyIsPremium, false);
+        // Only downgrade on an affirmative "no transactions" response
+        // Never downgrade if StoreKit was unavailable (network issue, etc.)
+        if (available) await prefs.setBool(_keyIsPremium, false);
         debugPrint('IAP: No active subscription found');
       }
 

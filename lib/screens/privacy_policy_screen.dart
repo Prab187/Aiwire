@@ -43,7 +43,7 @@ class _PolicyBody extends StatelessWidget {
           'AIWire Privacy Policy',
           isTitle: true,
         ),
-        _body('Last updated: March 2025'),
+        _body('Last updated: July 2026'),
         const SizedBox(height: 8),
         _body(
           'This Privacy Policy explains how AIWire ("we", "us", or "our") '
@@ -95,8 +95,7 @@ class _PolicyBody extends StatelessWidget {
         _bullets([
           'To create and maintain your account.',
           'To personalise your news feed and AI-generated summaries.',
-          'To process subscription payments via RevenueCat and Apple '
-              'StoreKit / Google Play Billing.',
+          'To process subscription payments via Apple StoreKit / Google Play Billing.',
           'To send you important account-related notifications (not marketing '
               'without your consent).',
           'To analyse aggregate usage trends and improve app features.',
@@ -124,9 +123,9 @@ class _PolicyBody extends StatelessWidget {
         _thirdPartyRow('NewsAPI',
             'Supplies news article metadata and headlines. No personal '
             'data is shared with NewsAPI.'),
-        _thirdPartyRow('RevenueCat / Apple StoreKit',
+        _thirdPartyRow('Apple StoreKit / Google Play Billing',
             'Manages in-app purchase subscriptions. Payment processing is '
-            'handled entirely by Apple; we receive subscription status only.'),
+            'handled entirely by Apple or Google; we receive subscription status only.'),
 
         _section('4. Data Retention'),
         _body(

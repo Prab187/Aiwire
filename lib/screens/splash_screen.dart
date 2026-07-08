@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'home_screen.dart';
+import 'onboarding_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -53,17 +55,22 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     // Fade out
     await _fadeAnim.forward();
 
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const HomeScreen(),
-          transitionsBuilder: (_, anim, __, child) => FadeTransition(
+    if (!mounted) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final onboarded = prefs.getBool('onboarded') ?? false;
+
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) =>
+            onboarded ? const HomeScreen() : const OnboardingScreen(),
+        transitionsBuilder: (_, anim, __, child) => FadeTransition(
             opacity: anim, child: child),
-          transitionDuration: const Duration(milliseconds: 400),
-        ),
-      );
-    }
+        transitionDuration: const Duration(milliseconds: 400),
+      ),
+    );
   }
 
   @override
