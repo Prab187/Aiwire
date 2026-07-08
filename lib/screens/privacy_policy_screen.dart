@@ -148,7 +148,7 @@ class _PolicyBody extends StatelessWidget {
         ]),
         _body(
           'To exercise any of these rights, please contact us at '
-          'privacy@aiwire.app. We will respond within 30 days.',
+          'email2prab@gmail.com. We will respond within 30 days.',
         ),
 
         _section('6. Data Security'),
@@ -190,7 +190,7 @@ class _PolicyBody extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'privacy@aiwire.app',
+          'email2prab@gmail.com',
           style: GoogleFonts.inter(
             fontSize: 13,
             color: const Color(0xFF888888),

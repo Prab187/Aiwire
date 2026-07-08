@@ -199,7 +199,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                     children: [
                       GestureDetector(
                         onTap: () async {
-                          final uri = Uri.parse('https://aiwire.app/terms');
+                          final uri = Uri.parse('https://prab187.github.io/Aiwire/terms.html');
                           if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
                         },
                         child: Text('Terms',
