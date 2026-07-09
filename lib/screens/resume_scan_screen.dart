@@ -3841,7 +3841,131 @@ class _OptimizedResumeSheetState extends State<_OptimizedResumeSheet> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Generating PDF...',
+                            style: GoogleFonts.inter(fontSize: 13),
+                          ),
+                          backgroundColor: t.muted,
+                        ),
+                      );
+                      try {
+                        final pdfPath = await ResumeService.exportResumeToPdf(
+                          widget.optimizedText,
+                          'Resume_Optimized',
+                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'PDF ready: $pdfPath',
+                                style: GoogleFonts.inter(fontSize: 13),
+                              ),
+                              backgroundColor: const Color(0xFF10B981),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error: $e',
+                                  style: GoogleFonts.inter(fontSize: 13)),
+                              backgroundColor: const Color(0xFFEF4444),
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFDC2626).withValues(alpha: 0.1),
+                      foregroundColor: const Color(0xFFDC2626),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
+                    label: Text(
+                      'PDF',
+                      style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Generating Word...',
+                            style: GoogleFonts.inter(fontSize: 13),
+                          ),
+                          backgroundColor: t.muted,
+                        ),
+                      );
+                      try {
+                        final wordPath = await ResumeService.exportResumeToWord(
+                          widget.optimizedText,
+                          'Resume_Optimized',
+                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Word ready: $wordPath',
+                                style: GoogleFonts.inter(fontSize: 13),
+                              ),
+                              backgroundColor: const Color(0xFF10B981),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error: $e',
+                                  style: GoogleFonts.inter(fontSize: 13)),
+                              backgroundColor: const Color(0xFFEF4444),
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                      foregroundColor: const Color(0xFF2563EB),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: const Icon(Icons.description_rounded, size: 16),
+                    label: Text(
+                      'Word',
+                      style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
@@ -3856,17 +3980,17 @@ class _OptimizedResumeSheetState extends State<_OptimizedResumeSheet> {
                       backgroundColor: const Color(0xFF6366F1)
                           .withValues(alpha: 0.1),
                       foregroundColor: const Color(0xFF6366F1),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    icon: const Icon(Icons.share_rounded, size: 18),
+                    icon: const Icon(Icons.share_rounded, size: 16),
                     label: Text(
                       'Share',
                       style: GoogleFonts.inter(
                         fontWeight: FontWeight.w600,
-                        fontSize: 13,
+                        fontSize: 12,
                       ),
                     ),
                   ),

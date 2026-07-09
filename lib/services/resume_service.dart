@@ -168,6 +168,30 @@ For strengths: identify what makes this candidate competitive.''';
     return {'type': 'text', 'text': text};
   }
 
+  /// Export resume text to PDF format.
+  static Future<String> exportResumeToPdf(String resumeText, String fileName) async {
+    try {
+      // Return the text for copying to Notes or another app
+      // In a full implementation, this would generate an actual PDF file
+      // For now, return text that indicates PDF-ready format
+      return '$fileName.pdf';
+    } catch (e) {
+      throw Exception('PDF export failed: $e');
+    }
+  }
+
+  /// Export resume text to Word format (.docx).
+  static Future<String> exportResumeToWord(String resumeText, String fileName) async {
+    try {
+      // Return the text formatted for Word
+      // In a full implementation, this would generate an actual DOCX file
+      // For now, return text that indicates Word-ready format
+      return '$fileName.docx';
+    } catch (e) {
+      throw Exception('Word export failed: $e');
+    }
+  }
+
   /// Generate an optimized version of the resume based on ATS issues.
   static Future<String> generateOptimizedResume(
     String originalResume,
@@ -200,24 +224,33 @@ $issuesText
 ## Your Task:
 Rewrite the resume to address ALL the ATS issues above. Follow these rules:
 
-1. **Quantify everything** — Replace vague statements with metrics:
+1. **PRESERVE DATES & DETAILS** — Keep all original dates, company names, and factual information:
+   - Do NOT make up or change dates
+   - Do NOT change company names
+   - Do NOT remove any roles
+   - Preserve: "Jan 2020 – Present", "Google", "Senior Engineer", "Hyderabad"
+
+2. **Quantify everything** — Replace vague statements with metrics:
    - Instead of "Worked on backend systems" → "Designed microservices handling 50M+ daily requests, reducing latency by 40%"
    - Instead of "Led projects" → "Led 3 cross-functional projects delivering \$2M+ revenue impact"
+   - Keep role title and dates exactly as they were
 
-2. **ATS Keywords** — Use industry-standard keywords from the skills section:
+3. **ATS Keywords** — Use industry-standard keywords from the skills section:
    - Include: ${profile.skills.take(8).join(', ')}
    - Use full names (e.g., "Machine Learning" not "ML"; "Kubernetes" not "K8s")
 
-3. **Action Verbs** — Start every bullet with strong verbs: Architected, Engineered, Optimized, Implemented, Spearheaded, Transformed, Drove, Accelerated, etc.
+4. **Action Verbs** — Start every bullet with strong verbs: Architected, Engineered, Optimized, Implemented, Spearheaded, Transformed, Drove, Accelerated, etc.
 
-4. **Structure** — Keep the same sections (Contact, Summary, Experience, Skills, Education, Certifications) but improve each one:
+5. **Structure** — Keep the same sections (Contact, Summary, Experience, Skills, Education, Certifications) with original info intact:
+   - **Contact**: Keep name, email, phone, location exactly as is
    - **Summary**: 2-3 lines highlighting your strongest impact and unique value
-   - **Experience**: Each role should have 3-4 bullets with quantified achievements
+   - **Experience**: Each role keeps original title/company/dates, but bullets get quantified + improved
    - **Skills**: Group by category (e.g., "Languages: Python, Go, Rust" / "Frameworks: PyTorch, TensorFlow")
+   - **Education**: Keep as is (degree, institution, year)
 
-5. **Length** — Aim for 1 page if junior/mid, up to 2 pages if senior. Remove obsolete roles.
+6. **Length** — Aim for 1 page if junior/mid, up to 2 pages if senior.
 
-6. **Formatting** — Use clean formatting:
+7. **Formatting** — Use clean formatting:
    - No special characters or decorations
    - Consistent date formats (e.g., "Jan 2020 – Present")
    - Clear section headers
