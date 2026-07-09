@@ -65,6 +65,10 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
   /// "we couldn't read your resume" message instead of fabricated advice.
   bool _profileReadable = true;
 
+  String? _originalResumeText;
+  String? _optimizedResumeText;
+  bool _generatingOptimized = false;
+
   late final AnimationController _pulseCtrl;
   late final Animation<double> _pulse;
   late TabController _tabCtrl;
@@ -207,6 +211,51 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
     _statusRotator = null;
   }
 
+  Future<void> _generateOptimizedResume() async {
+    if (_profile == null || _originalResumeText == null) return;
+
+    setState(() => _generatingOptimized = true);
+
+    try {
+      final optimized = await ResumeService.generateOptimizedResume(
+        _originalResumeText!,
+        _profile!,
+      );
+      if (mounted) {
+        setState(() {
+          _optimizedResumeText = optimized;
+          _generatingOptimized = false;
+        });
+        _showOptimizedResumeDialog();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _generatingOptimized = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to generate optimized resume: $e'),
+            backgroundColor: t.muted,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showOptimizedResumeDialog() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: t.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _OptimizedResumeSheet(
+        optimizedText: _optimizedResumeText ?? '',
+        theme: t,
+      ),
+    );
+  }
+
   Future<void> _pickAndScan({bool useSample = false}) async {
     // Premium gate disabled during testing
     // if (!await checkAiQuotaOrShowPaywall(context, t)) return;
@@ -223,6 +272,23 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
     _startStatusRotator();
 
     try {
+      // Extract original text for optimization later
+      final bytes = file.bytes;
+      final isPdf = file.extension?.toLowerCase() == 'pdf';
+      String originalText;
+      if (isPdf) {
+        originalText = '[PDF file uploaded - cannot extract text for optimization]';
+      } else {
+        try {
+          originalText = utf8.decode(bytes!, allowMalformed: true);
+        } catch (_) {
+          originalText = String.fromCharCodes(bytes!);
+        }
+      }
+      if (originalText.length > 8000) {
+        originalText = originalText.substring(0, 8000);
+      }
+
       final profile = await ResumeService.analyzeResume(file);
       if (!mounted) {
         _stopStatusRotator();
@@ -267,6 +333,8 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
       _stopStatusRotator();
       setState(() {
         _profile = profile;
+        _originalResumeText = originalText;
+        _optimizedResumeText = null;
         _jobs = <Job>[];
         _legitimacyMap = {};
         _profileReadable = readable;
@@ -2057,7 +2125,11 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
                               child: _AtsScoreCard(
                                 score: _profile!.atsScore,
                                 issues: _profile!.atsIssues,
-                                theme: t),
+                                theme: t,
+                                onOptimizePressed: _generatingOptimized ? null : _generateOptimizedResume,
+                                isGenerating: _generatingOptimized,
+                                hasOptimized: _optimizedResumeText != null,
+                              ),
                             )),
                           ]),
                         ),
@@ -3648,12 +3720,213 @@ class _CollapsibleRowState extends State<_CollapsibleRow> {
   }
 }
 
+// ── Optimized Resume Sheet ──────────────────────────────────────────────────
+class _OptimizedResumeSheet extends StatefulWidget {
+  final String optimizedText;
+  final AppTheme theme;
+  const _OptimizedResumeSheet({
+    required this.optimizedText,
+    required this.theme,
+  });
+
+  @override
+  State<_OptimizedResumeSheet> createState() => _OptimizedResumeSheetState();
+}
+
+class _OptimizedResumeSheetState extends State<_OptimizedResumeSheet> {
+  bool _copied = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.theme;
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.9,
+      minChildSize: 0.5,
+      builder: (_, ctrl) => SingleChildScrollView(
+        controller: ctrl,
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '✨ Optimized Resume',
+                    style: GoogleFonts.sourceSerif4(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: t.primary,
+                    ),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Icon(Icons.close_rounded, color: t.muted, size: 24),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Your resume has been rewritten to address all ATS issues',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: t.muted,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: t.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: t.divider, width: 0.5),
+              ),
+              child: Text(
+                widget.optimizedText,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  height: 1.6,
+                  color: t.primary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(
+                        ClipboardData(text: widget.optimizedText),
+                      );
+                      setState(() => _copied = true);
+                      Future.delayed(const Duration(seconds: 2), () {
+                        if (mounted) setState(() => _copied = false);
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Copied to clipboard!',
+                            style: GoogleFonts.inter(fontSize: 13),
+                          ),
+                          backgroundColor: const Color(0xFF10B981),
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _copied
+                          ? const Color(0xFF10B981)
+                          : t.primary.withValues(alpha: 0.1),
+                      foregroundColor:
+                          _copied ? Colors.white : t.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: Icon(
+                      _copied ? Icons.done_rounded : Icons.content_copy_rounded,
+                      size: 18,
+                    ),
+                    label: Text(
+                      _copied ? 'Copied!' : 'Copy',
+                      style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      final timestamp =
+                          DateTime.now().toIso8601String().split('T')[0];
+                      Share.share(
+                        widget.optimizedText,
+                        subject: 'Optimized Resume - $timestamp',
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6366F1)
+                          .withValues(alpha: 0.1),
+                      foregroundColor: const Color(0xFF6366F1),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: const Icon(Icons.share_rounded, size: 18),
+                    label: Text(
+                      'Share',
+                      style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF4F46E5).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: const Color(0xFF4F46E5).withValues(alpha: 0.2),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 16,
+                    color: const Color(0xFF4F46E5),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Review and personalize before sending. Add company-specific details for the best results.',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: const Color(0xFF4F46E5),
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ── ATS Score Card ──────────────────────────────────────────────────────────
 class _AtsScoreCard extends StatelessWidget {
   final int score;
   final List<String> issues;
   final AppTheme theme;
-  const _AtsScoreCard({required this.score, required this.issues, required this.theme});
+  final VoidCallback? onOptimizePressed;
+  final bool isGenerating;
+  final bool hasOptimized;
+  const _AtsScoreCard({
+    required this.score,
+    required this.issues,
+    required this.theme,
+    this.onOptimizePressed,
+    this.isGenerating = false,
+    this.hasOptimized = false,
+  });
 
   Color get _color => score >= 80
       ? const Color(0xFF10B981) : score >= 60
@@ -3734,6 +4007,41 @@ class _AtsScoreCard extends StatelessWidget {
                 fontSize: 13, color: t.primary.withValues(alpha: 0.85), height: 1.5))),
             ]),
           )),
+          const SizedBox(height: 12),
+          if (onOptimizePressed != null) ...[
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: isGenerating ? null : onOptimizePressed,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _color.withValues(alpha: 0.15),
+                  foregroundColor: _color,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(color: _color.withValues(alpha: 0.3)),
+                  ),
+                ),
+                icon: isGenerating
+                    ? SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(_color),
+                      ),
+                    )
+                    : Icon(hasOptimized ? Icons.done_all_rounded : Icons.auto_fix_high_rounded),
+                label: Text(
+                  isGenerating ? 'Optimizing...' : (hasOptimized ? 'View Optimized' : 'Auto-Fix Resume'),
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ]),
     );

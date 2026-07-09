@@ -167,4 +167,91 @@ For strengths: identify what makes this candidate competitive.''';
     if (text.length > 8000) text = text.substring(0, 8000);
     return {'type': 'text', 'text': text};
   }
+
+  /// Generate an optimized version of the resume based on ATS issues.
+  static Future<String> generateOptimizedResume(
+    String originalResume,
+    ResumeProfile profile,
+  ) async {
+    const apiKey = Secrets.anthropicApiKey;
+    if (apiKey.isEmpty) throw Exception('ANTHROPIC_API_KEY not configured');
+
+    final issuesText = profile.atsIssues.isNotEmpty
+        ? profile.atsIssues.map((e) => '• $e').join('\n')
+        : 'No specific issues identified.';
+
+    final prompt = '''You are an expert resume writer and ATS optimization specialist.
+
+## Original Resume:
+$originalResume
+
+## Profile Analysis:
+- Name: ${profile.name ?? 'N/A'}
+- Experience Level: ${profile.experienceLevel}
+- Years of Experience: ${profile.yearsOfExperience}
+- Location: ${profile.city.isNotEmpty ? '${profile.city}, ' : ''}${profile.country}
+- Top Skills: ${profile.skills.take(5).join(', ')}
+- ATS Score: ${profile.atsScore}/100
+- Education: ${profile.education ?? 'N/A'}
+
+## ATS Issues to Fix:
+$issuesText
+
+## Your Task:
+Rewrite the resume to address ALL the ATS issues above. Follow these rules:
+
+1. **Quantify everything** — Replace vague statements with metrics:
+   - Instead of "Worked on backend systems" → "Designed microservices handling 50M+ daily requests, reducing latency by 40%"
+   - Instead of "Led projects" → "Led 3 cross-functional projects delivering \$2M+ revenue impact"
+
+2. **ATS Keywords** — Use industry-standard keywords from the skills section:
+   - Include: ${profile.skills.take(8).join(', ')}
+   - Use full names (e.g., "Machine Learning" not "ML"; "Kubernetes" not "K8s")
+
+3. **Action Verbs** — Start every bullet with strong verbs: Architected, Engineered, Optimized, Implemented, Spearheaded, Transformed, Drove, Accelerated, etc.
+
+4. **Structure** — Keep the same sections (Contact, Summary, Experience, Skills, Education, Certifications) but improve each one:
+   - **Summary**: 2-3 lines highlighting your strongest impact and unique value
+   - **Experience**: Each role should have 3-4 bullets with quantified achievements
+   - **Skills**: Group by category (e.g., "Languages: Python, Go, Rust" / "Frameworks: PyTorch, TensorFlow")
+
+5. **Length** — Aim for 1 page if junior/mid, up to 2 pages if senior. Remove obsolete roles.
+
+6. **Formatting** — Use clean formatting:
+   - No special characters or decorations
+   - Consistent date formats (e.g., "Jan 2020 – Present")
+   - Clear section headers
+
+## Output:
+Return ONLY the rewritten resume text. No explanations, no markdown, no "Before/After" labels.
+Start immediately with the improved resume.''';
+
+    final response = await http.post(
+      Uri.parse('https://aiwire-proxy.prab187.workers.dev'),
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: json.encode({
+        'model': 'claude-haiku-4-5',
+        'max_tokens': 2500,
+        'temperature': 0.3,
+        'messages': [
+          {
+            'role': 'user',
+            'content': prompt,
+          }
+        ],
+      }),
+    ).timeout(const Duration(seconds: 60));
+
+    if (response.statusCode != 200) {
+      throw Exception('Claude API error: ${response.statusCode}');
+    }
+
+    final data = json.decode(response.body);
+    final optimizedText = (data['content'][0]['text'] as String).trim();
+    return optimizedText;
+  }
 }
