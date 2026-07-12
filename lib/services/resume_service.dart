@@ -193,21 +193,27 @@ For strengths: identify what makes this candidate competitive.''';
   }
 
   /// Generate an optimized version of the resume based on ATS issues.
+  /// Sends the ORIGINAL FILE (PDF or text) to Claude so every real detail —
+  /// email, phone, links, project names, dates — is copied over verbatim.
   static Future<String> generateOptimizedResume(
-    String originalResume,
+    PlatformFile file,
     ResumeProfile profile,
   ) async {
     const apiKey = Secrets.anthropicApiKey;
     if (apiKey.isEmpty) throw Exception('ANTHROPIC_API_KEY not configured');
+
+    final bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) throw Exception('Could not read file');
+
+    final isPdf = file.extension?.toLowerCase() == 'pdf';
+    final resumeContent = isPdf ? _pdfContent(bytes) : _textContent(bytes);
 
     final issuesText = profile.atsIssues.isNotEmpty
         ? profile.atsIssues.map((e) => '• $e').join('\n')
         : 'No specific issues identified.';
 
     final prompt = '''You are an expert resume writer and ATS optimization specialist.
-
-## Original Resume:
-$originalResume
+The document above is the candidate's ORIGINAL resume. Rewrite it following the rules below.
 
 ## Profile Analysis:
 - Name: ${profile.name ?? 'N/A'}
@@ -224,15 +230,16 @@ $issuesText
 ## Your Task:
 Rewrite the resume to address ALL the ATS issues above. Follow these rules:
 
-1. **PRESERVE DATES & DETAILS** — Keep all original dates, company names, and factual information:
-   - Do NOT make up or change dates
-   - Do NOT change company names
-   - Do NOT remove any roles
-   - Preserve: "Jan 2020 – Present", "Google", "Senior Engineer", "Hyderabad"
+1. **COPY EVERY REAL DETAIL FROM THE ORIGINAL — NO PLACEHOLDERS EVER**:
+   - Copy the exact email address, phone number, LinkedIn/GitHub/portfolio URLs, and city from the original resume
+   - Copy all dates, company names, job titles, project names, degree names, institutions, and certification names verbatim
+   - Copy real project details — names, technologies used, outcomes — and improve only the wording around them
+   - NEVER write placeholders like "[Your Email]", "[Phone]", "[Company]", "XX%", or "[Add project]"
+   - If a detail genuinely does not exist in the original (e.g. no LinkedIn URL), OMIT that line entirely — do not invent it and do not leave a blank to fill
 
-2. **Quantify everything** — Replace vague statements with metrics:
-   - Instead of "Worked on backend systems" → "Designed microservices handling 50M+ daily requests, reducing latency by 40%"
-   - Instead of "Led projects" → "Led 3 cross-functional projects delivering \$2M+ revenue impact"
+2. **Quantify with REAL numbers only** — Strengthen bullets using metrics that appear in or are clearly implied by the original resume:
+   - "Worked on backend systems" → reword with the actual scale/tech mentioned in the original
+   - If the original has no numbers for an achievement, improve the verb and specificity WITHOUT inventing statistics
    - Keep role title and dates exactly as they were
 
 3. **ATS Keywords** — Use industry-standard keywords from the skills section:
@@ -265,19 +272,23 @@ Start immediately with the improved resume.''';
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
+        if (isPdf) 'anthropic-beta': 'pdfs-2024-09-25',
       },
       body: json.encode({
         'model': 'claude-haiku-4-5',
-        'max_tokens': 2500,
+        'max_tokens': 3000,
         'temperature': 0.3,
         'messages': [
           {
             'role': 'user',
-            'content': prompt,
+            'content': [
+              resumeContent,
+              {'type': 'text', 'text': prompt},
+            ],
           }
         ],
       }),
-    ).timeout(const Duration(seconds: 60));
+    ).timeout(const Duration(seconds: 90));
 
     if (response.statusCode != 200) {
       throw Exception('Claude API error: ${response.statusCode}');

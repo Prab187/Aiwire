@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -65,7 +66,7 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
   /// "we couldn't read your resume" message instead of fabricated advice.
   bool _profileReadable = true;
 
-  String? _originalResumeText;
+  PlatformFile? _originalResumeFile;
   String? _optimizedResumeText;
   bool _generatingOptimized = false;
   String _optimizeStatusMessage = '';
@@ -256,7 +257,7 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
   }
 
   Future<void> _generateOptimizedResume() async {
-    if (_profile == null || _originalResumeText == null) return;
+    if (_profile == null || _originalResumeFile == null) return;
 
     // If already generated, just re-open the sheet — no need to re-pay Claude.
     if (_optimizedResumeText != null) {
@@ -269,7 +270,7 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
 
     try {
       final optimized = await ResumeService.generateOptimizedResume(
-        _originalResumeText!,
+        _originalResumeFile!,
         _profile!,
       );
       _stopOptimizeStatusRotator();
@@ -325,23 +326,6 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
     _startStatusRotator();
 
     try {
-      // Extract original text for optimization later
-      final bytes = file.bytes;
-      final isPdf = file.extension?.toLowerCase() == 'pdf';
-      String originalText;
-      if (isPdf) {
-        originalText = '[PDF file uploaded - cannot extract text for optimization]';
-      } else {
-        try {
-          originalText = utf8.decode(bytes!, allowMalformed: true);
-        } catch (_) {
-          originalText = String.fromCharCodes(bytes!);
-        }
-      }
-      if (originalText.length > 8000) {
-        originalText = originalText.substring(0, 8000);
-      }
-
       final profile = await ResumeService.analyzeResume(file);
       if (!mounted) {
         _stopStatusRotator();
@@ -386,7 +370,7 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
       _stopStatusRotator();
       setState(() {
         _profile = profile;
-        _originalResumeText = originalText;
+        _originalResumeFile = file;
         _optimizedResumeText = null;
         _jobs = <Job>[];
         _legitimacyMap = {};
