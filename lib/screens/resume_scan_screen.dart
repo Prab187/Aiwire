@@ -68,6 +68,26 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
   String? _originalResumeText;
   String? _optimizedResumeText;
   bool _generatingOptimized = false;
+  String _optimizeStatusMessage = '';
+  Timer? _optimizeStatusRotator;
+
+  /// setState of the ATS bottom sheet (if currently open). Modal sheets don't
+  /// rebuild on parent setState, so the optimize-status rotator calls this
+  /// too to animate the button label inside the sheet.
+  StateSetter? _sheetSetState;
+  static const List<String> _optimizeMessages = [
+    'Reading your resume…',
+    'Analysing structure…',
+    'Fixing weak phrases…',
+    'Adding quantified impact…',
+    'Injecting ATS keywords…',
+    'Strengthening action verbs…',
+    'Restructuring sections…',
+    'Keeping your dates intact…',
+    'Polishing the wording…',
+    'Final formatting pass…',
+    'Almost ready…',
+  ];
 
   late final AnimationController _pulseCtrl;
   late final Animation<double> _pulse;
@@ -183,6 +203,7 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
   void dispose() {
     _statusRotator?.cancel();
     _recStatusRotator?.cancel();
+    _optimizeStatusRotator?.cancel();
     // Drop the browser unload guard when this screen goes away so other
     // screens don't inherit a stale prompt.
     setUnloadGuard(enabled: false);
@@ -211,26 +232,58 @@ class _ResumeScanScreenState extends State<ResumeScanScreen>
     _statusRotator = null;
   }
 
+  void _startOptimizeStatusRotator() {
+    _optimizeStatusRotator?.cancel();
+    var i = 0;
+    _setOptimizeState(() => _optimizeStatusMessage = _optimizeMessages[0]);
+    _optimizeStatusRotator =
+        Timer.periodic(const Duration(milliseconds: 1600), (_) {
+      if (!mounted) return;
+      i = (i + 1) % _optimizeMessages.length;
+      _setOptimizeState(() => _optimizeStatusMessage = _optimizeMessages[i]);
+    });
+  }
+
+  /// Updates both the screen AND the open ATS bottom sheet (if any).
+  void _setOptimizeState(VoidCallback fn) {
+    setState(fn);
+    _sheetSetState?.call(() {});
+  }
+
+  void _stopOptimizeStatusRotator() {
+    _optimizeStatusRotator?.cancel();
+    _optimizeStatusRotator = null;
+  }
+
   Future<void> _generateOptimizedResume() async {
     if (_profile == null || _originalResumeText == null) return;
 
-    setState(() => _generatingOptimized = true);
+    // If already generated, just re-open the sheet — no need to re-pay Claude.
+    if (_optimizedResumeText != null) {
+      _showOptimizedResumeDialog();
+      return;
+    }
+
+    _setOptimizeState(() => _generatingOptimized = true);
+    _startOptimizeStatusRotator();
 
     try {
       final optimized = await ResumeService.generateOptimizedResume(
         _originalResumeText!,
         _profile!,
       );
+      _stopOptimizeStatusRotator();
       if (mounted) {
-        setState(() {
+        _setOptimizeState(() {
           _optimizedResumeText = optimized;
           _generatingOptimized = false;
         });
         _showOptimizedResumeDialog();
       }
     } catch (e) {
+      _stopOptimizeStatusRotator();
       if (mounted) {
-        setState(() => _generatingOptimized = false);
+        _setOptimizeState(() => _generatingOptimized = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to generate optimized resume: $e'),
@@ -2102,39 +2155,45 @@ Be concise, direct, actionable, and encouraging. Address them by first name.${is
                       context: context,
                       isScrollControlled: true,
                       backgroundColor: Colors.transparent,
-                      builder: (_) => DraggableScrollableSheet(
-                        expand: false,
-                        initialChildSize: 0.5,
-                        minChildSize: 0.3,
-                        maxChildSize: 0.8,
-                        builder: (_, ctrl) => Container(
-                          decoration: BoxDecoration(
-                            color: t.background,
-                            borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(20))),
-                          child: Column(children: [
-                            Center(child: Container(
-                              margin: const EdgeInsets.only(top: 12, bottom: 8),
-                              width: 36, height: 4,
+                      builder: (_) => StatefulBuilder(
+                        builder: (sheetCtx, sheetSetState) {
+                          _sheetSetState = sheetSetState;
+                          return DraggableScrollableSheet(
+                            expand: false,
+                            initialChildSize: 0.5,
+                            minChildSize: 0.3,
+                            maxChildSize: 0.8,
+                            builder: (_, ctrl) => Container(
                               decoration: BoxDecoration(
-                                color: t.muted.withValues(alpha: 0.25),
-                                borderRadius: BorderRadius.circular(2)))),
-                            Expanded(child: SingleChildScrollView(
-                              controller: ctrl,
-                              padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-                              child: _AtsScoreCard(
-                                score: _profile!.atsScore,
-                                issues: _profile!.atsIssues,
-                                theme: t,
-                                onOptimizePressed: _generatingOptimized ? null : _generateOptimizedResume,
-                                isGenerating: _generatingOptimized,
-                                hasOptimized: _optimizedResumeText != null,
-                              ),
-                            )),
-                          ]),
-                        ),
+                                color: t.background,
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(20))),
+                              child: Column(children: [
+                                Center(child: Container(
+                                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                                  width: 36, height: 4,
+                                  decoration: BoxDecoration(
+                                    color: t.muted.withValues(alpha: 0.25),
+                                    borderRadius: BorderRadius.circular(2)))),
+                                Expanded(child: SingleChildScrollView(
+                                  controller: ctrl,
+                                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+                                  child: _AtsScoreCard(
+                                    score: _profile!.atsScore,
+                                    issues: _profile!.atsIssues,
+                                    theme: t,
+                                    onOptimizePressed: _generateOptimizedResume,
+                                    isGenerating: _generatingOptimized,
+                                    generatingStatus: _optimizeStatusMessage,
+                                    hasOptimized: _optimizedResumeText != null,
+                                  ),
+                                )),
+                              ]),
+                            ),
+                          );
+                        },
                       ),
-                    );
+                    ).whenComplete(() => _sheetSetState = null);
                   },
                   child: Icon(Icons.chevron_right_rounded,
                     size: 18, color: t.muted),
@@ -4042,6 +4101,7 @@ class _AtsScoreCard extends StatelessWidget {
   final AppTheme theme;
   final VoidCallback? onOptimizePressed;
   final bool isGenerating;
+  final String generatingStatus;
   final bool hasOptimized;
   const _AtsScoreCard({
     required this.score,
@@ -4049,6 +4109,7 @@ class _AtsScoreCard extends StatelessWidget {
     required this.theme,
     this.onOptimizePressed,
     this.isGenerating = false,
+    this.generatingStatus = '',
     this.hasOptimized = false,
   });
 
@@ -4156,11 +4217,17 @@ class _AtsScoreCard extends StatelessWidget {
                       ),
                     )
                     : Icon(hasOptimized ? Icons.done_all_rounded : Icons.auto_fix_high_rounded),
-                label: Text(
-                  isGenerating ? 'Optimizing...' : (hasOptimized ? 'View Optimized' : 'Auto-Fix Resume'),
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                label: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: Text(
+                    isGenerating
+                        ? (generatingStatus.isEmpty ? 'Optimizing…' : generatingStatus)
+                        : (hasOptimized ? 'View Optimized Resume' : 'Auto-Fix Resume'),
+                    key: ValueKey(isGenerating ? generatingStatus : hasOptimized),
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
