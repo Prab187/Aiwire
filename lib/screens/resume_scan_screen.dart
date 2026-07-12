@@ -3778,6 +3778,8 @@ class _OptimizedResumeSheet extends StatefulWidget {
 
 class _OptimizedResumeSheetState extends State<_OptimizedResumeSheet> {
   bool _copied = false;
+  bool _makingPdf = false;
+  bool _makingWord = false;
 
   @override
   Widget build(BuildContext context) {
@@ -3891,45 +3893,28 @@ class _OptimizedResumeSheetState extends State<_OptimizedResumeSheet> {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () async {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Generating PDF...',
-                            style: GoogleFonts.inter(fontSize: 13),
-                          ),
-                          backgroundColor: t.muted,
-                        ),
-                      );
-                      try {
-                        final pdfPath = await ResumeService.exportResumeToPdf(
-                          widget.optimizedText,
-                          'Resume_Optimized',
-                        );
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'PDF ready: $pdfPath',
-                                style: GoogleFonts.inter(fontSize: 13),
-                              ),
-                              backgroundColor: const Color(0xFF10B981),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Error: $e',
-                                  style: GoogleFonts.inter(fontSize: 13)),
-                              backgroundColor: const Color(0xFFEF4444),
-                            ),
-                          );
-                        }
-                      }
-                    },
+                    onPressed: (_makingPdf || _makingWord)
+                        ? null
+                        : () async {
+                            setState(() => _makingPdf = true);
+                            try {
+                              await ResumeService.exportResumeToPdf(
+                                widget.optimizedText,
+                                'Resume_Optimized',
+                              );
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('PDF failed: $e',
+                                        style: GoogleFonts.inter(fontSize: 13)),
+                                    backgroundColor: const Color(0xFFEF4444),
+                                  ),
+                                );
+                              }
+                            }
+                            if (mounted) setState(() => _makingPdf = false);
+                          },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFDC2626).withValues(alpha: 0.1),
                       foregroundColor: const Color(0xFFDC2626),
@@ -3938,9 +3923,14 @@ class _OptimizedResumeSheetState extends State<_OptimizedResumeSheet> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
+                    icon: _makingPdf
+                        ? const SizedBox(width: 14, height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFDC2626))))
+                        : const Icon(Icons.picture_as_pdf_rounded, size: 16),
                     label: Text(
-                      'PDF',
+                      _makingPdf ? 'Making PDF…' : 'PDF',
                       style: GoogleFonts.inter(
                         fontWeight: FontWeight.w600,
                         fontSize: 12,
@@ -3951,45 +3941,28 @@ class _OptimizedResumeSheetState extends State<_OptimizedResumeSheet> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () async {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Generating Word...',
-                            style: GoogleFonts.inter(fontSize: 13),
-                          ),
-                          backgroundColor: t.muted,
-                        ),
-                      );
-                      try {
-                        final wordPath = await ResumeService.exportResumeToWord(
-                          widget.optimizedText,
-                          'Resume_Optimized',
-                        );
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Word ready: $wordPath',
-                                style: GoogleFonts.inter(fontSize: 13),
-                              ),
-                              backgroundColor: const Color(0xFF10B981),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Error: $e',
-                                  style: GoogleFonts.inter(fontSize: 13)),
-                              backgroundColor: const Color(0xFFEF4444),
-                            ),
-                          );
-                        }
-                      }
-                    },
+                    onPressed: (_makingPdf || _makingWord)
+                        ? null
+                        : () async {
+                            setState(() => _makingWord = true);
+                            try {
+                              await ResumeService.exportResumeToWord(
+                                widget.optimizedText,
+                                'Resume_Optimized',
+                              );
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Word failed: $e',
+                                        style: GoogleFonts.inter(fontSize: 13)),
+                                    backgroundColor: const Color(0xFFEF4444),
+                                  ),
+                                );
+                              }
+                            }
+                            if (mounted) setState(() => _makingWord = false);
+                          },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF2563EB).withValues(alpha: 0.1),
                       foregroundColor: const Color(0xFF2563EB),
@@ -3998,9 +3971,14 @@ class _OptimizedResumeSheetState extends State<_OptimizedResumeSheet> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    icon: const Icon(Icons.description_rounded, size: 16),
+                    icon: _makingWord
+                        ? const SizedBox(width: 14, height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2563EB))))
+                        : const Icon(Icons.description_rounded, size: 16),
                     label: Text(
-                      'Word',
+                      _makingWord ? 'Making Word…' : 'Word',
                       style: GoogleFonts.inter(
                         fontWeight: FontWeight.w600,
                         fontSize: 12,

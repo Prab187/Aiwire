@@ -1,8 +1,12 @@
 import '../config/secrets.dart';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:archive/archive.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:share_plus/share_plus.dart';
 import '../models/resume_profile.dart';
 import 'curated_resources.dart';
 
@@ -168,28 +172,97 @@ For strengths: identify what makes this candidate competitive.''';
     return {'type': 'text', 'text': text};
   }
 
-  /// Export resume text to PDF format.
-  static Future<String> exportResumeToPdf(String resumeText, String fileName) async {
-    try {
-      // Return the text for copying to Notes or another app
-      // In a full implementation, this would generate an actual PDF file
-      // For now, return text that indicates PDF-ready format
-      return '$fileName.pdf';
-    } catch (e) {
-      throw Exception('PDF export failed: $e');
-    }
+  /// Build a real PDF from the resume text and open the system share sheet
+  /// so the user can save it to Files, AirDrop it, or email it.
+  static Future<void> exportResumeToPdf(String resumeText, String fileName) async {
+    final doc = pw.Document();
+    final lines = resumeText.split('\n');
+
+    doc.addPage(pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.symmetric(horizontal: 48, vertical: 44),
+      build: (_) => lines.map((line) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) return pw.SizedBox(height: 6);
+        // Treat short ALL-CAPS lines as section headers
+        final isHeader = trimmed.length < 40 &&
+            trimmed == trimmed.toUpperCase() &&
+            RegExp(r'[A-Z]').hasMatch(trimmed);
+        return pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 2),
+          child: pw.Text(
+            line,
+            style: pw.TextStyle(
+              fontSize: isHeader ? 12 : 10,
+              fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
+              lineSpacing: 2,
+            ),
+          ),
+        );
+      }).toList(),
+    ));
+
+    final bytes = await doc.save();
+    await Share.shareXFiles(
+      [XFile.fromData(bytes, name: '$fileName.pdf', mimeType: 'application/pdf')],
+      fileNameOverrides: ['$fileName.pdf'],
+    );
   }
 
-  /// Export resume text to Word format (.docx).
-  static Future<String> exportResumeToWord(String resumeText, String fileName) async {
-    try {
-      // Return the text formatted for Word
-      // In a full implementation, this would generate an actual DOCX file
-      // For now, return text that indicates Word-ready format
-      return '$fileName.docx';
-    } catch (e) {
-      throw Exception('Word export failed: $e');
+  /// Build a real Word (.docx) file from the resume text and open the system
+  /// share sheet. A .docx is a zip of XML parts — assembled here with the
+  /// archive package so no extra plugin is needed.
+  static Future<void> exportResumeToWord(String resumeText, String fileName) async {
+    String esc(String s) => s
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+
+    final paragraphs = resumeText.split('\n').map((line) {
+      final trimmed = line.trim();
+      final isHeader = trimmed.isNotEmpty &&
+          trimmed.length < 40 &&
+          trimmed == trimmed.toUpperCase() &&
+          RegExp(r'[A-Z]').hasMatch(trimmed);
+      final props = isHeader ? '<w:rPr><w:b/><w:sz w:val="26"/></w:rPr>' : '';
+      return '<w:p><w:r>$props<w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>';
+    }).join();
+
+    const contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        '<Default Extension="xml" ContentType="application/xml"/>'
+        '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+        '</Types>';
+
+    const rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+        '</Relationships>';
+
+    final documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        '<w:body>$paragraphs</w:body></w:document>';
+
+    final archive = Archive();
+    void add(String path, String content) {
+      final data = utf8.encode(content);
+      archive.addFile(ArchiveFile(path, data.length, data));
     }
+
+    add('[Content_Types].xml', contentTypes);
+    add('_rels/.rels', rels);
+    add('word/document.xml', documentXml);
+
+    final zipped = ZipEncoder().encode(archive);
+    final bytes = Uint8List.fromList(zipped);
+    await Share.shareXFiles(
+      [XFile.fromData(bytes,
+          name: '$fileName.docx',
+          mimeType:
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document')],
+      fileNameOverrides: ['$fileName.docx'],
+    );
   }
 
   /// Generate an optimized version of the resume based on ATS issues.
