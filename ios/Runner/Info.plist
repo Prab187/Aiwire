@@ -22,10 +22,31 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.392694757606-th4472jah3e03mq6dnalkuu5aumo8vmg</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>AIWire uses your location to find AI/ML jobs near you.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>AIWire needs microphone access so you can speak your mock interview answers instead of typing.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>AIWire needs photo library access to select files for resume scanning.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>AIWire uses speech recognition to transcribe your spoken interview answers.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -47,29 +68,12 @@
 			</array>
 		</dict>
 	</dict>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>com.googleusercontent.apps.392694757606-th4472jah3e03mq6dnalkuu5aumo8vmg</string>
-			</array>
-		</dict>
-	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>AIWire needs photo library access to select files for resume scanning.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>AIWire needs microphone access so you can speak your mock interview answers instead of typing.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>AIWire uses speech recognition to transcribe your spoken interview answers.</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -83,7 +87,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>AIWire uses your location to find AI/ML jobs near you.</string>
 </dict>
 </plist>
