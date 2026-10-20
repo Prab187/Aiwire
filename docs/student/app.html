@@ -29,6 +29,7 @@
   --accent: #4fd1c5; --accent-soft: #173a3a; --mark: #4a4416; --bad: #ff8a80; color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.5; }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
 .wrap { max-width: 620px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
@@ -36,7 +37,7 @@ header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; backg
 header .wrap { padding-block: 12px 0; }
 h1 { font-family: var(--f-display); font-weight: 800; font-size: 1.5rem; margin: 0; line-height: 1.2; }
 nav { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; margin-top: 6px; }
-nav a { flex: 1 0 auto; text-align: center; text-decoration: none; color: var(--muted); font-weight: 600; font-size: 0.92rem; padding: 10px 12px; border-bottom: 3px solid transparent; }
+nav a { flex: 1 0 auto; text-align: center; text-decoration: none; color: var(--muted); font-weight: 600; font-size: 0.92rem; padding: 10px 8px; border-bottom: 3px solid transparent; }
 nav a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
 main { padding-block: 20px 48px; }
 section { display: grid; gap: 20px; }
@@ -70,6 +71,13 @@ label.f { display: grid; gap: 4px; font-size: 0.82rem; font-weight: 600; color: 
 .tt > div { grid-template-columns: 2rem 1fr; }
 .people h3 { font-family: var(--f-display); font-weight: 600; font-size: 1.02rem; margin: 6px 0 0; }
 .ex { border: 1px dashed var(--accent); border-radius: 12px; padding: 10px 14px; font-size: 0.86rem; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.bag { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 14px; }
+.bag label { display: flex; gap: 10px; align-items: center; padding: 6px 0; min-width: 0; overflow-wrap: anywhere; }
+.bag label.got span { text-decoration: line-through; color: var(--muted); }
+.bag small { color: var(--accent); font-size: 0.72rem; }
+.inline { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 10px; }
+textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; width: 100%; min-height: 90px; resize: vertical; }
+.next-test { font-family: var(--f-display); font-weight: 800; font-size: 1.6rem; line-height: 1.1; }
 .toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: 0.9rem; opacity: 0; pointer-events: none; transition: opacity .2s; }
 .toast.show { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
@@ -100,8 +108,22 @@ label.f { display: grid; gap: 4px; font-size: 0.82rem; font-weight: 600; color: 
       <div class="list" id="t-lessons"></div>
     </div>
     <div class="box">
+      <div class="label">Next test</div>
+      <div class="next-test" id="t-test">None coming up</div>
+      <p class="note" id="t-test-note">Add tests under Homework so you know when to revise.</p>
+    </div>
+    <div class="box">
       <h2 style="margin-bottom:8px">Homework due soon</h2>
       <div class="list" id="t-hw"></div>
+    </div>
+    <div class="box">
+      <h2 id="bag-title">Pack my bag</h2>
+      <p class="note" style="margin-bottom:8px">Items for your lessons are added for you. Ticks reset each day.</p>
+      <div class="bag" id="bag"></div>
+      <form class="inline" id="bag-form"><input id="bag-new" type="text" placeholder="Add an item, e.g. Trip letter" aria-label="New bag item" required><button type="submit">Add</button></form>
+    </div>
+    <div class="box">
+      <label class="f">Notes and reminders<textarea id="notes" placeholder="e.g. Get trip form signed · Club after school on Thursday"></textarea></label>
     </div>
     <div class="box">
       <label class="f">Your first name<input id="name" type="text" placeholder="e.g. Sam" autocomplete="given-name"></label>
@@ -121,12 +143,13 @@ label.f { display: grid; gap: 4px; font-size: 0.82rem; font-weight: 600; color: 
   <!-- HOMEWORK -->
   <section id="v-homework" hidden>
     <div class="box">
-      <h2 style="margin-bottom:10px">Add homework</h2>
+      <h2 style="margin-bottom:10px">Add homework or a test</h2>
       <form id="hw-form">
         <div class="two">
           <label class="f">Subject<input id="hw-subj" type="text" list="subjects" required placeholder="e.g. Maths"></label>
           <label class="f">Due<input id="hw-due" type="date" required></label>
         </div>
+        <label class="f">Type<select id="hw-type"><option value="hw">Homework</option><option value="test">Test or exam</option></select></label>
         <label class="f">What to do<input id="hw-text" type="text" required placeholder="e.g. Page 42, questions 1–10"></label>
         <button class="go" type="submit">Add homework</button>
       </form>
@@ -193,7 +216,11 @@ label.f { display: grid; gap: 4px; font-size: 0.82rem; font-weight: 600; color: 
         { id: 1, s: "Maths", t: "Page 42, questions 1–10", due: iso(plus(t, 1)), done: false },
         { id: 2, s: "French", t: "Learn 15 words for the vocab test", due: iso(plus(t, 3)), done: false },
         { id: 3, s: "English", t: "Read chapter 4 of the class novel", due: iso(plus(t, 5)), done: false },
+        { id: 4, s: "Science", t: "Topic test: cells and organisms", due: iso(plus(t, 8)), done: false, type: "test" },
       ],
+      bagExtra: [],
+      bag: { date: "", got: [] },
+      notes: "",
       people: [
         { id: 1, role: "parent", name: "Mum", info: "Mobile in my phone" },
         { id: 2, role: "tutor", name: "Mr Hughes", info: "Form room 12" },
@@ -205,6 +232,7 @@ label.f { display: grid; gap: 4px; font-size: 0.82rem; font-weight: 600; color: 
   }
   let S;
   try { S = JSON.parse(localStorage.getItem(KEY)) || example(); } catch { S = example(); }
+  S.bagExtra ||= []; S.bag ||= { date: "", got: [] }; S.notes ??= "";
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
   const toast = (m) => { const t = $("toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("show"), 1700); };
   const touch = () => { if (S.example) { S.example = false; } save(); };
@@ -216,6 +244,35 @@ label.f { display: grid; gap: 4px; font-size: 0.82rem; font-weight: 600; color: 
     if (n === 1) return `<span class="hl">Tomorrow</span>`;
     return `<span class="due">${parse(due).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}</span>`;
   }
+  const BASICS = ["Planner", "Pencil case", "Water bottle", "Lunch or money", "Reading book", "Keys"];
+  const FOR_LESSON = [[/maths/i, "Calculator"], [/\b(pe|games|sport)/i, "PE kit"], [/art/i, "Sketchbook"], [/music/i, "Instrument"], [/food|cook/i, "Ingredients"], [/science|physics|chemistry|biology/i, "Lab book"]];
+  function bagDay() {
+    const now = new Date(); let d = new Date(now);
+    if (now.getDay() % 6 === 0 || now.getHours() >= 16) { do d = plus(d, 1); while (d.getDay() % 6 === 0); }
+    return d;
+  }
+  function renderBag() {
+    const d = bagDay(), key = iso(d);
+    if (S.bag.date !== key) S.bag = { date: key, got: [] };
+    const lessons = S.tt[DAYS[d.getDay() - 1][0]] || [];
+    const auto = [];
+    for (const [re, item] of FOR_LESSON) { const l = lessons.find((x) => x && re.test(x)); if (l) auto.push([item, l]); }
+    const items = [...BASICS.map((b) => [b, ""]), ...auto, ...S.bagExtra.map((b) => [b, "mine"])];
+    $("bag-title").textContent = d.toDateString() === new Date().toDateString() ? "Pack my bag for today" : `Pack my bag for ${DAYS[d.getDay() - 1][2]}`;
+    $("bag").innerHTML = items.map(([it, why], i) => {
+      const got = S.bag.got.includes(it);
+      return `<label class="${got ? "got" : ""}"><input type="checkbox" data-bag="${esc(it)}" ${got ? "checked" : ""}><span>${esc(it)}${why && why !== "mine" ? ` <small>for ${esc(why)}</small>` : ""}</span>${why === "mine" ? `<button type="button" class="x" data-bagdel="${esc(it)}" aria-label="Remove ${esc(it)}">✕</button>` : ""}</label>`;
+    }).join("");
+    const left = items.filter(([it]) => !S.bag.got.includes(it)).length;
+    if (!left && items.length) $("bag-title").textContent += " ✓";
+  }
+  $("bag").addEventListener("change", (e) => {
+    const it = e.target.dataset.bag; if (it == null) return;
+    S.bag.got = e.target.checked ? [...S.bag.got, it] : S.bag.got.filter((x) => x !== it); save(); renderBag();
+  });
+  $("bag").addEventListener("click", (e) => { const b = e.target.closest("[data-bagdel]"); if (!b) return; e.preventDefault(); S.bagExtra = S.bagExtra.filter((x) => x !== b.dataset.bagdel); save(); renderBag(); });
+  $("bag-form").addEventListener("submit", (e) => { e.preventDefault(); const v = $("bag-new").value.trim(); if (v && !S.bagExtra.includes(v)) S.bagExtra.push(v); $("bag-new").value = ""; save(); renderBag(); toast("Added to your bag list"); });
+  $("notes").addEventListener("input", (e) => { S.notes = e.target.value; save(); });
   const subjects = () => [...new Set(Object.values(S.tt).flat().filter(Boolean))].sort();
 
   function renderToday() {
@@ -233,7 +290,12 @@ label.f { display: grid; gap: 4px; font-size: 0.82rem; font-weight: 600; color: 
     $("t-lessons").innerHTML = list.some(Boolean)
       ? list.map((s, i) => `<div><span class="num">${i + 1}</span><span class="txt">${esc(s || "—")}</span><span></span></div>`).join("")
       : `<p class="note">No lessons added for this day yet. Fill them in under Timetable.</p>`;
-    const soon = S.hw.filter((h) => !h.done && daysFromToday(h.due) <= 2).sort((a, b) => a.due.localeCompare(b.due));
+    const test = S.hw.filter((h) => h.type === "test" && !h.done && daysFromToday(h.due) >= 0).sort((a, b) => a.due.localeCompare(b.due))[0];
+    if (test) { const n = daysFromToday(test.due); $("t-test").textContent = `${test.s} in ${n === 0 ? "today" : n === 1 ? "1 day" : n + " days"}`.replace("in today", "is today"); $("t-test-note").textContent = test.t; }
+    else { $("t-test").textContent = "None coming up"; $("t-test-note").textContent = "Add tests under Homework so you know when to revise."; }
+    if (document.activeElement !== $("notes")) $("notes").value = S.notes || "";
+    renderBag();
+    const soon = S.hw.filter((h) => !h.done && h.type !== "test" && daysFromToday(h.due) <= 2).sort((a, b) => a.due.localeCompare(b.due));
     $("t-hw").innerHTML = soon.length
       ? soon.map((h) => `<div><span class="num">✓</span><span class="txt"><span class="chip">${esc(h.s)}</span> ${esc(h.t)}</span>${dueText(h.due)}</div>`).join("")
       : `<p class="note">Nothing due in the next two days.</p>`;
@@ -257,13 +319,13 @@ label.f { display: grid; gap: 4px; font-size: 0.82rem; font-weight: 600; color: 
   function renderHW() {
     const list = [...S.hw].sort((a, b) => a.done - b.done || a.due.localeCompare(b.due));
     $("hw-list").innerHTML = list.length ? list.map((h) =>
-      `<div class="${h.done ? "done" : ""}"><input type="checkbox" data-id="${h.id}" ${h.done ? "checked" : ""} aria-label="Done"><span class="txt"><span class="chip">${esc(h.s)}</span> ${esc(h.t)}<br>${h.done ? `<span class="due">Done</span>` : dueText(h.due)}</span><button type="button" class="x" data-del="${h.id}" aria-label="Delete">✕</button></div>`).join("")
+      `<div class="${h.done ? "done" : ""}"><input type="checkbox" data-id="${h.id}" ${h.done ? "checked" : ""} aria-label="Done"><span class="txt"><span class="chip">${esc(h.s)}</span>${h.type === "test" ? ` <span class="hl">Test</span>` : ""} ${esc(h.t)}<br>${h.done ? `<span class="due">Done</span>` : dueText(h.due)}</span><button type="button" class="x" data-del="${h.id}" aria-label="Delete">✕</button></div>`).join("")
       : `<p class="note">No homework. Add it here as soon as it's set.</p>`;
   }
   $("hw-due").value = iso(plus(new Date(), 1));
   $("hw-form").addEventListener("submit", (e) => {
     e.preventDefault();
-    S.hw.push({ id: Date.now(), s: $("hw-subj").value.trim(), t: $("hw-text").value.trim(), due: $("hw-due").value, done: false });
+    S.hw.push({ id: Date.now(), s: $("hw-subj").value.trim(), t: $("hw-text").value.trim(), due: $("hw-due").value, done: false, type: $("hw-type").value });
     $("hw-text").value = ""; touch(); renderAll(); toast("Homework added");
   });
   $("hw-list").addEventListener("click", (e) => {
@@ -291,7 +353,7 @@ label.f { display: grid; gap: 4px; font-size: 0.82rem; font-weight: 600; color: 
   $("name").addEventListener("input", (e) => { S.name = e.target.value.trim(); save(); $("hello").textContent = S.name ? `Hi ${S.name}` : "My School Day"; });
   $("clear-ex").onclick = () => {
     const name = S.name;
-    S = { example: false, name, tt: Object.fromEntries(DAYS.map(([k]) => [k, []])), hw: [], people: [] };
+    S = { example: false, name, tt: Object.fromEntries(DAYS.map(([k]) => [k, []])), hw: [], people: [], bagExtra: [], bag: { date: "", got: [] }, notes: "" };
     save(); renderAll(); toast("All clear. Add your own.");
   };
 
