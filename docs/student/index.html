@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>My School Day</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Lexend:wght@400;600&display=swap">
+<style>
+/* Layout: one narrow column like a school planner page; bottom-free top tabs; lists over cards */
+:root {
+  --bg: #f4f7f6;
+  --surface: #ffffff;
+  --ink: #15253a;
+  --muted: #5a6b7d;
+  --line: #dbe3e1;
+  --accent: #0d7c74;
+  --accent-soft: #dcf1ee;
+  --mark: #fff1a8;
+  --bad: #b3261e;
+  --f-display: "Baloo 2", "Trebuchet MS", system-ui, sans-serif;
+  --f-body: "Lexend", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1a1f; --surface: #15252b; --ink: #e6efee; --muted: #9db0b3; --line: #27393f;
+    --accent: #4fd1c5; --accent-soft: #173a3a; --mark: #4a4416; --bad: #ff8a80; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1a1f; --surface: #15252b; --ink: #e6efee; --muted: #9db0b3; --line: #27393f;
+  --accent: #4fd1c5; --accent-soft: #173a3a; --mark: #4a4416; --bad: #ff8a80; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.5; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 620px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+header .wrap { padding-block: 12px 0; }
+h1 { font-family: var(--f-display); font-weight: 800; font-size: 1.5rem; margin: 0; line-height: 1.2; }
+nav { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; margin-top: 6px; }
+nav a { flex: 1 0 auto; text-align: center; text-decoration: none; color: var(--muted); font-weight: 600; font-size: 0.92rem; padding: 10px 12px; border-bottom: 3px solid transparent; }
+nav a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
+main { padding-block: 20px 48px; }
+section { display: grid; gap: 20px; }
+h2 { font-family: var(--f-display); font-weight: 800; font-size: 1.25rem; margin: 0; text-wrap: balance; }
+.label { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.72rem; font-weight: 600; color: var(--muted); }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; min-width: 0; }
+.muted { color: var(--muted); }
+.note { font-size: 0.85rem; color: var(--muted); margin: 0; }
+.list { display: grid; }
+.list > div { display: grid; grid-template-columns: 2rem 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); min-width: 0; }
+.list > div:first-child { border-top: 0; }
+.num { font-family: var(--f-display); font-weight: 800; color: var(--accent); font-size: 1.1rem; }
+.chip { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 2px 9px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
+.hl { background: var(--mark); border-radius: 4px; padding: 0 4px; font-weight: 600; font-size: 0.82rem; }
+.late { color: var(--bad); font-weight: 600; font-size: 0.82rem; }
+.due { font-size: 0.82rem; color: var(--muted); }
+.txt { min-width: 0; overflow-wrap: anywhere; }
+.done .txt { text-decoration: line-through; color: var(--muted); }
+button { font: inherit; font-weight: 600; font-size: 0.9rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 8px 14px; border-radius: 10px; cursor: pointer; }
+button.go { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+button.x { border: 0; background: transparent; color: var(--muted); padding: 6px 8px; }
+input, select { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; min-width: 0; width: 100%; }
+input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+form { display: grid; gap: 10px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 460px) { .two { grid-template-columns: 1fr; } }
+label.f { display: grid; gap: 4px; font-size: 0.82rem; font-weight: 600; color: var(--muted); }
+.days { display: flex; gap: 6px; flex-wrap: wrap; }
+.days button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.tt > div { grid-template-columns: 2rem 1fr; }
+.people h3 { font-family: var(--f-display); font-weight: 600; font-size: 1.02rem; margin: 6px 0 0; }
+.ex { border: 1px dashed var(--accent); border-radius: 12px; padding: 10px 14px; font-size: 0.86rem; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: 0.9rem; opacity: 0; pointer-events: none; transition: opacity .2s; }
+.toast.show { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header>
+  <div class="wrap">
+    <h1 id="hello">My School Day</h1>
+    <nav aria-label="Sections">
+      <a href="#today">Today</a>
+      <a href="#timetable">Timetable</a>
+      <a href="#homework">Homework</a>
+      <a href="#people">My people</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- TODAY -->
+  <section id="v-today">
+    <div class="ex" id="ex-banner" hidden>
+      <span>You're looking at example data. Add your own and it replaces this.</span>
+      <button type="button" id="clear-ex">Start fresh</button>
+    </div>
+    <div class="box">
+      <div class="label" id="t-date"></div>
+      <h2 id="t-title" style="margin:2px 0 8px">Today's lessons</h2>
+      <div class="list" id="t-lessons"></div>
+    </div>
+    <div class="box">
+      <h2 style="margin-bottom:8px">Homework due soon</h2>
+      <div class="list" id="t-hw"></div>
+    </div>
+    <div class="box">
+      <label class="f">Your first name<input id="name" type="text" placeholder="e.g. Sam" autocomplete="given-name"></label>
+    </div>
+  </section>
+
+  <!-- TIMETABLE -->
+  <section id="v-timetable" hidden>
+    <div class="box">
+      <h2 style="margin-bottom:10px">Timetable</h2>
+      <div class="days" id="days"></div>
+      <div class="list tt" id="tt" style="margin-top:12px"></div>
+      <p class="note" style="margin-top:8px">Type a subject for each lesson. It saves as you type.</p>
+    </div>
+  </section>
+
+  <!-- HOMEWORK -->
+  <section id="v-homework" hidden>
+    <div class="box">
+      <h2 style="margin-bottom:10px">Add homework</h2>
+      <form id="hw-form">
+        <div class="two">
+          <label class="f">Subject<input id="hw-subj" type="text" list="subjects" required placeholder="e.g. Maths"></label>
+          <label class="f">Due<input id="hw-due" type="date" required></label>
+        </div>
+        <label class="f">What to do<input id="hw-text" type="text" required placeholder="e.g. Page 42, questions 1–10"></label>
+        <button class="go" type="submit">Add homework</button>
+      </form>
+      <datalist id="subjects"></datalist>
+    </div>
+    <div class="box">
+      <h2 style="margin-bottom:8px">To do</h2>
+      <div class="list" id="hw-list"></div>
+    </div>
+  </section>
+
+  <!-- PEOPLE -->
+  <section id="v-people" hidden>
+    <div class="box">
+      <h2 style="margin-bottom:10px">Add a person</h2>
+      <form id="p-form">
+        <div class="two">
+          <label class="f">Who are they?<select id="p-role"></select></label>
+          <label class="f">Name<input id="p-name" type="text" required placeholder="e.g. Mrs Patel"></label>
+        </div>
+        <label class="f">Contact or note<input id="p-info" type="text" placeholder="e.g. Teaches Science · room S4"></label>
+        <button class="go" type="submit">Add person</button>
+      </form>
+    </div>
+    <div class="box people" id="p-list"></div>
+  </section>
+</main>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+  const KEY = "my-school-day-v1";
+  const DAYS = [["mon", "Mon", "Monday"], ["tue", "Tue", "Tuesday"], ["wed", "Wed", "Wednesday"], ["thu", "Thu", "Thursday"], ["fri", "Fri", "Friday"]];
+  const LESSONS = 6;
+  const ROLES = [
+    ["parent", "Parent / guardian", "Who to tell about trips, letters and being ill"],
+    ["tutor", "Form tutor", "Your first stop for most questions"],
+    ["teacher", "Subject teacher", "Ask about homework and lessons"],
+    ["head", "Head of year", "For bigger worries or problems"],
+    ["office", "School office", "Absences, lost property, messages home"],
+    ["friend", "Friend / study buddy", "Swap homework notes if you miss a lesson"],
+  ];
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const pad = (n) => String(n).padStart(2, "0");
+  const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parse = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const plus = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const daysFromToday = (s) => Math.round((parse(s) - parse(iso(new Date()))) / 864e5);
+
+  function example() {
+    const t = new Date();
+    return {
+      example: true,
+      name: "",
+      tt: {
+        mon: ["Maths", "English", "Science", "French", "PE", "History"],
+        tue: ["Science", "Geography", "Maths", "Art", "English", "Music"],
+        wed: ["English", "Maths", "Computing", "History", "Science", "RE"],
+        thu: ["French", "Science", "English", "Maths", "Drama", "Geography"],
+        fri: ["Maths", "History", "Science", "English", "PE", "Tutor time"],
+      },
+      hw: [
+        { id: 1, s: "Maths", t: "Page 42, questions 1–10", due: iso(plus(t, 1)), done: false },
+        { id: 2, s: "French", t: "Learn 15 words for the vocab test", due: iso(plus(t, 3)), done: false },
+        { id: 3, s: "English", t: "Read chapter 4 of the class novel", due: iso(plus(t, 5)), done: false },
+      ],
+      people: [
+        { id: 1, role: "parent", name: "Mum", info: "Mobile in my phone" },
+        { id: 2, role: "tutor", name: "Mr Hughes", info: "Form room 12" },
+        { id: 3, role: "teacher", name: "Mrs Patel", info: "Science · room S4" },
+        { id: 4, role: "teacher", name: "Ms Okafor", info: "Maths · room M2" },
+        { id: 5, role: "office", name: "Reception", info: "Ring before 8:30 if I'm off ill" },
+      ],
+    };
+  }
+  let S;
+  try { S = JSON.parse(localStorage.getItem(KEY)) || example(); } catch { S = example(); }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
+  const toast = (m) => { const t = $("toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("show"), 1700); };
+  const touch = () => { if (S.example) { S.example = false; } save(); };
+
+  function dueText(due) {
+    const n = daysFromToday(due);
+    if (n < 0) return `<span class="late">${-n} day${n === -1 ? "" : "s"} late</span>`;
+    if (n === 0) return `<span class="hl">Today</span>`;
+    if (n === 1) return `<span class="hl">Tomorrow</span>`;
+    return `<span class="due">${parse(due).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}</span>`;
+  }
+  const subjects = () => [...new Set(Object.values(S.tt).flat().filter(Boolean))].sort();
+
+  function renderToday() {
+    const now = new Date();
+    $("hello").textContent = S.name ? `Hi ${S.name}` : "My School Day";
+    $("ex-banner").hidden = !S.example;
+    $("t-date").textContent = now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+    let d = new Date(now), title = "Today's lessons";
+    if (now.getDay() % 6 === 0 || now.getHours() >= 16) {
+      do d = plus(d, 1); while (d.getDay() % 6 === 0);
+      title = `${DAYS[d.getDay() - 1][2]}'s lessons`;
+    }
+    $("t-title").textContent = title;
+    const list = S.tt[DAYS[d.getDay() - 1][0]] || [];
+    $("t-lessons").innerHTML = list.some(Boolean)
+      ? list.map((s, i) => `<div><span class="num">${i + 1}</span><span class="txt">${esc(s || "—")}</span><span></span></div>`).join("")
+      : `<p class="note">No lessons added for this day yet. Fill them in under Timetable.</p>`;
+    const soon = S.hw.filter((h) => !h.done && daysFromToday(h.due) <= 2).sort((a, b) => a.due.localeCompare(b.due));
+    $("t-hw").innerHTML = soon.length
+      ? soon.map((h) => `<div><span class="num">✓</span><span class="txt"><span class="chip">${esc(h.s)}</span> ${esc(h.t)}</span>${dueText(h.due)}</div>`).join("")
+      : `<p class="note">Nothing due in the next two days.</p>`;
+    if (document.activeElement !== $("name")) $("name").value = S.name || "";
+  }
+
+  let day = DAYS[Math.min(Math.max(new Date().getDay() - 1, 0), 4)][0];
+  function renderTT() {
+    $("days").innerHTML = DAYS.map(([k, short]) => `<button type="button" data-day="${k}" aria-pressed="${k === day}">${short}</button>`).join("");
+    const list = S.tt[day] || [];
+    $("tt").innerHTML = Array.from({ length: LESSONS }, (_, i) =>
+      `<div><span class="num">${i + 1}</span><input type="text" id="tt-${i}" data-i="${i}" list="subjects" value="${esc(list[i] || "")}" placeholder="Lesson ${i + 1}" aria-label="Lesson ${i + 1}"></div>`).join("");
+    $("subjects").innerHTML = subjects().map((s) => `<option value="${esc(s)}">`).join("");
+  }
+  $("days").addEventListener("click", (e) => { const b = e.target.closest("[data-day]"); if (b) { day = b.dataset.day; renderTT(); } });
+  $("tt").addEventListener("input", (e) => {
+    const i = +e.target.dataset.i; S.tt[day] ||= [];
+    S.tt[day][i] = e.target.value.trim(); touch(); renderToday();
+  });
+
+  function renderHW() {
+    const list = [...S.hw].sort((a, b) => a.done - b.done || a.due.localeCompare(b.due));
+    $("hw-list").innerHTML = list.length ? list.map((h) =>
+      `<div class="${h.done ? "done" : ""}"><input type="checkbox" data-id="${h.id}" ${h.done ? "checked" : ""} aria-label="Done"><span class="txt"><span class="chip">${esc(h.s)}</span> ${esc(h.t)}<br>${h.done ? `<span class="due">Done</span>` : dueText(h.due)}</span><button type="button" class="x" data-del="${h.id}" aria-label="Delete">✕</button></div>`).join("")
+      : `<p class="note">No homework. Add it here as soon as it's set.</p>`;
+  }
+  $("hw-due").value = iso(plus(new Date(), 1));
+  $("hw-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    S.hw.push({ id: Date.now(), s: $("hw-subj").value.trim(), t: $("hw-text").value.trim(), due: $("hw-due").value, done: false });
+    $("hw-text").value = ""; touch(); renderAll(); toast("Homework added");
+  });
+  $("hw-list").addEventListener("click", (e) => {
+    const c = e.target.closest("input[data-id]"), d = e.target.closest("[data-del]");
+    if (c) { S.hw.find((h) => h.id == c.dataset.id).done = c.checked; touch(); renderAll(); if (c.checked) toast("Nice one"); }
+    if (d) { S.hw = S.hw.filter((h) => h.id != d.dataset.del); touch(); renderAll(); }
+  });
+
+  function renderPeople() {
+    $("p-role").innerHTML = ROLES.map(([k, l]) => `<option value="${k}">${l}</option>`).join("");
+    $("p-list").innerHTML = ROLES.map(([k, l, why]) => {
+      const ps = S.people.filter((p) => p.role === k);
+      return `<div style="padding-block:6px"><h3>${l}</h3><p class="note">${why}</p><div class="list">${ps.length
+        ? ps.map((p) => `<div><span class="num">•</span><span class="txt"><b>${esc(p.name)}</b>${p.info ? `<br><span class="due">${esc(p.info)}</span>` : ""}</span><button type="button" class="x" data-pdel="${p.id}" aria-label="Remove ${esc(p.name)}">✕</button></div>`).join("")
+        : `<p class="note" style="padding:6px 0">No one added yet.</p>`}</div></div>`;
+    }).join("");
+  }
+  $("p-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    S.people.push({ id: Date.now(), role: $("p-role").value, name: $("p-name").value.trim(), info: $("p-info").value.trim() });
+    $("p-name").value = ""; $("p-info").value = ""; touch(); renderPeople(); toast("Added");
+  });
+  $("p-list").addEventListener("click", (e) => { const b = e.target.closest("[data-pdel]"); if (b) { S.people = S.people.filter((p) => p.id != b.dataset.pdel); touch(); renderPeople(); } });
+
+  $("name").addEventListener("input", (e) => { S.name = e.target.value.trim(); save(); $("hello").textContent = S.name ? `Hi ${S.name}` : "My School Day"; });
+  $("clear-ex").onclick = () => {
+    const name = S.name;
+    S = { example: false, name, tt: Object.fromEntries(DAYS.map(([k]) => [k, []])), hw: [], people: [] };
+    save(); renderAll(); toast("All clear. Add your own.");
+  };
+
+  const VIEWS = ["today", "timetable", "homework", "people"];
+  function show(v) {
+    if (!VIEWS.includes(v)) v = "today";
+    VIEWS.forEach((x) => ($("v-" + x).hidden = x !== v));
+    document.querySelectorAll("nav a").forEach((a) => a.setAttribute("aria-current", a.getAttribute("href") === "#" + v ? "page" : "false"));
+  }
+  document.querySelector("nav").addEventListener("click", (e) => {
+    const a = e.target.closest("a"); if (!a) return; e.preventDefault();
+    try { history.replaceState(null, "", a.getAttribute("href")); } catch {}
+    show(a.getAttribute("href").slice(1)); scrollTo(0, 0);
+  });
+  window.addEventListener("hashchange", () => show(location.hash.slice(1)));
+
+  function renderAll() { renderToday(); renderTT(); renderHW(); renderPeople(); }
+  renderAll(); show(location.hash.slice(1));
+  setInterval(renderToday, 60000);
+})();
+</script>
+
+</body>
+</html>
