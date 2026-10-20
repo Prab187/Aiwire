@@ -1,0 +1,642 @@
+<title>CRGS Student Planner</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: a planner-notebook column — sticky tab strip on top, one view at a time, cards only where an object is self-contained */
+:root {
+  --bg: #f3f4f8;
+  --surface: #ffffff;
+  --ink: #18203a;
+  --muted: #5b6380;
+  --line: #dde0ea;
+  --accent: #2b3fa6;
+  --accent-soft: #e4e8fb;
+  --brass: #a8761b;
+  --good: #1f7a4d;
+  --warn: #a35a00;
+  --bad: #b3261e;
+  --house: #2b3fa6;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1324; --surface: #171c33; --ink: #e8eaf4; --muted: #9aa1bf; --line: #2a3150;
+    --accent: #8d9cff; --accent-soft: #232b55; --brass: #e0b25a;
+    --good: #5fd39a; --warn: #f0a94a; --bad: #ff8a80; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1324; --surface: #171c33; --ink: #e8eaf4; --muted: #9aa1bf; --line: #2a3150;
+  --accent: #8d9cff; --accent-soft: #232b55; --brass: #e0b25a;
+  --good: #5fd39a; --warn: #f0a94a; --bad: #ff8a80; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.5; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 880px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-block: 14px 6px; flex-wrap: wrap; }
+.brand h1 { font-family: var(--f-display); font-weight: 800; font-size: 1.35rem; margin: 0; letter-spacing: -0.01em; }
+.brand h1 span { color: var(--house); }
+.brand small { color: var(--muted); font-size: 0.8rem; }
+nav.tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
+nav.tabs a { flex: none; text-decoration: none; color: var(--muted); font-weight: 700; font-size: 0.92rem; padding: 7px 12px; border-radius: 999px; }
+nav.tabs a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
+nav.tabs a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+main { padding-block: 20px 48px; display: grid; gap: 22px; }
+section.view { display: grid; gap: 22px; }
+h2 { font-family: var(--f-display); font-weight: 800; font-size: 1.25rem; margin: 0; text-wrap: balance; }
+h3 { font-family: var(--f-display); font-weight: 600; font-size: 1rem; margin: 0; }
+.eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.72rem; font-weight: 700; color: var(--muted); }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; min-width: 0; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.muted { color: var(--muted); }
+.note { font-size: 0.85rem; color: var(--muted); }
+button, .btn { font: inherit; font-weight: 700; font-size: 0.9rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 8px 14px; border-radius: 10px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+button.ghost { border-color: transparent; background: transparent; color: var(--muted); padding: 6px 8px; }
+input, select, textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+label.field { display: grid; gap: 4px; font-size: 0.85rem; font-weight: 700; color: var(--muted); }
+
+/* Today */
+.now { display: grid; gap: 14px; }
+.now .clock { font-family: var(--f-mono); font-size: 2.4rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.now .lesson { font-family: var(--f-display); font-weight: 800; font-size: 1.9rem; line-height: 1.1; text-wrap: balance; }
+.bar { height: 8px; border-radius: 99px; background: var(--accent-soft); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--house); border-radius: 99px; transition: width .6s; }
+.daylist { display: grid; gap: 0; }
+.daylist .p { display: grid; grid-template-columns: 7.2rem 1fr auto; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); align-items: baseline; }
+.daylist .p:first-child { border-top: 0; }
+.daylist .p.past { color: var(--muted); }
+.daylist .p.cur { font-weight: 700; }
+.daylist .p.cur .t::before { content: "▸ "; color: var(--house); }
+.daylist .p.brk { color: var(--muted); font-size: 0.9rem; }
+.stat { display: grid; gap: 2px; }
+.stat b { font-family: var(--f-display); font-size: 2rem; font-weight: 800; line-height: 1; }
+
+/* Timetable */
+.tt-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+table.tt { border-collapse: collapse; width: 100%; min-width: 620px; }
+table.tt th, table.tt td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); padding: 0; text-align: left; vertical-align: top; }
+table.tt th { padding: 8px 10px; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); background: var(--bg); }
+table.tt th.today { color: var(--accent); }
+table.tt td.time { padding: 8px 10px; font-family: var(--f-mono); font-size: 0.75rem; color: var(--muted); white-space: nowrap; background: var(--bg); }
+table.tt td button { width: 100%; min-height: 54px; border: 0; border-radius: 0; background: transparent; display: grid; align-content: start; justify-items: start; gap: 0; padding: 8px 10px; text-align: left; }
+table.tt td button .s { font-weight: 700; }
+table.tt td button .r { font-size: 0.78rem; color: var(--muted); font-weight: 400; }
+table.tt td button:hover { background: var(--accent-soft); }
+table.tt tr.brk td { background: var(--bg); font-size: 0.8rem; color: var(--muted); padding: 4px 10px; }
+.chip { display: inline-block; font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
+.chip.brass { background: transparent; border: 1px solid var(--brass); color: var(--brass); }
+
+/* Homework */
+.hw { display: grid; gap: 0; }
+.hw .item { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start; padding: 12px 0; border-top: 1px solid var(--line); }
+.hw .item:first-child { border-top: 0; }
+.hw .item input[type=checkbox] { width: 20px; height: 20px; margin-top: 3px; accent-color: var(--house); }
+.hw .item.done .txt { text-decoration: line-through; color: var(--muted); }
+.hw .txt { min-width: 0; overflow-wrap: anywhere; }
+.due { font-size: 0.78rem; font-weight: 700; white-space: nowrap; }
+.due.over { color: var(--bad); } .due.soon { color: var(--warn); } .due.ok { color: var(--good); }
+form.add { display: grid; grid-template-columns: 1fr 2fr auto auto; gap: 8px; align-items: end; }
+@media (max-width: 640px) { form.add { grid-template-columns: 1fr 1fr; } form.add .wide { grid-column: 1 / -1; } }
+
+/* Focus */
+.timer { font-family: var(--f-mono); font-size: clamp(3rem, 14vw, 5.5rem); line-height: 1; text-align: center; font-variant-numeric: tabular-nums; }
+.ring { display: grid; justify-items: center; gap: 16px; }
+
+/* Info */
+.houses { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.houses button { justify-content: flex-start; padding: 12px; border-radius: 12px; }
+.houses button i { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+.houses button[aria-pressed="true"] { border-color: var(--house); box-shadow: inset 0 0 0 1px var(--house); }
+.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.links a { color: var(--accent); font-weight: 700; text-decoration: none; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.links a:hover { text-decoration: underline; }
+.terms .t { display: grid; grid-template-columns: 1.4fr 1fr 1fr auto; gap: 8px; align-items: center; padding-block: 6px; }
+@media (max-width: 560px) { .terms .t { grid-template-columns: 1fr 1fr; } .terms .t input[type=text] { grid-column: 1 / -1; } }
+.periods .t { display: grid; grid-template-columns: 1.4fr 1fr 1fr auto auto; gap: 8px; align-items: center; padding-block: 6px; }
+@media (max-width: 560px) { .periods .t { grid-template-columns: 1fr 1fr; } .periods .t input[type=text] { grid-column: 1 / -1; } }
+.banner { border: 1px dashed var(--brass); color: var(--ink); border-radius: 12px; padding: 10px 14px; font-size: 0.88rem; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+
+dialog { border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--ink); padding: 20px; width: min(420px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgb(10 14 30 / 0.45); }
+dialog form { display: grid; gap: 12px; }
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 700; font-size: 0.9rem; opacity: 0; pointer-events: none; transition: opacity .2s; }
+.toast.show { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <h1>CRGS <span>Planner</span></h1>
+      <small>Unofficial student tool · not run by the school</small>
+    </div>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#today">Today</a>
+      <a href="#timetable">Timetable</a>
+      <a href="#homework">Homework</a>
+      <a href="#focus">Revision timer</a>
+      <a href="#school">School &amp; settings</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- TODAY -->
+  <section class="view" id="v-today">
+    <div class="card now">
+      <div class="row" style="justify-content:space-between">
+        <span class="eyebrow" id="today-date"></span>
+        <span class="chip" id="week-chip" hidden></span>
+      </div>
+      <div class="clock" id="clock">--:--</div>
+      <div>
+        <div class="eyebrow" id="now-label">Now</div>
+        <div class="lesson" id="now-lesson">—</div>
+        <div class="muted" id="now-sub"></div>
+      </div>
+      <div class="bar" id="now-bar-wrap"><i id="now-bar" style="width:0"></i></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card stat"><span class="eyebrow">Homework due in 3 days</span><b id="st-hw">0</b><span class="note" id="st-hw-note"></span></div>
+      <div class="card stat"><span class="eyebrow" id="st-term-label">School days left this term</span><b id="st-term">—</b><span class="note" id="st-term-note"></span></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:6px"><h2 id="day-title">Today's lessons</h2></div>
+      <div class="daylist" id="daylist"></div>
+    </div>
+  </section>
+
+  <!-- TIMETABLE -->
+  <section class="view" id="v-timetable" hidden>
+    <div class="banner" id="tt-example" hidden>
+      <span>This is an example timetable. Tap any lesson to replace it with your own.</span>
+      <button type="button" id="tt-clear">Start blank</button>
+    </div>
+    <div class="row" style="justify-content:space-between">
+      <h2>My timetable</h2>
+      <div class="row" id="ab-switch" hidden>
+        <button type="button" data-week="A" id="wkA">Week A</button>
+        <button type="button" data-week="B" id="wkB">Week B</button>
+      </div>
+    </div>
+    <div class="tt-wrap"><table class="tt" id="tt"></table></div>
+    <p class="note">Change lesson times and turn on a two-week (A/B) timetable under School &amp; settings.</p>
+  </section>
+
+  <!-- HOMEWORK -->
+  <section class="view" id="v-homework" hidden>
+    <div class="card">
+      <h2 style="margin-bottom:12px">Add homework</h2>
+      <form class="add" id="hw-form">
+        <label class="field">Subject<select id="hw-subj"></select></label>
+        <label class="field wide">Task<input id="hw-text" type="text" required placeholder="e.g. Finish Q1–8 on simultaneous equations"></label>
+        <label class="field">Due<input id="hw-due" type="date" required></label>
+        <button class="primary" type="submit">Add</button>
+      </form>
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:4px">
+        <h2>To do</h2>
+        <button type="button" class="ghost" id="hw-clear-done">Clear finished</button>
+      </div>
+      <div class="hw" id="hw-list"></div>
+    </div>
+  </section>
+
+  <!-- FOCUS -->
+  <section class="view" id="v-focus" hidden>
+    <div class="card ring">
+      <div class="row">
+        <button type="button" data-mode="25">Study 25</button>
+        <button type="button" data-mode="50">Study 50</button>
+        <button type="button" data-mode="5">Break 5</button>
+      </div>
+      <label class="field" style="width:min(320px,100%)">Revising<select id="focus-subj"></select></label>
+      <div class="timer" id="timer">25:00</div>
+      <div class="row">
+        <button type="button" class="primary" id="t-start">Start</button>
+        <button type="button" id="t-reset">Reset</button>
+      </div>
+      <p class="note" id="focus-today"></p>
+    </div>
+    <div class="card">
+      <h2 style="margin-bottom:8px">Revision this week</h2>
+      <div class="daylist" id="focus-log"></div>
+    </div>
+  </section>
+
+  <!-- SCHOOL & SETTINGS -->
+  <section class="view" id="v-school" hidden>
+    <div class="card">
+      <h2>Colchester Royal Grammar School</h2>
+      <p class="muted" style="margin:6px 0 14px">6 Lexden Road, Colchester CO3 3ND · Office <span class="mono" id="phone">01206 509100</span> <button type="button" class="ghost" id="copy-phone">Copy</button></p>
+      <div class="links">
+        <a href="https://www.crgs.co.uk/" target="_blank" rel="noopener">School website ↗</a>
+        <a href="https://www.crgs.co.uk/term-dates" target="_blank" rel="noopener">Official term dates ↗</a>
+        <a href="https://www.crgs.co.uk/news" target="_blank" rel="noopener">School news ↗</a>
+        <a href="https://www.crgs.co.uk/140/ofsted-reports" target="_blank" rel="noopener">Ofsted reports ↗</a>
+      </div>
+      <p class="note">Links go to crgs.co.uk. If a page has moved, start from the homepage.</p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:4px">My house</h2>
+      <p class="note" style="margin:0 0 12px">Picks the app's highlight colour. These colours are this app's, not official house colours.</p>
+      <div class="houses" id="houses"></div>
+    </div>
+
+    <div class="card terms">
+      <div class="row" style="justify-content:space-between"><h2>Term dates</h2><span class="chip brass">Estimates, check the school site</span></div>
+      <p class="note">Used for the countdown on Today. Add half-terms as separate rows if you like.</p>
+      <div id="terms"></div>
+      <button type="button" id="add-term">Add term</button>
+    </div>
+
+    <div class="card periods">
+      <h2>School day</h2>
+      <p class="note">Example times. Edit them to match your planner. Untick “Lesson” for registration, break and lunch.</p>
+      <div id="periods"></div>
+      <div class="row"><button type="button" id="add-period">Add period</button></div>
+      <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
+      <label class="row" style="font-weight:700"><input type="checkbox" id="twoweek"> Two-week timetable (Week A / Week B)</label>
+      <label class="field" id="anchor-wrap" style="margin-top:10px;max-width:280px" hidden>A date in a Week A<input type="date" id="anchor"></label>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:6px">Your data</h2>
+      <p class="note" style="margin-top:0">Everything is saved only in this browser on this device. Nothing is sent to the school or anyone else.</p>
+      <div class="row">
+        <button type="button" id="reset-all">Reset everything</button>
+        <span id="reset-confirm" hidden class="row"><span class="note">Delete timetable, homework and settings?</span><button type="button" class="primary" id="reset-yes">Yes, reset</button><button type="button" id="reset-no">Cancel</button></span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlg-form">
+    <h3 id="dlg-title">Edit lesson</h3>
+    <label class="field">Subject<input id="dlg-subj" type="text" list="subj-list" placeholder="Leave empty for a free period"></label>
+    <label class="field">Room / teacher<input id="dlg-room" type="text" placeholder="e.g. S4 · Mr Smith"></label>
+    <datalist id="subj-list"></datalist>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" id="dlg-cancel">Cancel</button>
+      <button type="submit" class="primary">Save</button>
+    </div>
+  </form>
+</dialog>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+  const KEY = "crgs-planner-v1";
+  const DAYS = ["mon", "tue", "wed", "thu", "fri"];
+  const DAY_NAMES = { mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday" };
+  const HOUSES = [
+    { name: "Dugard's", color: "#2b3fa6" },
+    { name: "Harsnett's", color: "#b3261e" },
+    { name: "Parr's", color: "#1f7a4d" },
+    { name: "Shaw", color: "#a8761b" },
+    { name: "Jeffrey's", color: "#7a3fa6" },
+  ];
+  const SUBJECTS = ["Maths", "English", "Physics", "Chemistry", "Biology", "History", "Geography", "French", "German", "Latin", "Computing", "Art", "Music", "Drama", "PE", "Games", "RS", "DT", "Economics", "Further Maths", "Politics", "Psychology"];
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const pad = (n) => String(n).padStart(2, "0");
+  const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parseISO = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const mins = (hhmm) => { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; };
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const dayKey = (d) => ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][d.getDay()];
+  const mondayOf = (d) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); const wd = (x.getDay() + 6) % 7; return addDays(x, -wd); };
+
+  function sampleTT() {
+    const plan = {
+      mon: [["Maths", "M3"], ["English", "E2"], ["Physics", "S5"], ["French", "L1"], ["Games", "Field"]],
+      tue: [["Chemistry", "S2"], ["History", "H1"], ["Maths", "M3"], ["Latin", "L4"], ["Computing", "IT2"]],
+      wed: [["English", "E2"], ["Biology", "S7"], ["Geography", "G1"], ["Art", "A1"], ["PE", "Sports hall"]],
+      thu: [["Physics", "S5"], ["Maths", "M3"], ["RS", "H3"], ["Music", "Mu1"], ["English", "E2"]],
+      fri: [["French", "L1"], ["Chemistry", "S2"], ["History", "H1"], ["Biology", "S7"], ["Maths", "M3"]],
+    };
+    const out = {};
+    for (const d of DAYS) { out[d] = {}; plan[d].forEach(([s, r], i) => (out[d]["p" + (i + 1)] = { s, r })); }
+    return out;
+  }
+  function defaults() {
+    const today = new Date();
+    const due = (n) => iso(addDays(today, n));
+    return {
+      example: true,
+      house: 0,
+      twoWeek: false,
+      anchor: iso(mondayOf(today)),
+      periods: [
+        { id: "reg", name: "Registration", start: "08:40", end: "08:55", lesson: false },
+        { id: "p1", name: "Period 1", start: "08:55", end: "09:55", lesson: true },
+        { id: "p2", name: "Period 2", start: "09:55", end: "10:55", lesson: true },
+        { id: "brk", name: "Break", start: "10:55", end: "11:15", lesson: false },
+        { id: "p3", name: "Period 3", start: "11:15", end: "12:15", lesson: true },
+        { id: "lun", name: "Lunch", start: "12:15", end: "13:15", lesson: false },
+        { id: "p4", name: "Period 4", start: "13:15", end: "14:15", lesson: true },
+        { id: "p5", name: "Period 5", start: "14:15", end: "15:15", lesson: true },
+      ],
+      tt: { A: sampleTT(), B: sampleTT() },
+      hw: [
+        { id: 1, subject: "Maths", text: "Example: Exercise 4C, questions 1–12", due: due(1), done: false },
+        { id: 2, subject: "French", text: "Example: Learn vocab list 6 for Friday's test", due: due(3), done: false },
+        { id: 3, subject: "History", text: "Example: Source analysis paragraph on the Peasants' Revolt", due: due(6), done: false },
+      ],
+      terms: [
+        { name: "Autumn term 2026", start: "2026-09-03", end: "2026-12-18" },
+        { name: "Spring term 2027", start: "2027-01-05", end: "2027-03-26" },
+        { name: "Summer term 2027", start: "2027-04-12", end: "2027-07-21" },
+      ],
+      focus: [],
+    };
+  }
+
+  let S;
+  try { S = JSON.parse(localStorage.getItem(KEY)) || defaults(); } catch { S = defaults(); }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
+
+  function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("show"), 1800); }
+
+  // ---------- week / timetable helpers ----------
+  function weekLetter(d) {
+    if (!S.twoWeek) return "A";
+    const diff = Math.round((mondayOf(d) - mondayOf(parseISO(S.anchor))) / (7 * 864e5));
+    return ((diff % 2) + 2) % 2 === 0 ? "A" : "B";
+  }
+  const lessonAt = (d, pid) => (S.tt[weekLetter(d)][dayKey(d)] || {})[pid];
+  function allSubjects() {
+    const set = new Set();
+    for (const w of ["A", "B"]) for (const d of DAYS) for (const v of Object.values(S.tt[w][d] || {})) if (v && v.s) set.add(v.s);
+    return [...set].sort();
+  }
+  function applyHouse() { document.documentElement.style.setProperty("--house", HOUSES[S.house].color); }
+
+  // ---------- term countdown ----------
+  function schoolDaysBetween(a, b) { let n = 0; for (let d = new Date(a); d <= b; d = addDays(d, 1)) if (d.getDay() % 6) n++; return n; }
+  function termStatus(now) {
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const terms = S.terms.filter((t) => t.start && t.end).map((t) => ({ ...t, s: parseISO(t.start), e: parseISO(t.end) })).sort((a, b) => a.s - b.s);
+    const cur = terms.find((t) => today >= t.s && today <= t.e);
+    if (cur) return { label: "School days left this term", value: schoolDaysBetween(today, cur.e), note: `${cur.name} ends ${cur.e.toLocaleDateString(undefined, { day: "numeric", month: "short" })}` };
+    const next = terms.find((t) => t.s > today);
+    if (next) return { label: "Days until term starts", value: Math.round((next.s - today) / 864e5), note: `${next.name} starts ${next.s.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}` };
+    return { label: "Term dates", value: "—", note: "Add term dates under School & settings" };
+  }
+
+  // ---------- TODAY ----------
+  function renderToday() {
+    const now = new Date();
+    const m = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    $("clock").textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    $("today-date").textContent = now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+    const isWeekday = now.getDay() % 6 !== 0;
+
+    // Weekend/after school: show the next school day's list.
+    let showDay = new Date(now);
+    const lastEnd = S.periods.length ? Math.max(...S.periods.map((p) => mins(p.end))) : 0;
+    let headline = "Today's lessons";
+    if (!isWeekday || m >= lastEnd) {
+      do showDay = addDays(showDay, 1); while (showDay.getDay() % 6 === 0);
+      headline = `${DAY_NAMES[dayKey(showDay)]}'s lessons`;
+    }
+    $("day-title").textContent = headline;
+    $("week-chip").hidden = !S.twoWeek;
+    $("week-chip").textContent = `Week ${weekLetter(showDay)}`;
+
+    const periods = [...S.periods].sort((a, b) => mins(a.start) - mins(b.start));
+    const sameDay = showDay.toDateString() === now.toDateString();
+    let cur = null, next = null;
+    if (sameDay) {
+      cur = periods.find((p) => m >= mins(p.start) && m < mins(p.end));
+      next = periods.find((p) => mins(p.start) > m && (!p.lesson || lessonAt(now, p.id)?.s));
+    }
+
+    const describe = (p, d) => { if (!p.lesson) return p.name; const l = lessonAt(d, p.id); return l && l.s ? l.s : "Free period"; };
+    if (cur) {
+      const l = cur.lesson ? lessonAt(now, cur.id) : null;
+      const left = Math.ceil(mins(cur.end) - m);
+      $("now-label").textContent = `Now · ${cur.name}`;
+      $("now-lesson").textContent = describe(cur, now);
+      $("now-sub").textContent = [l?.r, `${left} min left`, next ? `then ${describe(next, now)} at ${next.start}` : "last one today"].filter(Boolean).join(" · ");
+      $("now-bar").style.width = `${((m - mins(cur.start)) / (mins(cur.end) - mins(cur.start))) * 100}%`;
+      $("now-bar-wrap").hidden = false;
+    } else {
+      $("now-bar-wrap").hidden = true;
+      if (sameDay && next) {
+        const l = next.lesson ? lessonAt(now, next.id) : null;
+        $("now-label").textContent = `Next · ${next.name} at ${next.start}`;
+        $("now-lesson").textContent = describe(next, now);
+        $("now-sub").textContent = [l?.r, `starts in ${Math.ceil(mins(next.start) - m)} min`].filter(Boolean).join(" · ");
+      } else {
+        const first = periods.find((p) => p.lesson && lessonAt(showDay, p.id)?.s);
+        $("now-label").textContent = "School's out";
+        $("now-lesson").textContent = first ? `${DAY_NAMES[dayKey(showDay)]} starts with ${lessonAt(showDay, first.id).s}` : "No lessons set";
+        $("now-sub").textContent = first ? `${first.start} · ${lessonAt(showDay, first.id).r || ""}` : "";
+      }
+    }
+
+    $("daylist").innerHTML = periods.map((p) => {
+      const st = sameDay ? (m >= mins(p.end) ? "past" : m >= mins(p.start) ? "cur" : "") : "";
+      const l = p.lesson ? lessonAt(showDay, p.id) : null;
+      return `<div class="p ${p.lesson ? "" : "brk"} ${st}"><span class="mono t">${p.start}–${p.end}</span><span>${esc(describe(p, showDay))}</span><span class="muted">${esc(l?.r || "")}</span></div>`;
+    }).join("");
+
+    const soon = S.hw.filter((h) => !h.done && (parseISO(h.due) - parseISO(iso(now))) / 864e5 <= 3);
+    const over = soon.filter((h) => parseISO(h.due) < parseISO(iso(now))).length;
+    $("st-hw").textContent = soon.length;
+    $("st-hw-note").textContent = over ? `${over} overdue` : soon.length ? soon.map((h) => h.subject).join(", ") : "All clear";
+
+    const ts = termStatus(now);
+    $("st-term-label").textContent = ts.label;
+    $("st-term").textContent = ts.value;
+    $("st-term-note").textContent = ts.note;
+  }
+
+  // ---------- TIMETABLE ----------
+  let ttWeek = "A";
+  function renderTT() {
+    $("tt-example").hidden = !S.example;
+    $("ab-switch").hidden = !S.twoWeek;
+    if (!S.twoWeek) ttWeek = "A";
+    $("wkA").className = ttWeek === "A" ? "primary" : "";
+    $("wkB").className = ttWeek === "B" ? "primary" : "";
+    const tk = dayKey(new Date());
+    const periods = [...S.periods].sort((a, b) => mins(a.start) - mins(b.start));
+    let html = `<thead><tr><th>Time</th>${DAYS.map((d) => `<th class="${d === tk ? "today" : ""}">${DAY_NAMES[d]}</th>`).join("")}</tr></thead><tbody>`;
+    for (const p of periods) {
+      if (!p.lesson) { html += `<tr class="brk"><td colspan="6">${p.start} · ${esc(p.name)}</td></tr>`; continue; }
+      html += `<tr><td class="time">${p.start}<br>${p.end}</td>`;
+      for (const d of DAYS) {
+        const l = (S.tt[ttWeek][d] || {})[p.id] || {};
+        html += `<td><button type="button" data-d="${d}" data-p="${p.id}" aria-label="${DAY_NAMES[d]} ${esc(p.name)}: ${esc(l.s || "free")}"><span class="s">${esc(l.s || "—")}</span><span class="r">${esc(l.r || "")}</span></button></td>`;
+      }
+      html += "</tr>";
+    }
+    $("tt").innerHTML = html + "</tbody>";
+  }
+  let editing = null;
+  $("tt").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-d]"); if (!b) return;
+    editing = { d: b.dataset.d, p: b.dataset.p };
+    const l = (S.tt[ttWeek][editing.d] || {})[editing.p] || {};
+    const per = S.periods.find((x) => x.id === editing.p);
+    $("dlg-title").textContent = `${DAY_NAMES[editing.d]} · ${per.name}${S.twoWeek ? ` · Week ${ttWeek}` : ""}`;
+    $("dlg-subj").value = l.s || ""; $("dlg-room").value = l.r || "";
+    $("subj-list").innerHTML = [...new Set([...allSubjects(), ...SUBJECTS])].map((s) => `<option value="${esc(s)}">`).join("");
+    $("dlg").showModal(); $("dlg-subj").focus();
+  });
+  $("dlg-cancel").onclick = () => $("dlg").close();
+  $("dlg-form").addEventListener("submit", () => {
+    if (!editing) return;
+    S.tt[ttWeek][editing.d] ||= {};
+    S.tt[ttWeek][editing.d][editing.p] = { s: $("dlg-subj").value.trim(), r: $("dlg-room").value.trim() };
+    if (!S.twoWeek) S.tt.B = JSON.parse(JSON.stringify(S.tt.A));
+    S.example = false; save(); renderAll(); toast("Lesson saved");
+  });
+  $("tt-clear").onclick = () => { S.tt = { A: {}, B: {} }; DAYS.forEach((d) => { S.tt.A[d] = {}; S.tt.B[d] = {}; }); S.example = false; save(); renderAll(); toast("Timetable cleared"); };
+  $("wkA").onclick = () => { ttWeek = "A"; renderTT(); };
+  $("wkB").onclick = () => { ttWeek = "B"; renderTT(); };
+
+  // ---------- HOMEWORK ----------
+  function dueLabel(due) {
+    const n = Math.round((parseISO(due) - parseISO(iso(new Date()))) / 864e5);
+    if (n < 0) return [`${-n} day${n === -1 ? "" : "s"} overdue`, "over"];
+    if (n === 0) return ["Due today", "soon"];
+    if (n === 1) return ["Due tomorrow", "soon"];
+    if (n <= 3) return [`Due ${parseISO(due).toLocaleDateString(undefined, { weekday: "long" })}`, "soon"];
+    return [`Due ${parseISO(due).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}`, "ok"];
+  }
+  function renderHW() {
+    const subs = [...new Set([...allSubjects(), ...SUBJECTS])];
+    const keep = $("hw-subj").value;
+    $("hw-subj").innerHTML = subs.map((s) => `<option>${esc(s)}</option>`).join("");
+    if (keep) $("hw-subj").value = keep;
+    $("focus-subj").innerHTML = subs.map((s) => `<option>${esc(s)}</option>`).join("");
+    const list = [...S.hw].sort((a, b) => a.done - b.done || a.due.localeCompare(b.due));
+    $("hw-list").innerHTML = list.length ? list.map((h) => {
+      const [txt, cls] = dueLabel(h.due);
+      return `<div class="item ${h.done ? "done" : ""}"><input type="checkbox" data-id="${h.id}" ${h.done ? "checked" : ""} aria-label="Mark done"><div class="txt"><span class="chip">${esc(h.subject)}</span> ${esc(h.text)}<div class="due ${h.done ? "" : cls}">${h.done ? "Done" : txt}</div></div><button type="button" class="ghost" data-del="${h.id}" aria-label="Delete">✕</button></div>`;
+    }).join("") : `<p class="muted">Nothing to do. Add homework above when it's set.</p>`;
+  }
+  $("hw-due").value = iso(addDays(new Date(), 1));
+  $("hw-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    S.hw.push({ id: Date.now(), subject: $("hw-subj").value, text: $("hw-text").value.trim(), due: $("hw-due").value, done: false });
+    $("hw-text").value = ""; save(); renderAll(); toast("Homework added");
+  });
+  $("hw-list").addEventListener("click", (e) => {
+    const c = e.target.closest("input[data-id]"), d = e.target.closest("button[data-del]");
+    if (c) { const h = S.hw.find((x) => x.id == c.dataset.id); h.done = c.checked; save(); renderAll(); }
+    if (d) { S.hw = S.hw.filter((x) => x.id != d.dataset.del); save(); renderAll(); toast("Deleted"); }
+  });
+  $("hw-clear-done").onclick = () => { const n = S.hw.filter((h) => h.done).length; S.hw = S.hw.filter((h) => !h.done); save(); renderAll(); toast(n ? `Cleared ${n}` : "Nothing finished yet"); };
+
+  // ---------- FOCUS ----------
+  let tLen = 25 * 60, tLeft = tLen, tRun = null, tEndAt = 0, tMode = 25;
+  const fmt = (s) => `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
+  function drawTimer() { $("timer").textContent = fmt(Math.max(0, Math.ceil(tLeft))); }
+  function stopTimer() { clearInterval(tRun); tRun = null; $("t-start").textContent = "Start"; }
+  function tick() {
+    tLeft = (tEndAt - Date.now()) / 1000;
+    if (tLeft <= 0) {
+      tLeft = 0; stopTimer(); drawTimer();
+      if (tMode !== 5) { S.focus.push({ date: iso(new Date()), subject: $("focus-subj").value, min: tMode }); save(); renderFocus(); }
+      toast(tMode === 5 ? "Break over" : "Session done. Take a break.");
+      try { const a = new AudioContext(), o = a.createOscillator(); o.frequency.value = 660; o.connect(a.destination); o.start(); o.stop(a.currentTime + 0.4); } catch {}
+      return;
+    }
+    drawTimer();
+  }
+  document.querySelectorAll("[data-mode]").forEach((b) => b.onclick = () => { stopTimer(); tMode = +b.dataset.mode; tLen = tLeft = tMode * 60; drawTimer(); });
+  $("t-start").onclick = () => {
+    if (tRun) { stopTimer(); return; }
+    if (tLeft <= 0) tLeft = tLen;
+    tEndAt = Date.now() + tLeft * 1000; tRun = setInterval(tick, 250); $("t-start").textContent = "Pause";
+  };
+  $("t-reset").onclick = () => { stopTimer(); tLeft = tLen; drawTimer(); };
+  function renderFocus() {
+    const today = iso(new Date());
+    const wkStart = iso(mondayOf(new Date()));
+    const todayMin = S.focus.filter((f) => f.date === today).reduce((a, f) => a + f.min, 0);
+    $("focus-today").textContent = todayMin ? `${todayMin} minutes revised today` : "Pick a subject and start a session.";
+    const by = {};
+    S.focus.filter((f) => f.date >= wkStart).forEach((f) => (by[f.subject] = (by[f.subject] || 0) + f.min));
+    const rows = Object.entries(by).sort((a, b) => b[1] - a[1]);
+    $("focus-log").innerHTML = rows.length ? rows.map(([s, mn]) => `<div class="p"><span class="mono t">${Math.floor(mn / 60)}h ${pad(mn % 60)}m</span><span>${esc(s)}</span><span></span></div>`).join("") : `<p class="muted">Finished sessions show up here, totalled by subject from Monday.</p>`;
+  }
+
+  // ---------- SCHOOL & SETTINGS ----------
+  function renderSchool() {
+    $("houses").innerHTML = HOUSES.map((h, i) => `<button type="button" data-h="${i}" aria-pressed="${i === S.house}"><i style="background:${h.color}"></i>${esc(h.name)}</button>`).join("");
+    $("terms").innerHTML = S.terms.map((t, i) => `<div class="t"><input type="text" data-ti="${i}" data-k="name" value="${esc(t.name)}" aria-label="Term name"><input type="date" data-ti="${i}" data-k="start" value="${t.start}" aria-label="Start"><input type="date" data-ti="${i}" data-k="end" value="${t.end}" aria-label="End"><button type="button" class="ghost" data-tdel="${i}" aria-label="Remove term">✕</button></div>`).join("");
+    const ps = [...S.periods].sort((a, b) => mins(a.start) - mins(b.start));
+    $("periods").innerHTML = ps.map((p) => `<div class="t"><input type="text" data-pid="${p.id}" data-k="name" value="${esc(p.name)}" aria-label="Period name"><input type="time" data-pid="${p.id}" data-k="start" value="${p.start}" aria-label="Start"><input type="time" data-pid="${p.id}" data-k="end" value="${p.end}" aria-label="End"><label class="row note"><input type="checkbox" data-pid="${p.id}" data-k="lesson" ${p.lesson ? "checked" : ""}>Lesson</label><button type="button" class="ghost" data-pdel="${p.id}" aria-label="Remove period">✕</button></div>`).join("");
+    $("twoweek").checked = S.twoWeek;
+    $("anchor-wrap").hidden = !S.twoWeek;
+    $("anchor").value = S.anchor;
+  }
+  $("houses").addEventListener("click", (e) => { const b = e.target.closest("[data-h]"); if (!b) return; S.house = +b.dataset.h; save(); applyHouse(); renderSchool(); toast(`${HOUSES[S.house].name} selected`); });
+  $("terms").addEventListener("change", (e) => { const el = e.target; if (el.dataset.ti == null) return; S.terms[+el.dataset.ti][el.dataset.k] = el.value; save(); renderToday(); });
+  $("terms").addEventListener("click", (e) => { const b = e.target.closest("[data-tdel]"); if (!b) return; S.terms.splice(+b.dataset.tdel, 1); save(); renderAll(); });
+  $("add-term").onclick = () => { S.terms.push({ name: "Half term / new term", start: "", end: "" }); save(); renderSchool(); };
+  $("periods").addEventListener("change", (e) => {
+    const el = e.target, p = S.periods.find((x) => x.id === el.dataset.pid); if (!p) return;
+    p[el.dataset.k] = el.type === "checkbox" ? el.checked : el.value;
+    if ((el.dataset.k === "start" || el.dataset.k === "end") && !el.value) return;
+    save(); renderAll();
+  });
+  $("periods").addEventListener("click", (e) => { const b = e.target.closest("[data-pdel]"); if (!b) return; S.periods = S.periods.filter((p) => p.id !== b.dataset.pdel); save(); renderAll(); });
+  $("add-period").onclick = () => {
+    const last = [...S.periods].sort((a, b) => mins(b.end) - mins(a.end))[0];
+    const st = last ? last.end : "15:15", e = mins(st) + 60;
+    S.periods.push({ id: "p" + Date.now(), name: "New period", start: st, end: `${pad(Math.floor(e / 60) % 24)}:${pad(e % 60)}`, lesson: true });
+    save(); renderAll();
+  };
+  $("twoweek").onchange = (e) => { S.twoWeek = e.target.checked; save(); renderAll(); };
+  $("anchor").onchange = (e) => { if (e.target.value) { S.anchor = e.target.value; save(); renderAll(); } };
+  $("copy-phone").onclick = () => {
+    navigator.clipboard?.writeText("01206 509100").then(() => toast("Number copied"), () => { const r = document.createRange(); r.selectNodeContents($("phone")); getSelection().removeAllRanges(); getSelection().addRange(r); });
+  };
+  $("reset-all").onclick = () => { $("reset-confirm").hidden = false; };
+  $("reset-no").onclick = () => { $("reset-confirm").hidden = true; };
+  $("reset-yes").onclick = () => { S = defaults(); save(); $("reset-confirm").hidden = true; applyHouse(); renderAll(); toast("Reset done"); };
+
+  // ---------- routing ----------
+  const VIEWS = ["today", "timetable", "homework", "focus", "school"];
+  function route() {
+    const h = location.hash.slice(1);
+    const v = VIEWS.includes(h) ? h : "today";
+    VIEWS.forEach((x) => ($("v-" + x).hidden = x !== v));
+    document.querySelectorAll("nav.tabs a").forEach((a) => a.setAttribute("aria-current", a.getAttribute("href") === "#" + v ? "page" : "false"));
+  }
+  document.querySelector("nav.tabs").addEventListener("click", (e) => {
+    const a = e.target.closest("a"); if (!a) return;
+    e.preventDefault(); try { history.replaceState(null, "", a.getAttribute("href")); } catch {}
+    const v = a.getAttribute("href").slice(1);
+    VIEWS.forEach((x) => ($("v-" + x).hidden = x !== v));
+    document.querySelectorAll("nav.tabs a").forEach((x) => x.setAttribute("aria-current", x === a ? "page" : "false"));
+    scrollTo(0, 0);
+  });
+  window.addEventListener("hashchange", route);
+
+  function renderAll() { renderToday(); renderTT(); renderHW(); renderFocus(); renderSchool(); }
+  applyHouse(); renderAll(); route(); drawTimer();
+  setInterval(renderToday, 15000);
+})();
+</script>
