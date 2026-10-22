@@ -4,86 +4,142 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Lexend:wght@400;600&display=swap">
 <style>
-/* Layout: one narrow column like a school planner page; bottom-free top tabs; lists over cards */
+/* Layout: one column; coloured hero card on Today; icon tab bar at the bottom on phones, top tabs on desktop; one colour per subject everywhere */
 :root {
-  --bg: #f4f7f6;
+  --bg: #f2f6f5;
   --surface: #ffffff;
   --ink: #15253a;
-  --muted: #5a6b7d;
+  --muted: #566879;
   --line: #dbe3e1;
   --accent: #0d7c74;
   --accent-soft: #dcf1ee;
   --mark: #fff1a8;
   --bad: #b3261e;
+  --hero-bg: #0d7c74;
+  --hero-fg: #ffffff;
+  --chip-bg-l: 90%;
+  --chip-fg-l: 26%;
   --f-display: "Baloo 2", "Trebuchet MS", system-ui, sans-serif;
   --f-body: "Lexend", "Segoe UI", system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0e1a1f; --surface: #15252b; --ink: #e6efee; --muted: #9db0b3; --line: #27393f;
-    --accent: #4fd1c5; --accent-soft: #173a3a; --mark: #4a4416; --bad: #ff8a80; color-scheme: dark;
+    --accent: #4fd1c5; --accent-soft: #173a3a; --mark: #4a4416; --bad: #ff8a80;
+    --hero-bg: #145a57; --hero-fg: #e8f7f5; --chip-bg-l: 24%; --chip-fg-l: 84%; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0e1a1f; --surface: #15252b; --ink: #e6efee; --muted: #9db0b3; --line: #27393f;
-  --accent: #4fd1c5; --accent-soft: #173a3a; --mark: #4a4416; --bad: #ff8a80; color-scheme: dark;
+  --accent: #4fd1c5; --accent-soft: #173a3a; --mark: #4a4416; --bad: #ff8a80;
+  --hero-bg: #145a57; --hero-fg: #e8f7f5; --chip-bg-l: 24%; --chip-fg-l: 84%; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.5; }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
-.wrap { max-width: 620px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 640px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
 header .wrap { padding-block: 12px 0; }
-h1 { font-family: var(--f-display); font-weight: 800; font-size: 1.5rem; margin: 0; line-height: 1.2; }
-nav { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; margin-top: 6px; }
-nav a { flex: 1 0 auto; text-align: center; text-decoration: none; color: var(--muted); font-weight: 600; font-size: 0.86rem; padding: 10px 5px; border-bottom: 3px solid transparent; }
-nav a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
-main { padding-block: 20px 48px; }
-section { display: grid; gap: 20px; }
+h1 { font-family: var(--f-display); font-weight: 800; font-size: 1.45rem; margin: 0; line-height: 1.2; }
+nav.tabs { display: flex; gap: 2px; margin-top: 4px; }
+nav.tabs a { flex: 1 1 0; display: flex; align-items: center; justify-content: center; gap: 7px; text-decoration: none; color: var(--muted); font-weight: 600; font-size: 0.9rem; padding: 10px 6px; border-bottom: 3px solid transparent; }
+nav.tabs a svg { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+nav.tabs a svg .f { fill: currentColor; stroke: none; }
+nav.tabs a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
+@media (max-width: 719px) {
+  header .wrap { padding-block: 12px; }
+  nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; margin: 0; gap: 2px; background: var(--surface); border-top: 1px solid var(--line); padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); }
+  nav.tabs a { flex-direction: column; gap: 2px; font-size: 0.7rem; padding: 6px 0; border-bottom: 0; border-radius: 12px; }
+  nav.tabs a svg { width: 24px; height: 24px; }
+  nav.tabs a[aria-current="page"] { background: var(--accent-soft); }
+  main { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
+  .toast { bottom: calc(86px + env(safe-area-inset-bottom, 0px)) !important; }
+}
+main { padding-block: 18px 48px; }
+section { display: grid; gap: 18px; }
 h2 { font-family: var(--f-display); font-weight: 800; font-size: 1.25rem; margin: 0; text-wrap: balance; }
 .label { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.72rem; font-weight: 600; color: var(--muted); }
-.box { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; min-width: 0; }
+.label.late { color: var(--bad); }
+.lbl { font-size: 0.82rem; font-weight: 600; color: var(--muted); }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; min-width: 0; }
 .muted { color: var(--muted); }
 .note { font-size: 0.85rem; color: var(--muted); margin: 0; }
+
+/* Hero */
+.hero { background: var(--hero-bg); color: var(--hero-fg); border-radius: 22px; padding: 18px 20px 20px; display: grid; gap: 8px; }
+.hero .label { color: inherit; opacity: 0.85; }
+.hero .greet { font-family: var(--f-display); font-weight: 600; font-size: 1.05rem; opacity: 0.92; margin-top: 4px; }
+.hero input { background: transparent; border: 0; border-bottom: 2px dashed color-mix(in srgb, var(--hero-fg) 45%, transparent); border-radius: 0; padding: 0 0 2px; font-family: var(--f-display); font-weight: 800; font-size: clamp(1.7rem, 8vw, 2.3rem); line-height: 1.15; color: inherit; width: 100%; margin-top: -6px; }
+.hero input::placeholder { color: color-mix(in srgb, var(--hero-fg) 60%, transparent); }
+.hero input:focus-visible { outline: 2px solid var(--hero-fg); outline-offset: 4px; border-bottom-style: solid; }
+.facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.fact { background: color-mix(in srgb, var(--hero-fg) 18%, transparent); padding: 4px 12px; border-radius: 99px; font-size: 0.82rem; font-weight: 600; }
+
+/* Lists */
 .list { display: grid; }
-.list > div { display: grid; grid-template-columns: 2rem 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); min-width: 0; }
+.list > div { display: grid; grid-template-columns: 2.2rem 1fr auto; gap: 12px; align-items: center; padding: 11px 0; border-top: 1px solid var(--line); min-width: 0; }
 .list > div:first-child { border-top: 0; }
-.num { font-family: var(--f-display); font-weight: 800; color: var(--accent); font-size: 1.1rem; }
-.chip { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 2px 9px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
-.hl { background: var(--mark); border-radius: 4px; padding: 0 4px; font-weight: 600; font-size: 0.82rem; }
-.late { color: var(--bad); font-weight: 600; font-size: 0.82rem; }
+.les > div, .tt > div { grid-template-columns: 2.2rem 1fr; }
+.num { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-family: var(--f-display); font-weight: 800; font-size: 0.95rem; flex: none; }
+.num.sc { background: hsl(var(--h) 60% var(--chip-bg-l)); color: hsl(var(--h) 55% var(--chip-fg-l)); }
+.chip { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 2px 9px; border-radius: 99px; background: hsl(var(--h, 175) 60% var(--chip-bg-l)); color: hsl(var(--h, 175) 55% var(--chip-fg-l)); }
+.hl { background: var(--mark); border-radius: 99px; padding: 1px 9px; font-weight: 600; font-size: 0.78rem; white-space: nowrap; }
+.late { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); border-radius: 99px; padding: 1px 9px; font-weight: 600; font-size: 0.78rem; white-space: nowrap; }
 .due { font-size: 0.82rem; color: var(--muted); }
 .txt { min-width: 0; overflow-wrap: anywhere; }
 .done .txt { text-decoration: line-through; color: var(--muted); }
-button { font: inherit; font-weight: 600; font-size: 0.9rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 8px 14px; border-radius: 10px; cursor: pointer; }
-button.go { background: var(--accent); border-color: var(--accent); color: var(--surface); }
-button.x { border: 0; background: transparent; color: var(--muted); padding: 6px 8px; }
-input, select { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; min-width: 0; width: 100%; }
-input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); }
-a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-form { display: grid; gap: 10px; }
+.grp + .grp { margin-top: 14px; }
+.grp .label { display: flex; justify-content: space-between; align-items: center; }
+.empty { text-align: center; color: var(--muted); padding-block: 24px; }
+
+/* Controls */
+button { font: inherit; font-weight: 600; font-size: 0.9rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 9px 14px; border-radius: 12px; cursor: pointer; }
+button.go { background: var(--accent); border-color: var(--accent); color: var(--surface); padding-block: 12px; }
+button.x { border: 0; background: transparent; color: var(--muted); min-width: 40px; min-height: 40px; padding: 0; }
+button.clr { border: 0; background: transparent; color: var(--accent); padding: 0; font-size: 0.78rem; text-transform: none; letter-spacing: 0; }
+input, select { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; min-width: 0; width: 100%; }
+input[type=checkbox] { width: 26px; height: 26px; accent-color: var(--accent); }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+form { display: grid; gap: 12px; }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-@media (max-width: 460px) { .two { grid-template-columns: 1fr; } }
+@media (max-width: 340px) { .two { grid-template-columns: 1fr; } }
 label.f { display: grid; gap: 4px; font-size: 0.82rem; font-weight: 600; color: var(--muted); }
-.days { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 3px; gap: 3px; }
+.seg button { border: 0; background: transparent; border-radius: 11px; padding: 9px 6px; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+details.box > summary { cursor: pointer; font-family: var(--f-display); font-weight: 800; font-size: 1.05rem; list-style: none; display: flex; align-items: center; gap: 12px; color: var(--accent); }
+details.box > summary::-webkit-details-marker { display: none; }
+details.box > summary::before { content: "+"; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--surface); font-size: 1.3rem; line-height: 1; }
+details.box[open] > summary::before { content: "–"; }
+details.box form { margin-top: 14px; }
+
+/* Timetable */
+.days { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.days button { padding: 10px 0; position: relative; }
 .days button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
-.tt > div { grid-template-columns: 2rem 1fr; }
-.people h3 { font-family: var(--f-display); font-weight: 600; font-size: 1.02rem; margin: 6px 0 0; }
-.ex { border: 1px dashed var(--accent); border-radius: 12px; padding: 10px 14px; font-size: 0.86rem; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
-.bag { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 14px; }
-.bag label { display: flex; gap: 10px; align-items: center; padding: 6px 0; min-width: 0; overflow-wrap: anywhere; }
+.days button.today::after { content: ""; position: absolute; left: 50%; bottom: 4px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: currentColor; opacity: 0.7; }
+
+/* People */
+.people h3 { font-family: var(--f-display); font-weight: 600; font-size: 1.02rem; margin: 0; }
+.people .rolebox + .rolebox { margin-top: 14px; }
+.ex { border: 1px dashed var(--accent); border-radius: 14px; padding: 10px 14px; font-size: 0.86rem; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+
+/* Bag and notes */
+.bag { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0 14px; }
+.bag label { display: flex; gap: 10px; align-items: center; padding: 9px 0; min-width: 0; overflow-wrap: anywhere; }
 .bag label.got span { text-decoration: line-through; color: var(--muted); }
 .bag small { color: var(--accent); font-size: 0.72rem; }
 .inline { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 10px; }
-textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; width: 100%; min-height: 90px; resize: vertical; }
-.next-test { font-family: var(--f-display); font-weight: 800; font-size: 1.6rem; line-height: 1.1; }
-.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: 0.9rem; opacity: 0; pointer-events: none; transition: opacity .2s; }
+textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; width: 100%; min-height: 90px; resize: vertical; }
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-weight: 600; font-size: 0.9rem; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; white-space: nowrap; }
 .toast.show { opacity: 1; }
+
 /* Games */
-.gtabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.gtabs { display: grid; grid-template-columns: repeat(var(--cols, 3), 1fr); gap: 6px; }
+.gtabs button { padding-inline: 4px; }
 .gtabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
-.sud { display: grid; grid-template-columns: repeat(var(--n, 9), 1fr); width: min(100%, 432px); aspect-ratio: 1; margin: 0 auto; border: 2px solid var(--ink); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.sud { display: grid; grid-template-columns: repeat(var(--n, 9), 1fr); width: min(100%, 432px); aspect-ratio: 1; margin: 0 auto; border: 2px solid var(--ink); border-radius: 10px; overflow: hidden; background: var(--surface); }
 .sud button { border: 0; border-radius: 0; padding: 0; font-family: var(--f-display); font-weight: 600; font-size: var(--fs, clamp(1rem, 5vw, 1.45rem)); color: var(--accent); background: var(--surface); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
 .sud button.given { color: var(--ink); font-weight: 800; }
 .sud button.bc { border-right: 2px solid var(--ink); }
@@ -93,7 +149,7 @@ textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px 
 .sud button.sel { background: var(--accent); color: var(--surface); }
 .sud button.wrong { color: var(--bad); text-decoration: underline wavy; }
 .pad { display: grid; grid-template-columns: repeat(var(--pc, 5), 1fr); gap: 6px; width: min(100%, 432px); margin: 0 auto; }
-.pad button { padding: 10px 0; font-family: var(--f-display); font-size: 1.2rem; justify-content: center; }
+.pad button { padding: 12px 0; font-family: var(--f-display); font-size: 1.25rem; }
 .big { font-family: var(--f-display); font-weight: 800; font-size: clamp(2rem, 9vw, 2.8rem); text-align: center; line-height: 1.1; letter-spacing: 0.04em; overflow-wrap: anywhere; }
 .center { display: grid; gap: 12px; justify-items: center; text-align: center; }
 .center input { max-width: 260px; text-align: center; font-size: 1.2rem; }
@@ -104,13 +160,13 @@ textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px 
 
 <header>
   <div class="wrap">
-    <h1 id="hello">My School Day</h1>
-    <nav aria-label="Sections">
-      <a href="#today">Today</a>
-      <a href="#timetable">Timetable</a>
-      <a href="#homework">Homework</a>
-      <a href="#people">People</a>
-      <a href="#games">Games</a>
+    <h1>My School Day</h1>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#today"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span>Today</span></a>
+      <a href="#timetable"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>Timetable</span></a>
+      <a href="#homework"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="3"/><path d="M9 4h6v3H9z"/><path d="M9 14l2 2 4-4"/></svg><span>Homework</span></a>
+      <a href="#people"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 3-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.2c2.6.2 4.5 2 4.5 4.8"/></svg><span>People</span></a>
+      <a href="#games"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="7" width="19" height="11" rx="5.5"/><path d="M7.5 10.5v4M5.5 12.5h4"/><circle class="f" cx="15.5" cy="11.8" r="1.2"/><circle class="f" cx="18" cy="13.8" r="1.2"/></svg><span>Games</span></a>
     </nav>
   </div>
 </header>
@@ -118,73 +174,70 @@ textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px 
 <main class="wrap">
   <!-- TODAY -->
   <section id="v-today">
+    <div class="hero">
+      <div class="label" id="t-date"></div>
+      <div class="greet" id="greet">Hello,</div>
+      <input id="name" type="text" placeholder="Add your name" aria-label="Your first name" autocomplete="given-name" maxlength="20">
+      <div class="facts" id="facts"></div>
+    </div>
     <div class="ex" id="ex-banner" hidden>
       <span>You're looking at example data. Add your own and it replaces this.</span>
       <button type="button" id="clear-ex">Start fresh</button>
     </div>
     <div class="box">
-      <div class="label" id="t-date"></div>
-      <h2 id="t-title" style="margin:2px 0 8px">Today's lessons</h2>
-      <div class="list" id="t-lessons"></div>
+      <h2 id="t-title" style="margin-bottom:6px">Today's lessons</h2>
+      <div class="list les" id="t-lessons"></div>
     </div>
     <div class="box">
-      <div class="label">Next test</div>
-      <div class="next-test" id="t-test">None coming up</div>
-      <p class="note" id="t-test-note">Add tests under Homework so you know when to revise.</p>
-    </div>
-    <div class="box">
-      <h2 style="margin-bottom:8px">Homework due soon</h2>
+      <h2 style="margin-bottom:6px">Homework due soon</h2>
       <div class="list" id="t-hw"></div>
     </div>
     <div class="box">
       <h2 id="bag-title">Pack my bag</h2>
-      <p class="note" style="margin-bottom:8px">Items for your lessons are added for you. Ticks reset each day.</p>
+      <p class="note" style="margin-bottom:6px">Items for your lessons are added for you. Ticks reset each day.</p>
       <div class="bag" id="bag"></div>
       <form class="inline" id="bag-form"><input id="bag-new" type="text" placeholder="Add an item, e.g. Trip letter" aria-label="New bag item" required><button type="submit">Add</button></form>
     </div>
     <div class="box">
       <label class="f">Notes and reminders<textarea id="notes" placeholder="e.g. Get trip form signed · Club after school on Thursday"></textarea></label>
     </div>
-    <div class="box">
-      <label class="f">Your first name<input id="name" type="text" placeholder="e.g. Sam" autocomplete="given-name"></label>
-    </div>
   </section>
 
   <!-- TIMETABLE -->
   <section id="v-timetable" hidden>
     <div class="box">
-      <h2 style="margin-bottom:10px">Timetable</h2>
+      <h2 style="margin-bottom:12px">Timetable</h2>
       <div class="days" id="days"></div>
-      <div class="list tt" id="tt" style="margin-top:12px"></div>
+      <div class="list tt" id="tt" style="margin-top:10px"></div>
       <p class="note" style="margin-top:8px">Type a subject for each lesson. It saves as you type.</p>
     </div>
   </section>
 
   <!-- HOMEWORK -->
   <section id="v-homework" hidden>
-    <div class="box">
-      <h2 style="margin-bottom:10px">Add homework or a test</h2>
+    <details class="box" id="hw-add">
+      <summary>Add homework or a test</summary>
       <form id="hw-form">
         <div class="two">
           <label class="f">Subject<input id="hw-subj" type="text" list="subjects" required placeholder="e.g. Maths"></label>
           <label class="f">Due<input id="hw-due" type="date" required></label>
         </div>
-        <label class="f">Type<select id="hw-type"><option value="hw">Homework</option><option value="test">Test or exam</option></select></label>
+        <div style="display:grid;gap:4px"><span class="lbl">Type</span>
+          <div class="seg" id="hw-seg"><button type="button" data-t="hw" aria-pressed="true">Homework</button><button type="button" data-t="test" aria-pressed="false">Test or exam</button></div>
+          <input type="hidden" id="hw-type" value="hw">
+        </div>
         <label class="f">What to do<input id="hw-text" type="text" required placeholder="e.g. Page 42, questions 1–10"></label>
-        <button class="go" type="submit">Add homework</button>
+        <button class="go" type="submit">Add</button>
       </form>
       <datalist id="subjects"></datalist>
-    </div>
-    <div class="box">
-      <h2 style="margin-bottom:8px">To do</h2>
-      <div class="list" id="hw-list"></div>
-    </div>
+    </details>
+    <div id="hw-list"></div>
   </section>
 
   <!-- PEOPLE -->
   <section id="v-people" hidden>
-    <div class="box">
-      <h2 style="margin-bottom:10px">Add a person</h2>
+    <details class="box" id="p-add">
+      <summary>Add a person</summary>
       <form id="p-form">
         <div class="two">
           <label class="f">Who are they?<select id="p-role"></select></label>
@@ -193,21 +246,21 @@ textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px 
         <label class="f">Contact or note<input id="p-info" type="text" placeholder="e.g. Teaches Science · room S4"></label>
         <button class="go" type="submit">Add person</button>
       </form>
-    </div>
+    </details>
     <div class="box people" id="p-list"></div>
   </section>
   <!-- GAMES -->
   <section id="v-games" hidden>
     <div class="box" style="display:grid;gap:10px">
       <h2>Games</h2>
-      <div class="label">Choose an age group</div>
-      <div class="gtabs" id="ages"></div>
+      <div class="label">Age group</div>
+      <div class="gtabs" id="ages" style="--cols:4"></div>
       <p class="note" id="age-note"></p>
     </div>
     <div class="gtabs" id="gtabs">
       <button type="button" data-g="sudoku" aria-pressed="true">Sudoku</button>
-      <button type="button" data-g="times" aria-pressed="false">Maths sprint</button>
-      <button type="button" data-g="words" aria-pressed="false">Word scramble</button>
+      <button type="button" data-g="times" aria-pressed="false">Maths</button>
+      <button type="button" data-g="words" aria-pressed="false">Words</button>
     </div>
 
     <div class="box" id="g-sudoku" style="display:grid;gap:12px">
@@ -267,6 +320,16 @@ textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px 
   const parse = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
   const plus = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
   const daysFromToday = (s) => Math.round((parse(s) - parse(iso(new Date()))) / 864e5);
+  // One colour per subject, the same everywhere. Known subjects get a fixed hue, others a hash.
+  const SUBJECT_HUE = { maths: 215, english: 345, science: 150, history: 32, geography: 100, french: 262, german: 280, latin: 240, art: 300, music: 285, pe: 18, games: 18, computing: 195, re: 55, rs: 55, drama: 325, dt: 70, economics: 125, "further maths": 225, "tutor time": 175 };
+  const HUES = [172, 205, 262, 330, 18, 42, 140, 350, 285, 100];
+  const hue = (s) => {
+    const k = String(s || "").trim().toLowerCase();
+    if (k in SUBJECT_HUE) return SUBJECT_HUE[k];
+    let h = 0; for (const c of k) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    return HUES[h % HUES.length];
+  };
+  const sc = (s) => `style="--h:${hue(s)}"`;
 
   function example() {
     const t = new Date();
@@ -333,6 +396,7 @@ textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px 
     }).join("");
     const left = items.filter(([it]) => !S.bag.got.includes(it)).length;
     if (!left && items.length) $("bag-title").textContent += " ✓";
+    return { got: items.length - left, total: items.length };
   }
   $("bag").addEventListener("change", (e) => {
     const it = e.target.dataset.bag; if (it == null) return;
@@ -344,81 +408,106 @@ textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px 
   const subjects = () => [...new Set(Object.values(S.tt).flat().filter(Boolean))].sort();
 
   function renderToday() {
-    const now = new Date();
-    $("hello").textContent = S.name ? `Hi ${S.name}` : "My School Day";
+    const now = new Date(), hr = now.getHours();
+    $("greet").textContent = hr < 12 ? "Good morning," : hr < 17 ? "Good afternoon," : "Good evening,";
     $("ex-banner").hidden = !S.example;
     $("t-date").textContent = now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
-    let d = new Date(now), title = "Today's lessons";
-    if (now.getDay() % 6 === 0 || now.getHours() >= 16) {
+    let d = new Date(now), later = false, title = "Today's lessons";
+    if (now.getDay() % 6 === 0 || hr >= 16) {
       do d = plus(d, 1); while (d.getDay() % 6 === 0);
-      title = `${DAYS[d.getDay() - 1][2]}'s lessons`;
+      title = `${DAYS[d.getDay() - 1][2]}'s lessons`; later = true;
     }
     $("t-title").textContent = title;
     const list = S.tt[DAYS[d.getDay() - 1][0]] || [];
     $("t-lessons").innerHTML = list.some(Boolean)
-      ? list.map((s, i) => `<div><span class="num">${i + 1}</span><span class="txt">${esc(s || "—")}</span><span></span></div>`).join("")
-      : `<p class="note">No lessons added for this day yet. Fill them in under Timetable.</p>`;
-    const test = S.hw.filter((h) => h.type === "test" && !h.done && daysFromToday(h.due) >= 0).sort((a, b) => a.due.localeCompare(b.due))[0];
-    if (test) { const n = daysFromToday(test.due); $("t-test").textContent = `${test.s} in ${n === 0 ? "today" : n === 1 ? "1 day" : n + " days"}`.replace("in today", "is today"); $("t-test-note").textContent = test.t; }
-    else { $("t-test").textContent = "None coming up"; $("t-test-note").textContent = "Add tests under Homework so you know when to revise."; }
+      ? list.map((s, i) => s ? `<div><span class="num sc" ${sc(s)}>${i + 1}</span><span class="txt">${esc(s)}</span></div>` : `<div><span class="num">${i + 1}</span><span class="txt muted">Free</span></div>`).join("")
+      : `<p class="note" style="padding-block:8px">No lessons added for this day yet. Fill them in under Timetable.</p>`;
     if (document.activeElement !== $("notes")) $("notes").value = S.notes || "";
-    renderBag();
+    const bagState = renderBag();
     const soon = S.hw.filter((h) => !h.done && h.type !== "test" && daysFromToday(h.due) <= 2).sort((a, b) => a.due.localeCompare(b.due));
     $("t-hw").innerHTML = soon.length
-      ? soon.map((h) => `<div><span class="num">✓</span><span class="txt"><span class="chip">${esc(h.s)}</span> ${esc(h.t)}</span>${dueText(h.due)}</div>`).join("")
-      : `<p class="note">Nothing due in the next two days.</p>`;
+      ? soon.map((h) => `<div><span class="num sc" ${sc(h.s)}>${esc(h.s.slice(0, 1).toUpperCase())}</span><span class="txt"><b>${esc(h.s)}</b><br><span class="due">${esc(h.t)}</span></span>${dueText(h.due)}</div>`).join("")
+      : `<p class="note" style="padding-block:8px">Nothing due in the next two days.</p>`;
+    const test = S.hw.filter((h) => h.type === "test" && !h.done && daysFromToday(h.due) >= 0).sort((a, b) => a.due.localeCompare(b.due))[0];
+    const nLes = list.filter(Boolean).length, facts = [];
+    facts.push(nLes ? `${nLes} lesson${nLes === 1 ? "" : "s"} ${later ? "on " + DAYS[d.getDay() - 1][2] : "today"}` : "No lessons added");
+    facts.push(soon.length ? `${soon.length} homework due soon` : "No homework due soon");
+    if (test) { const n = daysFromToday(test.due); facts.push(`${test.s} test ${n === 0 ? "today" : n === 1 ? "tomorrow" : "in " + n + " days"}`); }
+    facts.push(`Bag ${bagState.got}/${bagState.total}`);
+    $("facts").innerHTML = facts.map((f) => `<span class="fact">${esc(f)}</span>`).join("");
     if (document.activeElement !== $("name")) $("name").value = S.name || "";
   }
 
   let day = DAYS[Math.min(Math.max(new Date().getDay() - 1, 0), 4)][0];
   function renderTT() {
-    $("days").innerHTML = DAYS.map(([k, short]) => `<button type="button" data-day="${k}" aria-pressed="${k === day}">${short}</button>`).join("");
+    const todayKey = new Date().getDay() % 6 ? DAYS[new Date().getDay() - 1][0] : null;
+    $("days").innerHTML = DAYS.map(([k, short]) => `<button type="button" data-day="${k}" class="${k === todayKey ? "today" : ""}" aria-pressed="${k === day}">${short}</button>`).join("");
     const list = S.tt[day] || [];
     $("tt").innerHTML = Array.from({ length: LESSONS }, (_, i) =>
-      `<div><span class="num">${i + 1}</span><input type="text" id="tt-${i}" data-i="${i}" list="subjects" value="${esc(list[i] || "")}" placeholder="Lesson ${i + 1}" aria-label="Lesson ${i + 1}"></div>`).join("");
+      `<div><span class="num ${list[i] ? "sc" : ""}" ${list[i] ? sc(list[i]) : ""}>${i + 1}</span><input type="text" id="tt-${i}" data-i="${i}" list="subjects" value="${esc(list[i] || "")}" placeholder="Lesson ${i + 1}" aria-label="Lesson ${i + 1}"></div>`).join("");
     $("subjects").innerHTML = subjects().map((s) => `<option value="${esc(s)}">`).join("");
   }
   $("days").addEventListener("click", (e) => { const b = e.target.closest("[data-day]"); if (b) { day = b.dataset.day; renderTT(); } });
   $("tt").addEventListener("input", (e) => {
     const i = +e.target.dataset.i; S.tt[day] ||= [];
-    S.tt[day][i] = e.target.value.trim(); touch(); renderToday();
+    const v = e.target.value.trim(); S.tt[day][i] = v;
+    const num = e.target.previousElementSibling;
+    if (v) { num.classList.add("sc"); num.style.setProperty("--h", hue(v)); } else num.classList.remove("sc");
+    touch(); renderToday();
   });
 
   function renderHW() {
-    const list = [...S.hw].sort((a, b) => a.done - b.done || a.due.localeCompare(b.due));
-    $("hw-list").innerHTML = list.length ? list.map((h) =>
-      `<div class="${h.done ? "done" : ""}"><input type="checkbox" data-id="${h.id}" ${h.done ? "checked" : ""} aria-label="Done"><span class="txt"><span class="chip">${esc(h.s)}</span>${h.type === "test" ? ` <span class="hl">Test</span>` : ""} ${esc(h.t)}<br>${h.done ? `<span class="due">Done</span>` : dueText(h.due)}</span><button type="button" class="x" data-del="${h.id}" aria-label="Delete">✕</button></div>`).join("")
-      : `<p class="note">No homework. Add it here as soon as it's set.</p>`;
+    const byDue = (a, b) => a.due.localeCompare(b.due);
+    const open = S.hw.filter((h) => !h.done), done = S.hw.filter((h) => h.done);
+    const groups = [
+      ["Overdue", open.filter((h) => daysFromToday(h.due) < 0).sort(byDue), "late"],
+      ["This week", open.filter((h) => { const n = daysFromToday(h.due); return n >= 0 && n <= 7; }).sort(byDue), ""],
+      ["Later", open.filter((h) => daysFromToday(h.due) > 7).sort(byDue), ""],
+      ["Done", done.sort(byDue), ""],
+    ].filter((g) => g[1].length);
+    const row = (h) => `<div class="${h.done ? "done" : ""}"><input type="checkbox" data-id="${h.id}" ${h.done ? "checked" : ""} aria-label="Done: ${esc(h.t)}"><span class="txt"><span class="chip" ${sc(h.s)}>${esc(h.s)}</span>${h.type === "test" ? ` <span class="hl">Test</span>` : ""} ${esc(h.t)}${h.done ? "" : `<br>${dueText(h.due)}`}</span><button type="button" class="x" data-del="${h.id}" aria-label="Delete">✕</button></div>`;
+    $("hw-list").innerHTML = groups.length
+      ? `<div class="box">${groups.map(([name, items, cls]) => `<div class="grp"><div class="label ${cls}"><span>${name} · ${items.length}</span>${name === "Done" ? `<button type="button" class="clr" data-clear>Clear finished</button>` : ""}</div><div class="list">${items.map(row).join("")}</div></div>`).join("")}</div>`
+      : `<div class="box empty">All caught up. Add homework above when it's set.</div>`;
   }
   $("hw-due").value = iso(plus(new Date(), 1));
+  $("hw-add").open = !S.hw.length;
+  $("hw-seg").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-t]"); if (!b) return;
+    $("hw-type").value = b.dataset.t;
+    document.querySelectorAll("#hw-seg button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+  });
   $("hw-form").addEventListener("submit", (e) => {
     e.preventDefault();
     S.hw.push({ id: Date.now(), s: $("hw-subj").value.trim(), t: $("hw-text").value.trim(), due: $("hw-due").value, done: false, type: $("hw-type").value });
-    $("hw-text").value = ""; touch(); renderAll(); toast("Homework added");
+    $("hw-text").value = ""; $("hw-add").open = false; touch(); renderAll(); toast($("hw-type").value === "test" ? "Test added" : "Homework added");
   });
   $("hw-list").addEventListener("click", (e) => {
     const c = e.target.closest("input[data-id]"), d = e.target.closest("[data-del]");
     if (c) { S.hw.find((h) => h.id == c.dataset.id).done = c.checked; touch(); renderAll(); if (c.checked) toast("Nice one"); }
     if (d) { S.hw = S.hw.filter((h) => h.id != d.dataset.del); touch(); renderAll(); }
+    if (e.target.closest("[data-clear]")) { S.hw = S.hw.filter((h) => !h.done); touch(); renderAll(); toast("Cleared"); }
   });
 
+  const ROLE_HUE = { parent: 18, tutor: 172, teacher: 215, head: 262, office: 42, friend: 330 };
+  const initials = (n) => n.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
   function renderPeople() {
     $("p-role").innerHTML = ROLES.map(([k, l]) => `<option value="${k}">${l}</option>`).join("");
     $("p-list").innerHTML = ROLES.map(([k, l, why]) => {
       const ps = S.people.filter((p) => p.role === k);
-      return `<div style="padding-block:6px"><h3>${l}</h3><p class="note">${why}</p><div class="list">${ps.length
-        ? ps.map((p) => `<div><span class="num">•</span><span class="txt"><b>${esc(p.name)}</b>${p.info ? `<br><span class="due">${esc(p.info)}</span>` : ""}</span><button type="button" class="x" data-pdel="${p.id}" aria-label="Remove ${esc(p.name)}">✕</button></div>`).join("")
-        : `<p class="note" style="padding:6px 0">No one added yet.</p>`}</div></div>`;
+      return `<div class="rolebox"><h3>${l}</h3><p class="note">${why}</p><div class="list">${ps.length
+        ? ps.map((p) => `<div><span class="num sc" style="--h:${ROLE_HUE[k]}">${esc(initials(p.name))}</span><span class="txt"><b>${esc(p.name)}</b>${p.info ? `<br><span class="due">${esc(p.info)}</span>` : ""}</span><button type="button" class="x" data-pdel="${p.id}" aria-label="Remove ${esc(p.name)}">✕</button></div>`).join("")
+        : `<p class="note" style="padding-block:8px;font-style:italic">No one added yet.</p>`}</div></div>`;
     }).join("");
   }
   $("p-form").addEventListener("submit", (e) => {
     e.preventDefault();
     S.people.push({ id: Date.now(), role: $("p-role").value, name: $("p-name").value.trim(), info: $("p-info").value.trim() });
-    $("p-name").value = ""; $("p-info").value = ""; touch(); renderPeople(); toast("Added");
+    $("p-name").value = ""; $("p-info").value = ""; $("p-add").open = false; touch(); renderPeople(); toast("Added");
   });
   $("p-list").addEventListener("click", (e) => { const b = e.target.closest("[data-pdel]"); if (b) { S.people = S.people.filter((p) => p.id != b.dataset.pdel); touch(); renderPeople(); } });
 
-  $("name").addEventListener("input", (e) => { S.name = e.target.value.trim(); save(); $("hello").textContent = S.name ? `Hi ${S.name}` : "My School Day"; });
+  $("name").addEventListener("input", (e) => { S.name = e.target.value.trim(); save(); });
   $("clear-ex").onclick = () => {
     const name = S.name;
     S = { games: S.games, example: false, name, tt: Object.fromEntries(DAYS.map(([k]) => [k, []])), hw: [], people: [], bagExtra: [], bag: { date: "", got: [] }, notes: "" };
@@ -464,7 +553,7 @@ textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px 
   if (!AGES[G.age]) G.age = "a11";
   const AG = () => AGES[G.age];
   function renderAges() {
-    $("ages").innerHTML = Object.entries(AGES).map(([k, a]) => `<button type="button" data-age="${k}" aria-pressed="${k === G.age}">${a.label}</button>`).join("");
+    $("ages").innerHTML = Object.entries(AGES).map(([k, a]) => `<button type="button" data-age="${k}" aria-pressed="${k === G.age}">${a.label.replace("Ages ", "")}</button>`).join("");
     $("age-note").textContent = AG().note;
     $("tt-rule").textContent = `${AG().math} As many as you can in 60 seconds.`;
     $("tt-best").textContent = (G.best || {})[G.age] || 0;
@@ -587,7 +676,7 @@ textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px 
   function nextWord() {
     const [subj, w] = pick(AG().words);
     let sc; do sc = shuffle([...w]).join(""); while (sc === w);
-    ws = w; $("ws-hint").textContent = subj; $("ws-word").textContent = sc.toUpperCase(); $("ws-a").value = "";
+    ws = w; $("ws-hint").textContent = subj; $("ws-hint").style.setProperty("--h", hue(subj)); $("ws-word").textContent = sc.toUpperCase(); $("ws-a").value = "";
   }
   const showStreak = () => { $("ws-streak").textContent = G.wsStreak || 0; $("ws-best").textContent = G.wsBest || 0; };
   $("ws-form").addEventListener("submit", (e) => {
