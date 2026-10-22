@@ -37,7 +37,7 @@ header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; backg
 header .wrap { padding-block: 12px 0; }
 h1 { font-family: var(--f-display); font-weight: 800; font-size: 1.5rem; margin: 0; line-height: 1.2; }
 nav { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; margin-top: 6px; }
-nav a { flex: 1 0 auto; text-align: center; text-decoration: none; color: var(--muted); font-weight: 600; font-size: 0.92rem; padding: 10px 8px; border-bottom: 3px solid transparent; }
+nav a { flex: 1 0 auto; text-align: center; text-decoration: none; color: var(--muted); font-weight: 600; font-size: 0.86rem; padding: 10px 5px; border-bottom: 3px solid transparent; }
 nav a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
 main { padding-block: 20px 48px; }
 section { display: grid; gap: 20px; }
@@ -80,6 +80,25 @@ textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px 
 .next-test { font-family: var(--f-display); font-weight: 800; font-size: 1.6rem; line-height: 1.1; }
 .toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: 0.9rem; opacity: 0; pointer-events: none; transition: opacity .2s; }
 .toast.show { opacity: 1; }
+/* Games */
+.gtabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.gtabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.sud { display: grid; grid-template-columns: repeat(var(--n, 9), 1fr); width: min(100%, 432px); aspect-ratio: 1; margin: 0 auto; border: 2px solid var(--ink); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.sud button { border: 0; border-radius: 0; padding: 0; font-family: var(--f-display); font-weight: 600; font-size: var(--fs, clamp(1rem, 5vw, 1.45rem)); color: var(--accent); background: var(--surface); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
+.sud button.given { color: var(--ink); font-weight: 800; }
+.sud button.bc { border-right: 2px solid var(--ink); }
+.sud button.br { border-bottom: 2px solid var(--ink); }
+.sud button.peer { background: var(--accent-soft); }
+.sud button.same { background: var(--mark); }
+.sud button.sel { background: var(--accent); color: var(--surface); }
+.sud button.wrong { color: var(--bad); text-decoration: underline wavy; }
+.pad { display: grid; grid-template-columns: repeat(var(--pc, 5), 1fr); gap: 6px; width: min(100%, 432px); margin: 0 auto; }
+.pad button { padding: 10px 0; font-family: var(--f-display); font-size: 1.2rem; justify-content: center; }
+.big { font-family: var(--f-display); font-weight: 800; font-size: clamp(2rem, 9vw, 2.8rem); text-align: center; line-height: 1.1; letter-spacing: 0.04em; overflow-wrap: anywhere; }
+.center { display: grid; gap: 12px; justify-items: center; text-align: center; }
+.center input { max-width: 260px; text-align: center; font-size: 1.2rem; }
+.score { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; font-size: 0.9rem; color: var(--muted); }
+.score b { color: var(--ink); font-family: var(--f-display); font-size: 1.15rem; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
@@ -90,7 +109,8 @@ textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px 
       <a href="#today">Today</a>
       <a href="#timetable">Timetable</a>
       <a href="#homework">Homework</a>
-      <a href="#people">My people</a>
+      <a href="#people">People</a>
+      <a href="#games">Games</a>
     </nav>
   </div>
 </header>
@@ -175,6 +195,54 @@ textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px 
       </form>
     </div>
     <div class="box people" id="p-list"></div>
+  </section>
+  <!-- GAMES -->
+  <section id="v-games" hidden>
+    <div class="box" style="display:grid;gap:10px">
+      <h2>Games</h2>
+      <div class="label">Choose an age group</div>
+      <div class="gtabs" id="ages"></div>
+      <p class="note" id="age-note"></p>
+    </div>
+    <div class="gtabs" id="gtabs">
+      <button type="button" data-g="sudoku" aria-pressed="true">Sudoku</button>
+      <button type="button" data-g="times" aria-pressed="false">Maths sprint</button>
+      <button type="button" data-g="words" aria-pressed="false">Word scramble</button>
+    </div>
+
+    <div class="box" id="g-sudoku" style="display:grid;gap:12px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+        <h2 id="sd-title">Sudoku</h2>
+        <button type="button" id="sd-new">New puzzle</button>
+      </div>
+      <p class="note" id="sd-rule"></p>
+      <div class="sud" id="sud" role="grid" aria-label="Sudoku grid"></div>
+      <div class="pad" id="pad"></div>
+      <div class="score"><span>Mistakes <b id="sd-mist">0</b></span><span>Time <b id="sd-time">0:00</b></span><span>Solved <b id="sd-won">0</b></span></div>
+    </div>
+
+    <div class="box center" id="g-times" hidden>
+      <h2>Maths sprint</h2>
+      <p class="note" id="tt-rule"></p>
+      <div class="big" id="tt-q">Ready?</div>
+      <form id="tt-form" style="display:grid;gap:10px;justify-items:center;width:100%">
+        <input id="tt-a" type="text" inputmode="numeric" autocomplete="off" aria-label="Your answer" disabled>
+        <button type="submit" class="go" id="tt-go">Start</button>
+      </form>
+      <div class="score"><span>Score <b id="tt-score">0</b></span><span>Time <b id="tt-time">60</b></span><span>Best <b id="tt-best">0</b></span></div>
+    </div>
+
+    <div class="box center" id="g-words" hidden>
+      <h2>Word scramble</h2>
+      <p class="note">Unscramble the word. The subject is your clue.</p>
+      <span class="chip" id="ws-hint"></span>
+      <div class="big" id="ws-word"></div>
+      <form id="ws-form" style="display:grid;gap:10px;justify-items:center;width:100%">
+        <input id="ws-a" type="text" autocomplete="off" autocapitalize="none" aria-label="Your answer">
+        <div style="display:flex;gap:8px"><button type="submit" class="go">Check</button><button type="button" id="ws-skip">Skip</button></div>
+      </form>
+      <div class="score"><span>Streak <b id="ws-streak">0</b></span><span>Best <b id="ws-best">0</b></span></div>
+    </div>
   </section>
 </main>
 <div class="toast" id="toast" role="status"></div>
@@ -353,11 +421,189 @@ textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px 
   $("name").addEventListener("input", (e) => { S.name = e.target.value.trim(); save(); $("hello").textContent = S.name ? `Hi ${S.name}` : "My School Day"; });
   $("clear-ex").onclick = () => {
     const name = S.name;
-    S = { example: false, name, tt: Object.fromEntries(DAYS.map(([k]) => [k, []])), hw: [], people: [], bagExtra: [], bag: { date: "", got: [] }, notes: "" };
+    S = { games: S.games, example: false, name, tt: Object.fromEntries(DAYS.map(([k]) => [k, []])), hw: [], people: [], bagExtra: [], bag: { date: "", got: [] }, notes: "" };
     save(); renderAll(); toast("All clear. Add your own.");
   };
 
-  const VIEWS = ["today", "timetable", "homework", "people"];
+  // ---------- GAMES ----------
+  S.games ||= {};
+  const G = S.games;
+  const rnd = (n) => Math.floor(Math.random() * n);
+  const pick = (a) => a[rnd(a.length)];
+  const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+  // Each age group sets the Sudoku size, the maths questions and the word list.
+  const AGES = {
+    a5: { label: "Ages 5–7", note: "Little ones: a 4×4 Sudoku, adding and taking away to 20, and short words.",
+      sd: { n: 4, bh: 2, bw: 2, keep: 8 },
+      math: "Add and take away numbers up to 20.",
+      q() { if (rnd(2)) { const a = rnd(11), b = rnd(11); return [`${a} + ${b}`, a + b]; } const a = 5 + rnd(16), b = rnd(a + 1); return [`${a} − ${b}`, a - b]; },
+      words: [["English", "book"], ["English", "read"], ["Maths", "add"], ["Maths", "five"], ["Maths", "ten"], ["Science", "sun"], ["Science", "tree"], ["Science", "fish"], ["Art", "paint"], ["Art", "pen"], ["Music", "song"], ["Music", "drum"], ["PE", "ball"], ["PE", "jump"], ["Geography", "map"], ["Geography", "rain"]] },
+    a7: { label: "Ages 7–11", note: "Primary: a 6×6 Sudoku, times tables up to 12×12, and everyday school words.",
+      sd: { n: 6, bh: 2, bw: 3, keep: 18 },
+      math: "Times tables from 2× to 12×.",
+      q() { const a = 2 + rnd(11), b = 2 + rnd(11); return [`${a} × ${b}`, a * b]; },
+      words: [["Maths", "fraction"], ["Maths", "triangle"], ["Maths", "number"], ["Maths", "divide"], ["Science", "planet"], ["Science", "magnet"], ["Science", "plant"], ["English", "story"], ["English", "spelling"], ["English", "noun"], ["Geography", "river"], ["Geography", "country"], ["History", "castle"], ["History", "king"], ["Music", "rhythm"], ["Computing", "mouse"]] },
+    a11: { label: "Ages 11–14", note: "Secondary: an easy 9×9 Sudoku, times and division facts, and KS3 words.",
+      sd: { n: 9, bh: 3, bw: 3, keep: 38 },
+      math: "Multiply and divide with numbers up to 12.",
+      q() { const a = 2 + rnd(11), b = 2 + rnd(11); return rnd(2) ? [`${a} × ${b}`, a * b] : [`${a * b} ÷ ${a}`, b]; },
+      words: [["Maths", "equation"], ["Maths", "decimal"], ["Maths", "perimeter"], ["Science", "molecule"], ["Science", "gravity"], ["Science", "oxygen"], ["Science", "habitat"], ["English", "adjective"], ["English", "paragraph"], ["English", "metaphor"], ["Geography", "volcano"], ["Geography", "continent"], ["Geography", "climate"], ["History", "empire"], ["Computing", "algorithm"], ["French", "bonjour"]] },
+    a14: { label: "Ages 14–16", note: "GCSE: a harder 9×9 Sudoku, mixed mental maths, and longer GCSE words.",
+      sd: { n: 9, bh: 3, bw: 3, keep: 28 },
+      math: "Mixed: squares, percentages, negative numbers and division.",
+      q() {
+        const t = rnd(4);
+        if (t === 0) { const a = 2 + rnd(14); return [`${a}²`, a * a]; }
+        if (t === 1) { const p = pick([10, 20, 25, 50, 75]), n = pick([20, 40, 60, 80, 120, 200, 360]); return [`${p}% of ${n}`, (p * n) / 100]; }
+        if (t === 2) { const a = rnd(13) - 6, b = rnd(13) - 6; return [`${a} × (${b})`, a * b]; }
+        const a = 3 + rnd(10), b = 3 + rnd(10); return [`${a * b} ÷ ${b}`, a];
+      },
+      words: [["Science", "photosynthesis"], ["Science", "electron"], ["Science", "catalyst"], ["Maths", "quadratic"], ["Maths", "hypotenuse"], ["Maths", "probability"], ["English", "alliteration"], ["English", "protagonist"], ["History", "parliament"], ["History", "revolution"], ["Geography", "population"], ["Geography", "erosion"], ["Computing", "variable"], ["Economics", "inflation"], ["Biology", "chromosome"], ["Chemistry", "reaction"]] },
+  };
+  if (!AGES[G.age]) G.age = "a11";
+  const AG = () => AGES[G.age];
+  function renderAges() {
+    $("ages").innerHTML = Object.entries(AGES).map(([k, a]) => `<button type="button" data-age="${k}" aria-pressed="${k === G.age}">${a.label}</button>`).join("");
+    $("age-note").textContent = AG().note;
+    $("tt-rule").textContent = `${AG().math} As many as you can in 60 seconds.`;
+    $("tt-best").textContent = (G.best || {})[G.age] || 0;
+  }
+  $("ages").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-age]"); if (!b || b.dataset.age === G.age) return;
+    G.age = b.dataset.age; if (tTick) endTT(true);
+    $("tt-q").textContent = "Ready?";
+    renderAges(); newSudoku(); nextWord(); toast(AG().label);
+  });
+  $("gtabs").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-g]"); if (!b) return;
+    document.querySelectorAll("#gtabs button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+    ["sudoku", "times", "words"].forEach((g) => ($("g-" + g).hidden = g !== b.dataset.g));
+  });
+
+  // Sudoku of size n with boxes bh rows × bw columns; grids are arrays, 0 = empty.
+  function okCell(g, cfg, i, v) {
+    const { n, bh, bw } = cfg, r = Math.floor(i / n), c = i % n, br = r - r % bh, bc = c - c % bw;
+    for (let k = 0; k < n; k++) {
+      if (g[r * n + k] === v || g[k * n + c] === v) return false;
+      if (g[(br + Math.floor(k / bw)) * n + bc + k % bw] === v) return false;
+    }
+    return true;
+  }
+  function fill(g, cfg) {
+    const i = g.indexOf(0); if (i < 0) return true;
+    for (const v of shuffle([...Array(cfg.n)].map((_, k) => k + 1))) { if (okCell(g, cfg, i, v)) { g[i] = v; if (fill(g, cfg)) return true; g[i] = 0; } }
+    return false;
+  }
+  function countSolutions(g, cfg, limit = 2) {
+    const i = g.indexOf(0); if (i < 0) return 1;
+    let found = 0;
+    for (let v = 1; v <= cfg.n && found < limit; v++) if (okCell(g, cfg, i, v)) { g[i] = v; found += countSolutions(g, cfg, limit - found); g[i] = 0; }
+    return found;
+  }
+  function makePuzzle(cfg) {
+    const N = cfg.n * cfg.n, sol = Array(N).fill(0); fill(sol, cfg);
+    const puz = [...sol]; let filled = N;
+    for (const i of shuffle([...Array(N).keys()])) {
+      if (filled <= cfg.keep) break;
+      const v = puz[i]; puz[i] = 0;
+      if (countSolutions([...puz], cfg) !== 1) puz[i] = v; else filled--;
+    }
+    return { age: G.age, cfg, sol, puz, cur: [...puz], mist: 0, secs: 0, done: false };
+  }
+  let sel = -1;
+  function newSudoku() { G.sd = makePuzzle(AG().sd); sel = -1; save(); renderSudoku(); }
+  const fmtT = (t) => `${Math.floor(t / 60)}:${pad(t % 60)}`;
+  function renderSudoku() {
+    const sd = G.sd, { n, bh, bw } = sd.cfg, sv = sel >= 0 ? sd.cur[sel] : 0;
+    $("sd-title").textContent = `Sudoku ${n}×${n}`;
+    $("sd-rule").textContent = `Fill every row, column and box with 1 to ${n}. Wrong numbers show in red.`;
+    $("sud").style.setProperty("--n", n);
+    $("sud").style.setProperty("--fs", n === 9 ? "clamp(1rem, 5vw, 1.45rem)" : n === 6 ? "clamp(1.3rem, 7vw, 2rem)" : "clamp(1.8rem, 10vw, 2.8rem)");
+    const box = (i) => Math.floor(Math.floor(i / n) / bh) * 100 + Math.floor((i % n) / bw);
+    $("sud").innerHTML = sd.cur.map((v, i) => {
+      const r = Math.floor(i / n), c = i % n, given = sd.puz[i] !== 0;
+      const cls = [given && "given", c % bw === bw - 1 && c < n - 1 && "bc", r % bh === bh - 1 && r < n - 1 && "br",
+        i === sel && "sel",
+        sel >= 0 && i !== sel && v && v === sv && "same",
+        sel >= 0 && i !== sel && (Math.floor(sel / n) === r || sel % n === c || box(sel) === box(i)) && "peer",
+        v && !given && v !== sd.sol[i] && "wrong"].filter(Boolean).join(" ");
+      return `<button type="button" class="${cls}" data-i="${i}" aria-label="Row ${r + 1} column ${c + 1}: ${v || "empty"}">${v || ""}</button>`;
+    }).join("");
+    $("pad").style.setProperty("--pc", n === 9 ? 5 : n + 1);
+    $("pad").innerHTML = [...Array(n)].map((_, k) => `<button type="button" data-n="${k + 1}">${k + 1}</button>`).join("") + `<button type="button" data-n="0" aria-label="Erase">⌫</button>`;
+    $("sd-mist").textContent = sd.mist;
+    $("sd-time").textContent = fmtT(sd.secs);
+    $("sd-won").textContent = G.sdWon || 0;
+  }
+  function placeNum(v) {
+    const sd = G.sd; if (sel < 0 || sd.done || sd.puz[sel] !== 0) return;
+    if (v && v !== sd.sol[sel] && sd.cur[sel] !== v) sd.mist++;
+    sd.cur[sel] = v;
+    if (sd.cur.every((x, i) => x === sd.sol[i])) { sd.done = true; G.sdWon = (G.sdWon || 0) + 1; toast(`Solved in ${fmtT(sd.secs)}!`); }
+    save(); renderSudoku();
+  }
+  $("pad").addEventListener("click", (e) => { const b = e.target.closest("[data-n]"); if (b) placeNum(+b.dataset.n); });
+  $("sud").addEventListener("click", (e) => { const b = e.target.closest("[data-i]"); if (b) { sel = +b.dataset.i; renderSudoku(); $("sud").querySelector(`[data-i="${sel}"]`).focus(); } });
+  $("sud").addEventListener("keydown", (e) => {
+    if (sel < 0) return;
+    const n = G.sd.cfg.n, N = n * n, mv = { ArrowUp: -n, ArrowDown: n, ArrowLeft: -1, ArrowRight: 1 }[e.key];
+    if (mv) { e.preventDefault(); sel = (sel + mv + N) % N; renderSudoku(); $("sud").querySelector(`[data-i="${sel}"]`).focus(); }
+    else if (/^[1-9]$/.test(e.key) && +e.key <= n) placeNum(+e.key);
+    else if (e.key === "Backspace" || e.key === "Delete" || e.key === "0") placeNum(0);
+  });
+  $("sd-new").onclick = newSudoku;
+  setInterval(() => {
+    if ($("v-games").hidden || $("g-sudoku").hidden || !G.sd || G.sd.done) return;
+    G.sd.secs++; $("sd-time").textContent = fmtT(G.sd.secs);
+    if (G.sd.secs % 10 === 0) save();
+  }, 1000);
+
+  // Maths sprint
+  let tq = null, tScore = 0, tLeft = 0, tTick = null;
+  function nextQ() { const [q, ans] = AG().q(); tq = ans; $("tt-q").textContent = q; $("tt-a").value = ""; $("tt-a").focus(); }
+  function endTT(silent) {
+    clearInterval(tTick); tTick = null; $("tt-a").disabled = true; $("tt-go").textContent = "Play again";
+    if (silent) return;
+    G.best ||= {};
+    const best = tScore > (G.best[G.age] || 0); if (best) { G.best[G.age] = tScore; save(); }
+    $("tt-q").textContent = best ? `New best: ${tScore}!` : `You got ${tScore}`; $("tt-best").textContent = G.best[G.age] || 0;
+  }
+  $("tt-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (!tTick) {
+      tScore = 0; tLeft = 60; $("tt-score").textContent = 0; $("tt-time").textContent = 60;
+      $("tt-a").disabled = false; $("tt-go").textContent = "Answer"; nextQ();
+      tTick = setInterval(() => { tLeft--; $("tt-time").textContent = tLeft; if (tLeft <= 0) endTT(); }, 1000);
+      return;
+    }
+    const v = $("tt-a").value.trim().replace("−", "-"); if (v === "") return;
+    if (Number(v) === tq) { tScore++; $("tt-score").textContent = tScore; } else toast(`Not quite: it's ${tq}`);
+    nextQ();
+  });
+
+  // Word scramble
+  let ws = null;
+  function nextWord() {
+    const [subj, w] = pick(AG().words);
+    let sc; do sc = shuffle([...w]).join(""); while (sc === w);
+    ws = w; $("ws-hint").textContent = subj; $("ws-word").textContent = sc.toUpperCase(); $("ws-a").value = "";
+  }
+  const showStreak = () => { $("ws-streak").textContent = G.wsStreak || 0; $("ws-best").textContent = G.wsBest || 0; };
+  $("ws-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    if ($("ws-a").value.trim().toLowerCase() === ws) {
+      G.wsStreak = (G.wsStreak || 0) + 1; if (G.wsStreak > (G.wsBest || 0)) G.wsBest = G.wsStreak;
+      toast("Correct!"); save(); nextWord();
+    } else { G.wsStreak = 0; save(); toast("Try again"); }
+    showStreak();
+  });
+  $("ws-skip").onclick = () => { toast(`It was ${ws.toUpperCase()}`); G.wsStreak = 0; save(); showStreak(); nextWord(); };
+
+  if (!G.sd || !Array.isArray(G.sd.cur) || G.sd.age !== G.age) G.sd = makePuzzle(AG().sd);
+  renderAges(); renderSudoku(); nextWord(); showStreak();
+
+  const VIEWS = ["today", "timetable", "homework", "people", "games"];
   function show(v) {
     if (!VIEWS.includes(v)) v = "today";
     VIEWS.forEach((x) => ($("v-" + x).hidden = x !== v));
