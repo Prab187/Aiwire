@@ -67,7 +67,7 @@ class CrgsPlannerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
     return MaterialApp(
-      title: 'Kampus',
+      title: 'CRGS Kampus',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(Brightness.light),
       darkTheme: buildTheme(Brightness.dark),
@@ -121,7 +121,7 @@ class _HomeShellState extends State<HomeShell> {
                 child: Row(
                   children: [
                     const Expanded(
-                      child: Text('Kampus', style: TextStyle(fontFamily: serif, fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white)),
+                      child: Text('CRGS Kampus', style: TextStyle(fontFamily: serif, fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white)),
                     ),
                     IconButton(
                       tooltip: 'Contacts',

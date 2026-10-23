@@ -1,8 +1,8 @@
-# Builds Kampus on a Mac runner, signs it with Apple's cloud signing and
-# uploads it to TestFlight. Run it by hand: Actions > "Kampus to TestFlight" > Run workflow.
+# Builds CRGS Kampus on a Mac runner, signs it with Apple's cloud signing and
+# uploads it to TestFlight. Run it by hand: Actions > "CRGS Kampus to TestFlight" > Run workflow.
 # Needs four repository secrets (see crgs_planner/README.md):
 #   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8_BASE64, APPLE_TEAM_ID
-name: Kampus to TestFlight
+name: CRGS Kampus to TestFlight
 
 on:
   workflow_dispatch:
