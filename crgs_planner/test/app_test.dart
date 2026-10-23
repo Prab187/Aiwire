@@ -31,7 +31,7 @@ Future<void> _tab(WidgetTester tester, String label) async {
 void main() {
   testWidgets('opens on Today with the header, greeting and sample data', (tester) async {
     await _pump(tester);
-    expect(find.text('CRGS Student Planner'), findsOneWidget);
+    expect(find.text('CRGS Connect'), findsOneWidget);
     expect(find.textContaining('Good '), findsOneWidget);
     expect(find.text("What's your name?"), findsOneWidget);
     expect(find.textContaining('Sample data'), findsOneWidget);
@@ -157,7 +157,7 @@ void main() {
     await tester.tap(find.byKey(const Key('radio-play')));
     await tester.pump();
     await tester.pump();
-    expect(lastSpeaker.spoken.first, contains("You're tuned in to CRGS Student Planner Radio"));
+    expect(lastSpeaker.spoken.first, contains("You're tuned in to CRGS Connect Radio"));
     expect(lastSpeaker.spoken.length, 5);
     await tester.scrollUntilVisible(find.textContaining('Unofficial: not made or endorsed'), 400, scrollable: find.byType(Scrollable).first);
     await tester.pumpWidget(const SizedBox());

@@ -1,6 +1,6 @@
 import 'news_item.dart';
 
-const stationName = 'CRGS Student Planner Radio';
+const stationName = 'CRGS Connect Radio';
 
 String _join(List<String> items) {
   if (items.length <= 1) return items.join();

@@ -1,8 +1,8 @@
-# Builds CRGS Student Planner on a Mac runner, signs it with Apple's cloud signing and
-# uploads it to TestFlight. Run it by hand: Actions > "CRGS Student Planner to TestFlight" > Run workflow.
+# Builds CRGS Connect on a Mac runner, signs it with Apple's cloud signing and
+# uploads it to TestFlight. Run it by hand: Actions > "CRGS Connect to TestFlight" > Run workflow.
 # Needs four repository secrets (see crgs_planner/README.md):
 #   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8_BASE64, APPLE_TEAM_ID
-name: CRGS Student Planner to TestFlight
+name: CRGS Connect to TestFlight
 
 on:
   workflow_dispatch:

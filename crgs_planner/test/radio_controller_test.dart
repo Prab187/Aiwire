@@ -19,7 +19,7 @@ void main() {
     await r.play();
     expect(repo.fetches, 1);
     expect(speaker.spoken.length, 5); // intro + 3 stories + outro
-    expect(speaker.spoken.first, contains("You're tuned in to CRGS Student Planner Radio. 3 stories"));
+    expect(speaker.spoken.first, contains("You're tuned in to CRGS Connect Radio. 3 stories"));
     expect(speaker.spoken[1], startsWith('Story 1 of 3.'));
     expect(speaker.spoken[1], contains("St Mary's Academy, and Khanmigo."));
     expect(speaker.spoken[3], contains('Oakfield High School, and Copilot.'));
