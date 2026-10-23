@@ -6,7 +6,7 @@ Work top to bottom. Items marked **you** need your own details.
 | Field | Value |
 |---|---|
 | Platforms | iOS only |
-| Name | `CRGS Kampus` |
+| Name | `Kampus` |
 | Primary Language | English (U.K.) |
 | Bundle ID | `com.prabha.crgsstudentplanner` (register it first under Certificates, Identifiers & Profiles > Identifiers > App IDs > App > Explicit) |
 | SKU | `crgsplanner` |
@@ -29,7 +29,7 @@ New: AI Radio reads you the latest news about schools adopting AI, and shows whi
 
 **Description:**
 ```
-CRGS Kampus keeps your school day in one place.
+Kampus keeps your school day in one place.
 
 TODAY
 See today's lessons (or tomorrow's after school), what homework is due, your next test and a quick bag check, all on one screen.
