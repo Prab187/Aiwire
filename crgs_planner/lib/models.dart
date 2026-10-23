@@ -84,6 +84,9 @@ class AppData {
     List<String>? bagGot,
     this.notes = '',
     GamesState? games,
+    this.radioSchool = 'Colchester Royal Grammar School',
+    this.radioScope = 'uk',
+    this.radioRate = 1.0,
   })  : timetable = timetable ?? {for (var i = 0; i < 5; i++) i: List.filled(lessonsPerDay, '')},
         homework = homework ?? [],
         people = people ?? [],
@@ -101,6 +104,15 @@ class AppData {
   List<String> bagGot;
   String notes;
   final GamesState games;
+
+  /// The school the radio listens out for.
+  String radioSchool;
+
+  /// 'uk' or 'world'.
+  String radioScope;
+
+  /// Speaking speed multiplier: 0.8, 1.0 or 1.2.
+  double radioRate;
 
   /// Sample content so the app is not empty the first time it opens.
   factory AppData.example(DateTime now) {
@@ -143,6 +155,9 @@ class AppData {
         'bagGot': bagGot,
         'notes': notes,
         'games': games.toJson(),
+        'radioSchool': radioSchool,
+        'radioScope': radioScope,
+        'radioRate': radioRate,
       };
 
   factory AppData.fromJson(Map<String, dynamic> j) {
@@ -166,6 +181,9 @@ class AppData {
       bagGot: ((j['bagGot'] as List?) ?? const []).map((e) => '$e').toList(),
       notes: j['notes'] as String? ?? '',
       games: GamesState.fromJson(Map<String, dynamic>.from((j['games'] as Map?) ?? {})),
+      radioSchool: j['radioSchool'] as String? ?? 'Colchester Royal Grammar School',
+      radioScope: j['radioScope'] as String? ?? 'uk',
+      radioRate: (j['radioRate'] as num?)?.toDouble() ?? 1.0,
     );
   }
 }

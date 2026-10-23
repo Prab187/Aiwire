@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:crgs_planner/main.dart';
 import 'package:crgs_planner/models.dart';
+import 'package:crgs_planner/radio/radio_controller.dart';
 import 'package:crgs_planner/store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'fakes.dart';
+
+FakeSpeaker lastSpeaker = FakeSpeaker();
 
 Future<AppStore> _pump(WidgetTester tester, {Map<String, Object> prefs = const {}}) async {
   SharedPreferences.setMockInitialValues(prefs);
@@ -11,7 +16,9 @@ Future<AppStore> _pump(WidgetTester tester, {Map<String, Object> prefs = const {
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
   final store = await AppStore.load();
-  await tester.pumpWidget(CrgsPlannerApp(store: store));
+  lastSpeaker = FakeSpeaker();
+  final radio = RadioController(repo: FakeRepo(sampleStories()), speaker: lastSpeaker, store: store);
+  await tester.pumpWidget(CrgsPlannerApp(store: store, radio: radio));
   await tester.pump();
   return store;
 }
@@ -101,7 +108,8 @@ void main() {
 
   testWidgets('add and remove a person', (tester) async {
     final store = await _pump(tester);
-    await _tab(tester, 'Contacts');
+    await tester.tap(find.byTooltip('Contacts')); // opened from the header
+    await tester.pumpAndSettle();
     expect(find.text('Mrs Patel'), findsOneWidget);
     await tester.tap(find.text('Add a contact'));
     await tester.pumpAndSettle();
@@ -131,6 +139,27 @@ void main() {
     await tester.tap(find.text('Start'));
     await tester.pump();
     expect(find.textContaining(RegExp(r'^\d+ [+−] \d+$')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('radio: stories, school and AI board, play reads them out', (tester) async {
+    await _pump(tester);
+    await _tab(tester, 'Radio');
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Which school got which AI'), findsOneWidget);
+    expect(find.text('Who got which AI'), findsOneWidget);
+    // St Mary's Academy -> Khanmigo shows on the board (and in the playlist chips)
+    expect(find.text("St Mary's Academy"), findsWidgets);
+    expect(find.text('Khanmigo'), findsWidgets);
+    expect(find.text("St Mary's Academy rolls out Khanmigo AI tutor to Year 9"), findsWidgets);
+    expect(find.text('Read the story'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('radio-play')));
+    await tester.pump();
+    await tester.pump();
+    expect(lastSpeaker.spoken.first, contains("You're tuned in to CRGS Student Planner Radio"));
+    expect(lastSpeaker.spoken.length, 5);
+    await tester.scrollUntilVisible(find.textContaining('Unofficial: not made or endorsed'), 400, scrollable: find.byType(Scrollable).first);
     await tester.pumpWidget(const SizedBox());
   });
 

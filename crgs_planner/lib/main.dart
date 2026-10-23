@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'palette.dart';
 import 'screens/games_screen.dart';
 import 'screens/homework_screen.dart';
+import 'radio/news_sources.dart';
+import 'radio/radio_controller.dart';
+import 'radio/speaker.dart';
 import 'screens/people_screen.dart';
+import 'screens/radio_screen.dart';
 import 'screens/timetable_screen.dart';
 import 'screens/today_screen.dart';
 import 'store.dart';
@@ -12,7 +17,9 @@ import 'store.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final store = await AppStore.load();
-  runApp(CrgsPlannerApp(store: store));
+  final prefs = await SharedPreferences.getInstance();
+  final radio = RadioController(repo: LiveNewsRepository(), speaker: TtsSpeaker(), store: store, prefs: prefs);
+  runApp(CrgsPlannerApp(store: store, radio: radio));
 }
 
 ThemeData buildTheme(Brightness b) {
@@ -52,8 +59,9 @@ ThemeData buildTheme(Brightness b) {
 }
 
 class CrgsPlannerApp extends StatelessWidget {
-  const CrgsPlannerApp({super.key, required this.store});
+  const CrgsPlannerApp({super.key, required this.store, required this.radio});
   final AppStore store;
+  final RadioController radio;
 
   @override
   Widget build(BuildContext context) {
@@ -63,14 +71,15 @@ class CrgsPlannerApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: buildTheme(Brightness.light),
       darkTheme: buildTheme(Brightness.dark),
-      home: HomeShell(store: store),
+      home: HomeShell(store: store, radio: radio),
     );
   }
 }
 
 class HomeShell extends StatefulWidget {
-  const HomeShell({super.key, required this.store});
+  const HomeShell({super.key, required this.store, required this.radio});
   final AppStore store;
+  final RadioController radio;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -89,7 +98,7 @@ class _HomeShellState extends State<HomeShell> {
       case 2:
         return HomeworkScreen(store: widget.store);
       case 3:
-        return PeopleScreen(store: widget.store);
+        return RadioScreen(radio: widget.radio);
       default:
         return GamesScreen(store: widget.store);
     }
@@ -108,8 +117,29 @@ class _HomeShellState extends State<HomeShell> {
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
-                child: Text('CRGS Student Planner', style: TextStyle(fontFamily: serif, fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white)),
+                padding: const EdgeInsets.fromLTRB(20, 4, 8, 6),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text('CRGS Student Planner', style: TextStyle(fontFamily: serif, fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white)),
+                    ),
+                    IconButton(
+                      tooltip: 'Contacts',
+                      color: Colors.white,
+                      icon: const Icon(Icons.people_outline),
+                      onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) => Scaffold(
+                          appBar: AppBar(
+                            title: const Text('Contacts', style: TextStyle(fontFamily: serif, fontWeight: FontWeight.w700, color: Colors.white)),
+                            backgroundColor: dark ? Brand.barDark : Brand.purple,
+                            iconTheme: const IconThemeData(color: Colors.white),
+                          ),
+                          body: PeopleScreen(store: widget.store),
+                        ),
+                      )),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -133,7 +163,7 @@ class _HomeShellState extends State<HomeShell> {
           NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Today'),
           NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'Timetable'),
           NavigationDestination(icon: Icon(Icons.assignment_turned_in_outlined), selectedIcon: Icon(Icons.assignment_turned_in), label: 'Homework'),
-          NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: 'Contacts'),
+          NavigationDestination(icon: Icon(Icons.radio_outlined), selectedIcon: Icon(Icons.radio), label: 'Radio'),
           NavigationDestination(icon: Icon(Icons.sports_esports_outlined), selectedIcon: Icon(Icons.sports_esports), label: 'Games'),
         ],
       ),
