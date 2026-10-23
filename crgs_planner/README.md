@@ -16,7 +16,7 @@ stripe, gold, white, serif headings). The school's crest is **not** used. See
 |---|---|
 | `lib/` | The app code (screens, radio, games, saving) |
 | `test/` | 53 automated tests (Sudoku has exactly one answer, maths answers are right, saving, every screen, and the radio: story detection, feed reading, playback) |
-| `ios/` | The iPhone project. Bundle ID `com.prabha.crgsplanner`, iPhone only, portrait |
+| `ios/` | The iPhone project. Bundle ID `com.prabha.crgsstudentplanner`, iPhone only, portrait |
 | `ios/ExportOptions.plist` | Used by the TestFlight upload |
 | `../.github/workflows/crgs-planner-testflight.yml` | Builds on a Mac in GitHub and uploads to TestFlight |
 | `../docs/crgs-planner/privacy.html` | Privacy policy page (needed for the App Store listing) |
@@ -71,7 +71,7 @@ You need a paid Apple Developer account. No Mac is needed: GitHub builds it.
 
 1. **Create the app record.** App Store Connect > Apps > **+** > New App.
    Platform iOS, name CRGS Student Planner, language English, bundle ID
-   `com.prabha.crgsplanner` (register it first under Certificates, Identifiers &
+   `com.prabha.crgsstudentplanner` (register it first under Certificates, Identifiers &
    Profiles > Identifiers if it is not in the list), SKU `crgsplanner`.
 2. **Make an API key.** App Store Connect > Users and Access > Integrations >
    App Store Connect API > Team Keys > **+**. Name it, give it the **App Manager**
@@ -133,7 +133,7 @@ and your paid Apple Developer account signed in under Xcode > Settings > Account
 3. **Open it:** `open ios/Runner.xcworkspace` (the `.xcworkspace`, not `.xcodeproj`).
 4. **Signing:** click **Runner** (blue icon, top of the left list), then the **Runner**
    target, then **Signing & Capabilities**. Tick **Automatically manage signing** and
-   choose your **Team**. Leave the bundle identifier as `com.prabha.crgsplanner`.
+   choose your **Team**. Leave the bundle identifier as `com.prabha.crgsstudentplanner`.
    Xcode registers it on your developer account for you.
 5. **Create the app record** in App Store Connect now (see `APP_STORE_LISTING.md`
    section 1). The bundle ID will be in the dropdown.

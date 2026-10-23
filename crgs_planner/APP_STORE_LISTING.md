@@ -8,7 +8,7 @@ Work top to bottom. Items marked **you** need your own details.
 | Platforms | iOS only |
 | Name | `CRGS Student Planner` |
 | Primary Language | English (U.K.) |
-| Bundle ID | `com.prabha.crgsplanner` (register it first under Certificates, Identifiers & Profiles > Identifiers > App IDs > App > Explicit) |
+| Bundle ID | `com.prabha.crgsstudentplanner` (register it first under Certificates, Identifiers & Profiles > Identifiers > App IDs > App > Explicit) |
 | SKU | `crgsplanner` |
 | User Access | Full Access |
 
