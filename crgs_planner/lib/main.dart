@@ -12,7 +12,7 @@ import 'store.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final store = await AppStore.load();
-  runApp(MyDayAtSchoolApp(store: store));
+  runApp(CrgsPlannerApp(store: store));
 }
 
 ThemeData buildTheme(Brightness b) {
@@ -51,15 +51,15 @@ ThemeData buildTheme(Brightness b) {
   );
 }
 
-class MyDayAtSchoolApp extends StatelessWidget {
-  const MyDayAtSchoolApp({super.key, required this.store});
+class CrgsPlannerApp extends StatelessWidget {
+  const CrgsPlannerApp({super.key, required this.store});
   final AppStore store;
 
   @override
   Widget build(BuildContext context) {
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
     return MaterialApp(
-      title: 'MyDayAtSchool',
+      title: 'CRGS Student Planner',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(Brightness.light),
       darkTheme: buildTheme(Brightness.dark),
@@ -109,7 +109,7 @@ class _HomeShellState extends State<HomeShell> {
               bottom: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
-                child: Text('MyDayAtSchool', style: TextStyle(fontFamily: serif, fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white)),
+                child: Text('CRGS Student Planner', style: TextStyle(fontFamily: serif, fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white)),
               ),
             ),
           ),
@@ -133,7 +133,7 @@ class _HomeShellState extends State<HomeShell> {
           NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Today'),
           NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'Timetable'),
           NavigationDestination(icon: Icon(Icons.assignment_turned_in_outlined), selectedIcon: Icon(Icons.assignment_turned_in), label: 'Homework'),
-          NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: 'People'),
+          NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: 'Contacts'),
           NavigationDestination(icon: Icon(Icons.sports_esports_outlined), selectedIcon: Icon(Icons.sports_esports), label: 'Games'),
         ],
       ),

@@ -37,7 +37,7 @@ class HomeworkScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             if (groups.isEmpty)
-              const Panel(child: Center(child: Padding(padding: EdgeInsets.all(12), child: Note("All caught up. Add homework above when it's set."))))
+              const Panel(child: Center(child: Padding(padding: EdgeInsets.all(12), child: Note("You're all caught up. New homework goes here."))))
             else
               Panel(
                 child: Column(
@@ -62,7 +62,7 @@ class HomeworkScreen extends StatelessWidget {
                             if (name == 'Done')
                               TextButton(
                                 onPressed: () => store.update((d) => d.homework.removeWhere((h) => h.done)),
-                                child: const Text('Clear finished'),
+                                child: const Text('Clear done'),
                               ),
                           ],
                         ),
@@ -165,7 +165,7 @@ class _AddHomeworkSheetState extends State<_AddHomeworkSheet> {
   void _save() {
     final s = _subject.text.trim(), t = _text.text.trim();
     if (s.isEmpty || t.isEmpty) {
-      setState(() => _error = 'Add a subject and what to do.');
+      setState(() => _error = 'Add a subject and some details.');
       return;
     }
     widget.store.update((d) => d.homework.add(Homework(id: DateTime.now().microsecondsSinceEpoch, subject: s, text: t, due: _due, isTest: _isTest)));
@@ -199,7 +199,7 @@ class _AddHomeworkSheetState extends State<_AddHomeworkSheet> {
             TextField(
               controller: _text,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'What to do', hintText: 'e.g. Page 42, questions 1–10', border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))),
+              decoration: const InputDecoration(labelText: 'Details', hintText: 'e.g. Page 42, Q1–10', border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(

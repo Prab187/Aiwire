@@ -58,7 +58,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                               initialValue: lessons[i],
                               textCapitalization: TextCapitalization.words,
                               decoration: InputDecoration(
-                                hintText: 'Lesson ${i + 1}',
+                                hintText: 'Period ${i + 1}',
                                 isDense: true,
                                 border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
                               ),
@@ -69,7 +69,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                       ),
                     ),
                   const SizedBox(height: 6),
-                  const Note('Type a subject for each lesson. It saves as you type.'),
+                  const Note('Type a subject for each period. Saves automatically.'),
                 ],
               ),
             ),

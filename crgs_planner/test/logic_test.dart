@@ -2,11 +2,11 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mydayatschool/dates.dart';
-import 'package:mydayatschool/games/age_groups.dart';
-import 'package:mydayatschool/games/sudoku_logic.dart';
-import 'package:mydayatschool/logic.dart';
-import 'package:mydayatschool/models.dart';
+import 'package:crgs_planner/dates.dart';
+import 'package:crgs_planner/games/age_groups.dart';
+import 'package:crgs_planner/games/sudoku_logic.dart';
+import 'package:crgs_planner/logic.dart';
+import 'package:crgs_planner/models.dart';
 
 bool _valid(List<int> g, SudokuConfig c) {
   final n = c.n;

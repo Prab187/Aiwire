@@ -65,7 +65,7 @@ class _SudokuGameState extends State<SudokuGame> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Note('Fill every row, column and box with 1 to ${cfg.n}. Wrong numbers show in red.'),
+          Note('Fill every row, column and box with 1–${cfg.n}. Mistakes show in red.'),
           const SizedBox(height: 12),
           _grid(context),
           const SizedBox(height: 12),

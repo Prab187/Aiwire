@@ -72,7 +72,7 @@ class _MathSprintState extends State<MathSprint> {
         _score++;
         _wrongHint = null;
       } else {
-        _wrongHint = "Not quite: it's ${_q!.answer}";
+        _wrongHint = "Not quite, it's ${_q!.answer}";
       }
       _next();
     });
@@ -86,7 +86,7 @@ class _MathSprintState extends State<MathSprint> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Note('${widget.group.mathRule} As many as you can in 60 seconds.'),
+          Note('${widget.group.mathRule} Beat the clock: 60 seconds.'),
           const SizedBox(height: 16),
           Text(_display, textAlign: TextAlign.center, style: const TextStyle(fontSize: 44, fontWeight: FontWeight.w800)),
           SizedBox(height: 22, child: Center(child: Text(_wrongHint ?? '', style: TextStyle(color: Theme.of(context).colorScheme.error)))),

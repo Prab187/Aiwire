@@ -81,7 +81,7 @@ class _WordScrambleState extends State<WordScramble> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Note('Unscramble the word. The subject is your clue.'),
+          const Note('Unscramble the word. The subject is your hint.'),
           const SizedBox(height: 14),
           Center(child: subj.SubjectChip(_subject)),
           const SizedBox(height: 10),

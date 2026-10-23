@@ -1,4 +1,4 @@
-# MyDayAtSchool
+# CRGS Student Planner
 
 A planner for students: today's lessons, timetable, homework and tests, a bag
 checklist, school contacts, and Sudoku / maths / word games by age group.
@@ -6,8 +6,8 @@ Flutter app for iPhone. Everything is saved on the phone. No accounts, no
 network, no tracking.
 
 Colours follow the Colchester Royal Grammar School website (purple, green
-stripe, gold, white, serif headings). The school's crest and name are **not**
-used. See "Before you submit" below.
+stripe, gold, white, serif headings). The school's crest is **not** used. See
+"Before you submit" below.
 
 ## What is in this folder
 
@@ -15,22 +15,26 @@ used. See "Before you submit" below.
 |---|---|
 | `lib/` | The app code (screens, games, saving) |
 | `test/` | 28 automated tests (Sudoku has exactly one answer, maths answers are right, saving, every screen) |
-| `ios/` | The iPhone project. Bundle ID `com.prabha.mydayatschool`, iPhone only, portrait |
+| `ios/` | The iPhone project. Bundle ID `com.prabha.crgsplanner`, iPhone only, portrait |
 | `ios/ExportOptions.plist` | Used by the TestFlight upload |
-| `../.github/workflows/mydayatschool-testflight.yml` | Builds on a Mac in GitHub and uploads to TestFlight |
-| `../docs/mydayatschool/privacy.html` | Privacy policy page (needed for the App Store listing) |
+| `../.github/workflows/crgs-planner-testflight.yml` | Builds on a Mac in GitHub and uploads to TestFlight |
+| `../docs/crgs-planner/privacy.html` | Privacy policy page (needed for the App Store listing) |
 
 ## Before you submit
 
-1. **Name.** "My School Day" is already an App Store app, so this one is called
-   MyDayAtSchool. Names must be unique, so confirm it is free when you create the
-   app in App Store Connect. If it is taken, change `CFBundleDisplayName` in
-   `ios/Runner/Info.plist` and the title in `lib/main.dart`.
-2. **School crest.** The app icon is an original planner icon in the school's
-   colours. Do not swap in the school's crest or put the school's name in the app
-   name unless the school has agreed in writing. Apple rejects apps that look
-   like they are made by someone they are not.
-3. **Privacy page.** Add a contact email to `docs/mydayatschool/privacy.html`
+1. **Name.** The app is called exactly **CRGS Student Planner**, also under the icon
+   on the home screen. The name must be unique on the App Store, so confirm it is
+   free when you create the app in App Store Connect.
+2. **The school's name and crest.** The name includes the school's initials, so
+   Apple can ask who made the app and whether the school agrees. The app says
+   "Unofficial student app. Not made or endorsed by Colchester Royal Grammar
+   School." on the Today screen and in the privacy policy. Keep that wording, and
+   ask the school's permission before you publish publicly. TestFlight for you
+   and friends is fine in the meantime.
+3. **Icon.** The app icon is an original planner icon in the school's colours. The
+   school's crest is not used. Only use the crest if the school has agreed in
+   writing; then add the image file and the icon sizes can be regenerated.
+4. **Privacy page.** Add a contact email to `docs/crgs-planner/privacy.html`
    (search for "add a contact email").
 
 ## Put it on TestFlight (one-time setup, about 20 minutes)
@@ -38,9 +42,9 @@ used. See "Before you submit" below.
 You need a paid Apple Developer account. No Mac is needed: GitHub builds it.
 
 1. **Create the app record.** App Store Connect > Apps > **+** > New App.
-   Platform iOS, name MyDayAtSchool, language English, bundle ID
-   `com.prabha.mydayatschool` (register it first under Certificates, Identifiers &
-   Profiles > Identifiers if it is not in the list), SKU `mydayatschool`.
+   Platform iOS, name CRGS Student Planner, language English, bundle ID
+   `com.prabha.crgsplanner` (register it first under Certificates, Identifiers &
+   Profiles > Identifiers if it is not in the list), SKU `crgsplanner`.
 2. **Make an API key.** App Store Connect > Users and Access > Integrations >
    App Store Connect API > Team Keys > **+**. Name it, give it the **App Manager**
    role, download the `.p8` file (you can only download it once). Note the
@@ -57,7 +61,7 @@ You need a paid Apple Developer account. No Mac is needed: GitHub builds it.
    | `APPLE_TEAM_ID` | The 10-character Team ID |
 
    Keep the key out of chat, email and the repo. Only paste it into GitHub.
-5. **Run the build.** GitHub > Actions > **MyDayAtSchool to TestFlight** >
+5. **Run the build.** GitHub > Actions > **CRGS Student Planner to TestFlight** >
    Run workflow. It checks the code, runs the tests, signs the app, and uploads it.
 6. **TestFlight.** After Apple processes the build (usually 10 to 30 minutes) it
    appears in App Store Connect > your app > TestFlight. Add yourself under
@@ -69,7 +73,7 @@ being registered.
 
 ## Later, for the public App Store
 
-- Privacy policy URL: the page in `docs/mydayatschool/` once GitHub Pages serves it.
+- Privacy policy URL: the page in `docs/crgs-planner/` once GitHub Pages serves it.
 - App Privacy: choose **Data Not Collected**.
 - Export compliance is already answered in the app (no non-exempt encryption).
 - Age rating: no web access, no user content shared, no purchases. Expect 4+.

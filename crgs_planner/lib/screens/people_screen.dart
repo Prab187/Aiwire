@@ -27,7 +27,7 @@ class PeopleScreen extends StatelessWidget {
                 builder: (_) => _AddPersonSheet(store: store),
               ),
               icon: const Icon(Icons.add),
-              label: const Text('Add a person'),
+              label: const Text('Add a contact'),
               style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
             ),
             const SizedBox(height: 16),
@@ -55,7 +55,7 @@ class PeopleScreen extends StatelessWidget {
   List<Widget> _peopleIn(BuildContext context, Role r, Color muted) {
     final people = store.data.people.where((p) => p.role == r.key).toList();
     if (people.isEmpty) {
-      return [Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('No one added yet.', style: TextStyle(fontStyle: FontStyle.italic, color: muted)))];
+      return [Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Nobody added yet.', style: TextStyle(fontStyle: FontStyle.italic, color: muted)))];
     }
     return [
       for (final p in people)
@@ -126,12 +126,12 @@ class _AddPersonSheetState extends State<_AddPersonSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Add a person', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            Text('Add a contact', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 14),
             DropdownButtonFormField<String>(
               isExpanded: true,
               initialValue: _role,
-              decoration: const InputDecoration(labelText: 'Who are they?', border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))),
+              decoration: const InputDecoration(labelText: 'Role', border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))),
               items: [for (final r in roles) DropdownMenuItem(value: r.key, child: Text(r.label))],
               onChanged: (v) => setState(() => _role = v ?? _role),
             ),
@@ -145,11 +145,11 @@ class _AddPersonSheetState extends State<_AddPersonSheet> {
             TextField(
               controller: _info,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Contact or note', hintText: 'e.g. Teaches Science · room S4', border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))),
+              decoration: const InputDecoration(labelText: 'Number, email or note', hintText: 'e.g. Science, room S4', border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))),
             ),
             if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
             const SizedBox(height: 16),
-            FilledButton(onPressed: _save, style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)), child: const Text('Add person')),
+            FilledButton(onPressed: _save, style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)), child: const Text('Add contact')),
           ],
         ),
       ),

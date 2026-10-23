@@ -31,12 +31,12 @@ class Role {
 }
 
 const roles = [
-  Role('parent', 'Parent / guardian', 'Who to tell about trips, letters and being ill', 18),
-  Role('tutor', 'Form tutor', 'Your first stop for most questions', 172),
-  Role('teacher', 'Subject teacher', 'Ask about homework and lessons', 215),
-  Role('head', 'Head of year', 'For bigger worries or problems', 262),
+  Role('parent', 'Parent / guardian', 'For trips, letters and sick days', 18),
+  Role('tutor', 'Form tutor', 'Your first port of call', 172),
+  Role('teacher', 'Subject teacher', 'Questions about homework and lessons', 215),
+  Role('head', 'Head of year', 'For bigger worries', 262),
   Role('office', 'School office', 'Absences, lost property, messages home', 42),
-  Role('friend', 'Friend / study buddy', 'Swap homework notes if you miss a lesson', 330),
+  Role('friend', 'Study buddy', 'Swap notes if you miss a lesson', 330),
 ];
 
 class Person {
@@ -123,11 +123,11 @@ class AppData {
         Homework(id: 4, subject: 'Science', text: 'Topic test: cells and organisms', due: plus(8), isTest: true),
       ],
       people: [
-        Person(id: 1, role: 'parent', name: 'Mum', info: 'Mobile in my phone'),
+        Person(id: 1, role: 'parent', name: 'Mum', info: 'Saved in my phone'),
         Person(id: 2, role: 'tutor', name: 'Mr Hughes', info: 'Form room 12'),
-        Person(id: 3, role: 'teacher', name: 'Mrs Patel', info: 'Science · room S4'),
-        Person(id: 4, role: 'teacher', name: 'Ms Okafor', info: 'Maths · room M2'),
-        Person(id: 5, role: 'office', name: 'Reception', info: "Ring before 8:30 if I'm off ill"),
+        Person(id: 3, role: 'teacher', name: 'Mrs Patel', info: 'Science, room S4'),
+        Person(id: 4, role: 'teacher', name: 'Ms Okafor', info: 'Maths, room M2'),
+        Person(id: 5, role: 'office', name: 'Reception', info: 'Call before 8:30 if off sick'),
       ],
     );
   }

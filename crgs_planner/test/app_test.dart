@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mydayatschool/main.dart';
-import 'package:mydayatschool/models.dart';
-import 'package:mydayatschool/store.dart';
+import 'package:crgs_planner/main.dart';
+import 'package:crgs_planner/models.dart';
+import 'package:crgs_planner/store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Future<AppStore> _pump(WidgetTester tester, {Map<String, Object> prefs = const {}}) async {
@@ -11,7 +11,7 @@ Future<AppStore> _pump(WidgetTester tester, {Map<String, Object> prefs = const {
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
   final store = await AppStore.load();
-  await tester.pumpWidget(MyDayAtSchoolApp(store: store));
+  await tester.pumpWidget(CrgsPlannerApp(store: store));
   await tester.pump();
   return store;
 }
@@ -22,14 +22,14 @@ Future<void> _tab(WidgetTester tester, String label) async {
 }
 
 void main() {
-  testWidgets('opens on Today with the header, greeting and example data', (tester) async {
+  testWidgets('opens on Today with the header, greeting and sample data', (tester) async {
     await _pump(tester);
-    expect(find.text('MyDayAtSchool'), findsOneWidget);
+    expect(find.text('CRGS Student Planner'), findsOneWidget);
     expect(find.textContaining('Good '), findsOneWidget);
-    expect(find.text('Add your name'), findsOneWidget);
-    expect(find.textContaining('example data'), findsOneWidget);
+    expect(find.text("What's your name?"), findsOneWidget);
+    expect(find.textContaining('Sample data'), findsOneWidget);
     // The bag checklist is further down the page; scroll to it.
-    await tester.scrollUntilVisible(find.textContaining('Pack my bag'), 300, scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(find.textContaining('Bag check'), 300, scrollable: find.byType(Scrollable).first);
     expect(find.text('Planner'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
@@ -43,13 +43,13 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('Start fresh clears the example content', (tester) async {
+  testWidgets('Clear sample removes the example content', (tester) async {
     final store = await _pump(tester);
-    await tester.tap(find.text('Start fresh'));
+    await tester.tap(find.text('Clear sample'));
     await tester.pump();
     expect(store.data.example, isFalse);
     expect(store.data.homework, isEmpty);
-    expect(find.textContaining('example data'), findsNothing);
+    expect(find.textContaining('Sample data'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -62,9 +62,9 @@ void main() {
     // Empty save shows an error and adds nothing.
     await tester.tap(find.text('Add'));
     await tester.pump();
-    expect(find.text('Add a subject and what to do.'), findsOneWidget);
+    expect(find.text('Add a subject and some details.'), findsOneWidget);
     await tester.enterText(find.widgetWithText(TextField, 'Subject'), 'Latin');
-    await tester.enterText(find.widgetWithText(TextField, 'What to do'), 'Translate paragraph 2');
+    await tester.enterText(find.widgetWithText(TextField, 'Details'), 'Translate paragraph 2');
     await tester.tap(find.text('Test or exam'));
     await tester.pump();
     await tester.tap(find.text('Add'));
@@ -83,7 +83,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.data.homework.where((h) => h.done).length, 1);
     expect(find.text('DONE · 1'), findsOneWidget);
-    await tester.tap(find.text('Clear finished'));
+    await tester.tap(find.text('Clear done'));
     await tester.pumpAndSettle();
     expect(store.data.homework.length, 3);
     await tester.pumpWidget(const SizedBox());
@@ -101,12 +101,12 @@ void main() {
 
   testWidgets('add and remove a person', (tester) async {
     final store = await _pump(tester);
-    await _tab(tester, 'People');
+    await _tab(tester, 'Contacts');
     expect(find.text('Mrs Patel'), findsOneWidget);
-    await tester.tap(find.text('Add a person'));
+    await tester.tap(find.text('Add a contact'));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Dr Jane Who');
-    await tester.tap(find.text('Add person'));
+    await tester.tap(find.text('Add contact'));
     await tester.pumpAndSettle();
     expect(store.data.people.length, 6);
     expect(find.text('DJ'), findsOneWidget);

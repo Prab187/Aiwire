@@ -63,8 +63,8 @@ class _TodayScreenState extends State<TodayScreen> {
         final dayName = weekdayNames[day.weekday - 1];
 
         final facts = <String>[
-          nLessons == 0 ? 'No lessons added' : '$nLessons lesson${nLessons == 1 ? '' : 's'} ${later ? 'on $dayName' : 'today'}',
-          soon.isEmpty ? 'No homework due soon' : '${soon.length} homework due soon',
+          nLessons == 0 ? 'No lessons yet' : '$nLessons lesson${nLessons == 1 ? '' : 's'} ${later ? dayName : 'today'}',
+          soon.isEmpty ? 'Nothing due soon' : '${soon.length} due soon',
           if (test != null) _testFact(test, now),
           'Bag $gotCount/${bag.length}',
         ];
@@ -78,7 +78,7 @@ class _TodayScreenState extends State<TodayScreen> {
             Panel(
               title: later ? "$dayName's lessons" : "Today's lessons",
               child: nLessons == 0
-                  ? const Note('No lessons added for this day yet. Fill them in under Timetable.')
+                  ? const Note('No lessons yet. Add them in Timetable.')
                   : Column(
                       children: [
                         for (var i = 0; i < lessons.length; i++)
@@ -105,9 +105,9 @@ class _TodayScreenState extends State<TodayScreen> {
             ),
             const SizedBox(height: 16),
             Panel(
-              title: 'Homework due soon',
+              title: 'Due soon',
               child: soon.isEmpty
-                  ? const Note('Nothing due in the next two days.')
+                  ? const Note('Nothing due in the next 2 days.')
                   : Column(
                       children: [
                         for (final h in soon)
@@ -137,17 +137,28 @@ class _TodayScreenState extends State<TodayScreen> {
             _bagPanel(context, day, later, bag, got),
             const SizedBox(height: 16),
             Panel(
-              title: 'Notes and reminders',
+              title: 'Notes',
               child: TextField(
                 controller: _notes,
                 minLines: 3,
                 maxLines: 8,
                 textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(
-                  hintText: 'e.g. Get trip form signed · Club after school on Thursday',
+                  hintText: 'e.g. Trip form to sign, club on Thursday',
                   border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
                 ),
                 onChanged: (v) => widget.store.update((d) => d.notes = v, clearsExample: false),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: Text(
+                  'Unofficial student app. Not made or endorsed by Colchester Royal Grammar School.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12),
+                ),
               ),
             ),
           ],
@@ -194,7 +205,7 @@ class _TodayScreenState extends State<TodayScreen> {
             textCapitalization: TextCapitalization.words,
             style: TextStyle(color: fg, fontSize: 32, fontWeight: FontWeight.w700, fontFamily: serif),
             decoration: InputDecoration(
-              hintText: 'Add your name',
+              hintText: "What's your name?",
               hintStyle: TextStyle(color: fg.withValues(alpha: 0.6), fontSize: 32, fontWeight: FontWeight.w700, fontFamily: serif),
               counterText: '',
               isDense: true,
@@ -228,13 +239,13 @@ class _TodayScreenState extends State<TodayScreen> {
       decoration: BoxDecoration(border: Border.all(color: cs.primary.withValues(alpha: 0.6)), borderRadius: BorderRadius.circular(14)),
       child: Row(
         children: [
-          const Expanded(child: Text("You're looking at example data. Add your own and it replaces this.", style: TextStyle(fontSize: 13))),
+          const Expanded(child: Text('Sample data for now. Clear it to add your own.', style: TextStyle(fontSize: 13))),
           TextButton(
             onPressed: () {
               widget.store.startFresh();
               _notes.clear();
             },
-            child: const Text('Start fresh'),
+            child: const Text('Clear sample'),
           ),
         ],
       ),
@@ -243,13 +254,13 @@ class _TodayScreenState extends State<TodayScreen> {
 
   Widget _bagPanel(BuildContext context, DateTime day, bool later, List<BagItem> bag, List<String> got) {
     final allDone = bag.isNotEmpty && bag.every((b) => got.contains(b.name));
-    final title = (later ? 'Pack my bag for ${weekdayNames[day.weekday - 1]}' : 'Pack my bag for today') + (allDone ? ' ✓' : '');
+    final title = (later ? 'Bag check for ${weekdayNames[day.weekday - 1]}' : 'Bag check for today') + (allDone ? ' ✓' : '');
     return Panel(
       title: title,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Note('Items for your lessons are added for you. Ticks reset each day.'),
+          const Note('Kit for your lessons is added for you. Ticks reset daily.'),
           const SizedBox(height: 4),
           for (final b in bag)
             CheckboxListTile(
@@ -283,7 +294,7 @@ class _TodayScreenState extends State<TodayScreen> {
                   controller: _bagNew,
                   textCapitalization: TextCapitalization.sentences,
                   decoration: const InputDecoration(
-                    hintText: 'Add an item, e.g. Trip letter',
+                    hintText: 'Add something, e.g. trip letter',
                     isDense: true,
                     border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
                   ),

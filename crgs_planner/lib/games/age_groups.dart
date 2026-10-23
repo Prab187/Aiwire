@@ -70,8 +70,8 @@ const ageGroups = <AgeGroup>[
   AgeGroup(
     key: 'a5',
     label: '5–7',
-    note: 'Little ones: a 4×4 Sudoku, adding and taking away to 20, and short words.',
-    mathRule: 'Add and take away numbers up to 20.',
+    note: 'Mini 4×4 Sudoku, add and subtract up to 20, short words.',
+    mathRule: 'Add and subtract up to 20.',
     sudoku: SudokuConfig(4, 2, 2, 8),
     question: _add,
     words: [
@@ -83,7 +83,7 @@ const ageGroups = <AgeGroup>[
   AgeGroup(
     key: 'a7',
     label: '7–11',
-    note: 'Primary: a 6×6 Sudoku, times tables up to 12×12, and everyday school words.',
+    note: '6×6 Sudoku, times tables up to 12×12, everyday school words.',
     mathRule: 'Times tables from 2× to 12×.',
     sudoku: SudokuConfig(6, 2, 3, 18),
     question: _times,
@@ -97,8 +97,8 @@ const ageGroups = <AgeGroup>[
   AgeGroup(
     key: 'a11',
     label: '11–14',
-    note: 'Secondary: an easy 9×9 Sudoku, times and division facts, and KS3 words.',
-    mathRule: 'Multiply and divide with numbers up to 12.',
+    note: 'Easy 9×9 Sudoku, times and division facts, KS3 words.',
+    mathRule: 'Multiply and divide up to 12.',
     sudoku: SudokuConfig(9, 3, 3, 38),
     question: _timesDivide,
     words: [
@@ -111,8 +111,8 @@ const ageGroups = <AgeGroup>[
   AgeGroup(
     key: 'a14',
     label: '14–16',
-    note: 'GCSE: a harder 9×9 Sudoku, mixed mental maths, and longer GCSE words.',
-    mathRule: 'Mixed: squares, percentages, negative numbers and division.',
+    note: 'Tougher 9×9 Sudoku, mixed mental maths, longer GCSE words.',
+    mathRule: 'Mixed: squares, percentages, negatives and division.',
     sudoku: SudokuConfig(9, 3, 3, 28),
     question: _mixed,
     negativeAnswers: true,
