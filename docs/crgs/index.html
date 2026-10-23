@@ -9,51 +9,55 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@600;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500&display=swap">
 <style>
 /* Layout: a planner-notebook column — sticky tab strip on top, one view at a time, cards only where an object is self-contained */
 :root {
-  --bg: #f3f4f8;
+  --bg: #f6f3f8;
   --surface: #ffffff;
-  --ink: #18203a;
-  --muted: #5b6380;
-  --line: #dde0ea;
-  --accent: #2b3fa6;
-  --accent-soft: #e4e8fb;
+  --ink: #1f1530;
+  --muted: #645a73;
+  --line: #e1d9e8;
+  --accent: #62338a;
+  --accent-soft: #efe8f5;
+  --bar: #62338a;
+  --stripe: #3f8f45;
+  --gold: #e0b25a;
   --brass: #a8761b;
   --good: #1f7a4d;
   --warn: #a35a00;
   --bad: #b3261e;
   --house: #2b3fa6;
-  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-display: "Lora", Georgia, "Times New Roman", serif;
   --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
   --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f1324; --surface: #171c33; --ink: #e8eaf4; --muted: #9aa1bf; --line: #2a3150;
-    --accent: #8d9cff; --accent-soft: #232b55; --brass: #e0b25a;
+    --bg: #14101b; --surface: #1e1729; --ink: #efe9f6; --muted: #b0a5c0; --line: #3a2d4d;
+    --accent: #d2bdeb; --accent-soft: #2e2144; --bar: #2e1a47; --stripe: #7fcb86; --brass: #e0b25a;
     --good: #5fd39a; --warn: #f0a94a; --bad: #ff8a80; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0f1324; --surface: #171c33; --ink: #e8eaf4; --muted: #9aa1bf; --line: #2a3150;
-  --accent: #8d9cff; --accent-soft: #232b55; --brass: #e0b25a;
+  --bg: #14101b; --surface: #1e1729; --ink: #efe9f6; --muted: #b0a5c0; --line: #3a2d4d;
+  --accent: #d2bdeb; --accent-soft: #2e2144; --bar: #2e1a47; --stripe: #7fcb86; --brass: #e0b25a;
   --good: #5fd39a; --warn: #f0a94a; --bad: #ff8a80; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.5; }
-body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bar); }
 .wrap { max-width: 880px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bar); border-bottom: 3px solid var(--stripe); }
 .brand { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-block: 14px 6px; flex-wrap: wrap; }
-.brand h1 { font-family: var(--f-display); font-weight: 800; font-size: 1.35rem; margin: 0; letter-spacing: -0.01em; }
-.brand h1 span { color: var(--house); }
-.brand small { color: var(--muted); font-size: 0.8rem; }
+.brand h1 { font-family: var(--f-display); font-weight: 700; font-size: 1.35rem; margin: 0; color: #fff; }
+.brand h1 span { color: var(--gold); }
+.brand small { color: rgba(255,255,255,.78); font-size: 0.8rem; }
 nav.tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
-nav.tabs a { flex: none; text-decoration: none; color: var(--muted); font-weight: 700; font-size: 0.92rem; padding: 7px 12px; border-radius: 999px; }
-nav.tabs a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
-nav.tabs a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+nav.tabs a { flex: none; text-decoration: none; color: rgba(255,255,255,.82); font-weight: 700; font-size: 0.92rem; padding: 7px 12px; border-radius: 999px; }
+nav.tabs a[aria-current="page"] { background: var(--surface); color: var(--accent); }
+nav.tabs a:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 main { padding-block: 20px 48px; display: grid; gap: 22px; }
 section.view { display: grid; gap: 22px; }
 [hidden] { display: none !important; }

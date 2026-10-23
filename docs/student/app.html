@@ -2,53 +2,57 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Lexend:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@600;700&family=Lexend:wght@400;600&display=swap">
 <style>
-/* Layout: one column; coloured hero card on Today; icon tab bar at the bottom on phones, top tabs on desktop; one colour per subject everywhere */
+/* Layout: one column; purple bar and green stripe from the school site; hero card on Today; icon tab bar at the bottom on phones, top tabs on desktop; one colour per subject everywhere */
 :root {
-  --bg: #f2f6f5;
+  --bg: #f6f3f8;
   --surface: #ffffff;
-  --ink: #15253a;
-  --muted: #566879;
-  --line: #dbe3e1;
-  --accent: #0d7c74;
-  --accent-soft: #dcf1ee;
+  --ink: #1f1530;
+  --muted: #645a73;
+  --line: #e1d9e8;
+  --accent: #62338a;
+  --accent-soft: #efe8f5;
   --mark: #fff1a8;
   --bad: #b3261e;
-  --hero-bg: #0d7c74;
+  --bar: #62338a;
+  --stripe: #3f8f45;
+  --hero-bg: #62338a;
   --hero-fg: #ffffff;
   --chip-bg-l: 90%;
   --chip-fg-l: 26%;
-  --f-display: "Baloo 2", "Trebuchet MS", system-ui, sans-serif;
+  --f-display: "Lora", Georgia, "Times New Roman", serif;
   --f-body: "Lexend", "Segoe UI", system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0e1a1f; --surface: #15252b; --ink: #e6efee; --muted: #9db0b3; --line: #27393f;
-    --accent: #4fd1c5; --accent-soft: #173a3a; --mark: #4a4416; --bad: #ff8a80;
-    --hero-bg: #145a57; --hero-fg: #e8f7f5; --chip-bg-l: 24%; --chip-fg-l: 84%; color-scheme: dark;
+    --bg: #14101b; --surface: #1e1729; --ink: #efe9f6; --muted: #b0a5c0; --line: #3a2d4d;
+    --accent: #d2bdeb; --accent-soft: #2e2144; --mark: #4a4416; --bad: #ff8a80;
+    --bar: #2e1a47; --stripe: #7fcb86;
+    --hero-bg: #3e2263; --hero-fg: #f3ebfb; --chip-bg-l: 24%; --chip-fg-l: 84%; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0e1a1f; --surface: #15252b; --ink: #e6efee; --muted: #9db0b3; --line: #27393f;
-  --accent: #4fd1c5; --accent-soft: #173a3a; --mark: #4a4416; --bad: #ff8a80;
-  --hero-bg: #145a57; --hero-fg: #e8f7f5; --chip-bg-l: 24%; --chip-fg-l: 84%; color-scheme: dark;
+  --bg: #14101b; --surface: #1e1729; --ink: #efe9f6; --muted: #b0a5c0; --line: #3a2d4d;
+  --accent: #d2bdeb; --accent-soft: #2e2144; --mark: #4a4416; --bad: #ff8a80;
+  --bar: #2e1a47; --stripe: #7fcb86;
+  --hero-bg: #3e2263; --hero-fg: #f3ebfb; --chip-bg-l: 24%; --chip-fg-l: 84%; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.5; }
-body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bar); }
 .wrap { max-width: 640px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
-header .wrap { padding-block: 12px 0; }
-h1 { font-family: var(--f-display); font-weight: 800; font-size: 1.45rem; margin: 0; line-height: 1.2; }
+.brandbar { background: var(--bar); border-bottom: 3px solid var(--stripe); }
+.brandbar .wrap { padding-block: 12px; }
+h1 { font-family: var(--f-display); font-weight: 700; font-size: 1.45rem; margin: 0; line-height: 1.2; color: #fff; }
 nav.tabs { display: flex; gap: 2px; margin-top: 4px; }
 nav.tabs a { flex: 1 1 0; display: flex; align-items: center; justify-content: center; gap: 7px; text-decoration: none; color: var(--muted); font-weight: 600; font-size: 0.9rem; padding: 10px 6px; border-bottom: 3px solid transparent; }
 nav.tabs a svg { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 nav.tabs a svg .f { fill: currentColor; stroke: none; }
 nav.tabs a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
 @media (max-width: 719px) {
-  header .wrap { padding-block: 12px; }
   nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; margin: 0; gap: 2px; background: var(--surface); border-top: 1px solid var(--line); padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); }
   nav.tabs a { flex-direction: column; gap: 2px; font-size: 0.7rem; padding: 6px 0; border-bottom: 0; border-radius: 12px; }
   nav.tabs a svg { width: 24px; height: 24px; }
@@ -67,10 +71,10 @@ h2 { font-family: var(--f-display); font-weight: 800; font-size: 1.25rem; margin
 .note { font-size: 0.85rem; color: var(--muted); margin: 0; }
 
 /* Hero */
-.hero { background: var(--hero-bg); color: var(--hero-fg); border-radius: 22px; padding: 18px 20px 20px; display: grid; gap: 8px; }
+.hero { background: var(--hero-bg); color: var(--hero-fg); border-radius: 22px; border-bottom: 5px solid var(--stripe); padding: 18px 20px 20px; display: grid; gap: 8px; }
 .hero .label { color: inherit; opacity: 0.85; }
 .hero .greet { font-family: var(--f-display); font-weight: 600; font-size: 1.05rem; opacity: 0.92; margin-top: 4px; }
-.hero input { background: transparent; border: 0; border-bottom: 2px dashed color-mix(in srgb, var(--hero-fg) 45%, transparent); border-radius: 0; padding: 0 0 2px; font-family: var(--f-display); font-weight: 800; font-size: clamp(1.7rem, 8vw, 2.3rem); line-height: 1.15; color: inherit; width: 100%; margin-top: -6px; }
+.hero input { background: transparent; border: 0; border-bottom: 2px dashed color-mix(in srgb, var(--hero-fg) 45%, transparent); border-radius: 0; padding: 0 0 2px; font-family: var(--f-display); font-weight: 700; font-size: clamp(1.7rem, 8vw, 2.3rem); line-height: 1.15; color: inherit; width: 100%; margin-top: -6px; }
 .hero input::placeholder { color: color-mix(in srgb, var(--hero-fg) 60%, transparent); }
 .hero input:focus-visible { outline: 2px solid var(--hero-fg); outline-offset: 4px; border-bottom-style: solid; }
 .facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
@@ -159,8 +163,8 @@ textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px 
 </style>
 
 <header>
+  <div class="brandbar"><div class="wrap"><h1>My School Day</h1></div></div>
   <div class="wrap">
-    <h1>My School Day</h1>
     <nav class="tabs" aria-label="Sections">
       <a href="#today"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span>Today</span></a>
       <a href="#timetable"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>Timetable</span></a>
