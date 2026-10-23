@@ -1,4 +1,4 @@
-# CRGS Connect
+# CRGS Kampus
 
 A planner for students: today's lessons, timetable, homework and tests, a bag
 checklist, school contacts, an **AI Radio** about AI in schools, and Sudoku /
@@ -50,7 +50,7 @@ fix is in `lib/radio/news_sources.dart`.
 
 ## Before you submit
 
-1. **Name.** The app is called exactly **CRGS Connect**, also under the icon
+1. **Name.** The app is called exactly **CRGS Kampus**, also under the icon
    on the home screen. The name must be unique on the App Store, so confirm it is
    free when you create the app in App Store Connect.
 2. **The school's name and crest.** The name includes the school's initials, so
@@ -70,7 +70,7 @@ fix is in `lib/radio/news_sources.dart`.
 You need a paid Apple Developer account. No Mac is needed: GitHub builds it.
 
 1. **Create the app record.** App Store Connect > Apps > **+** > New App.
-   Platform iOS, name CRGS Connect, language English, bundle ID
+   Platform iOS, name CRGS Kampus, language English, bundle ID
    `com.prabha.crgsstudentplanner` (register it first under Certificates, Identifiers &
    Profiles > Identifiers if it is not in the list), SKU `crgsplanner`.
 2. **Make an API key.** App Store Connect > Users and Access > Integrations >
@@ -89,7 +89,7 @@ You need a paid Apple Developer account. No Mac is needed: GitHub builds it.
    | `APPLE_TEAM_ID` | The 10-character Team ID |
 
    Keep the key out of chat, email and the repo. Only paste it into GitHub.
-5. **Run the build.** GitHub > Actions > **CRGS Connect to TestFlight** >
+5. **Run the build.** GitHub > Actions > **CRGS Kampus to TestFlight** >
    Run workflow. It checks the code, runs the tests, signs the app, and uploads it.
 6. **TestFlight.** After Apple processes the build (usually 10 to 30 minutes) it
    appears in App Store Connect > your app > TestFlight. Add yourself under

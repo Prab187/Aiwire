@@ -25,7 +25,7 @@ class LiveNewsRepository implements NewsRepository {
   final http.Client _client;
   final Duration timeout;
 
-  static const _headers = {'User-Agent': 'CRGSStudentPlanner/1.0 (student app; unofficial)'};
+  static const _headers = {'User-Agent': 'CRGSKampus/1.0 (student app; unofficial)'};
 
   Uri gdeltUri(String query) => Uri.https('api.gdeltproject.org', '/api/v2/doc/doc', {
         'query': query,
