@@ -111,10 +111,47 @@ being registered.
 - Age rating: no web access, no user content shared, no purchases. Expect 4+.
 - Screenshots: iPhone 6.9-inch (1320 x 2868). The app is iPhone only.
 
-## Build on a Mac instead
+## Build on a Mac with Xcode (the quickest way)
 
-```
-flutter pub get
-flutter test
-open ios/Runner.xcworkspace   # Signing & Capabilities: pick your team, then Product > Archive
-```
+You need: a Mac, Xcode (from the Mac App Store), the Flutter SDK
+(flutter.dev/install/macos, then run `flutter doctor` and fix anything it flags),
+and your paid Apple Developer account signed in under Xcode > Settings > Accounts.
+
+1. **Get the code**
+   ```
+   git clone https://github.com/Prab187/Aiwire.git
+   cd Aiwire && git checkout claude/relaxed-knuth-tdj9x3
+   cd crgs_planner
+   ```
+2. **Prepare it**
+   ```
+   flutter pub get
+   flutter test
+   flutter build ios --release --no-codesign
+   ```
+   The last command creates the Pods and settings Xcode needs. Ignore its "no codesign" note.
+3. **Open it:** `open ios/Runner.xcworkspace` (the `.xcworkspace`, not `.xcodeproj`).
+4. **Signing:** click **Runner** (blue icon, top of the left list), then the **Runner**
+   target, then **Signing & Capabilities**. Tick **Automatically manage signing** and
+   choose your **Team**. Leave the bundle identifier as `com.prabha.crgsplanner`.
+   Xcode registers it on your developer account for you.
+5. **Create the app record** in App Store Connect now (see `APP_STORE_LISTING.md`
+   section 1). The bundle ID will be in the dropdown.
+6. **Archive:** in the device menu at the top choose **Any iOS Device (arm64)**, then
+   **Product > Archive**. Wait a few minutes.
+7. **Upload:** the Organizer opens. Choose **Distribute App > App Store Connect >
+   Distribute** (keep the defaults, automatic signing). When it says "Upload
+   Successful", you are done.
+8. **TestFlight:** after Apple finishes processing (10 to 30 minutes, you get an
+   email) the build appears under your app > TestFlight. Add testers (see
+   `APP_STORE_LISTING.md` section 7).
+
+For each later upload, raise the build number first (`version: 1.0.0+2` in
+`pubspec.yaml`, then `flutter build ios --release --no-codesign` again). Apple
+refuses a build number it has already seen.
+
+Common problems:
+- *No account / No team:* add your Apple ID in Xcode > Settings > Accounts.
+- *Failed to register bundle identifier:* someone else has it. Change it in Xcode and
+  tell me the new one so I can match the app.
+- *Pods errors:* run `cd ios && pod repo update && pod install`, then try again.
