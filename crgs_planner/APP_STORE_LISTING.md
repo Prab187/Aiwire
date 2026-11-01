@@ -6,7 +6,7 @@ Work top to bottom. Items marked **you** need your own details.
 | Field | Value |
 |---|---|
 | Platforms | iOS only |
-| Name (App Store, must be unique) | Try in order until Apple accepts one: `Kampus Daybook`, `Kampus Quill`, `Kampus Compass`. The name under the icon on the phone stays `CRGS Kampus`. |
+| Name (App Store, must be unique) | `Kampus Quill`. Xcode creates the app record with this name when you upload (it is the name in Info.plist). If Apple says it is taken, tell Claude for another. The in-app title stays `CRGS Kampus`. |
 | Primary Language | English (U.K.) |
 | Bundle ID | `com.prabha.crgsstudentplanner` (register it first under Certificates, Identifiers & Profiles > Identifiers > App IDs > App > Explicit) |
 | SKU | `crgsplanner` |
