@@ -28,9 +28,11 @@ class PeopleScreen extends StatelessWidget {
               ),
               icon: const Icon(Icons.add),
               label: const Text('Add a contact'),
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             Panel(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -38,7 +40,11 @@ class PeopleScreen extends StatelessWidget {
                   for (final r in roles) ...[
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
-                      child: Text(r.label, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                      child: Text(
+                        r.label,
+                        style: Theme.of(context).textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
                     ),
                     Note(r.why),
                     ..._peopleIn(context, r, muted),
@@ -55,7 +61,15 @@ class PeopleScreen extends StatelessWidget {
   List<Widget> _peopleIn(BuildContext context, Role r, Color muted) {
     final people = store.data.people.where((p) => p.role == r.key).toList();
     if (people.isEmpty) {
-      return [Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Nobody added yet.', style: TextStyle(fontStyle: FontStyle.italic, color: muted)))];
+      return [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            'Nobody added yet.',
+            style: TextStyle(fontStyle: FontStyle.italic, color: muted),
+          ),
+        ),
+      ];
     }
     return [
       for (final p in people)
@@ -69,7 +83,13 @@ class PeopleScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                    Text(
+                      p.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
                     if (p.info.isNotEmpty) Note(p.info),
                   ],
                 ),
@@ -77,7 +97,9 @@ class PeopleScreen extends StatelessWidget {
               IconButton(
                 tooltip: 'Remove ${p.name}',
                 icon: Icon(Icons.close, size: 20, color: muted),
-                onPressed: () => store.update((d) => d.people.removeWhere((x) => x.id == p.id)),
+                onPressed: () => store.update(
+                  (d) => d.people.removeWhere((x) => x.id == p.id),
+                ),
               ),
             ],
           ),
@@ -113,43 +135,94 @@ class _AddPersonSheetState extends State<_AddPersonSheet> {
       setState(() => _error = 'Add a name.');
       return;
     }
-    widget.store.update((d) => d.people.add(Person(id: DateTime.now().microsecondsSinceEpoch, role: _role, name: n, info: _info.text.trim())));
+    widget.store.update(
+      (d) => d.people.add(
+        Person(
+          id: DateTime.now().microsecondsSinceEpoch,
+          role: _role,
+          name: n,
+          info: _info.text.trim(),
+        ),
+      ),
+    );
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        0,
+        20,
+        20 + MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Add a contact', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            Text(
+              'Add a contact',
+              style: Theme.of(context).textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
             const SizedBox(height: 14),
             DropdownButtonFormField<String>(
               isExpanded: true,
               initialValue: _role,
-              decoration: const InputDecoration(labelText: 'Role', border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))),
-              items: [for (final r in roles) DropdownMenuItem(value: r.key, child: Text(r.label))],
+              decoration: const InputDecoration(
+                labelText: 'Role',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                ),
+              ),
+              items: [
+                for (final r in roles)
+                  DropdownMenuItem(value: r.key, child: Text(r.label)),
+              ],
               onChanged: (v) => setState(() => _role = v ?? _role),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _name,
               textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(labelText: 'Name', hintText: 'e.g. Mrs Patel', border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))),
+              decoration: const InputDecoration(
+                labelText: 'Name',
+                hintText: 'e.g. Mrs Patel',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _info,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Number, email or note', hintText: 'e.g. Science, room S4', border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))),
+              decoration: const InputDecoration(
+                labelText: 'Number, email or note',
+                hintText: 'e.g. Science, room S4',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                ),
+              ),
             ),
-            if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: _save, style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)), child: const Text('Add contact')),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: _save,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+              ),
+              child: const Text('Add contact'),
+            ),
           ],
         ),
       ),

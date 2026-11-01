@@ -33,7 +33,7 @@ void main() {
     await _pump(tester);
     expect(find.text('CRGS Kampus'), findsOneWidget);
     expect(find.textContaining('Good '), findsOneWidget);
-    expect(find.text("What's your name?"), findsOneWidget);
+    expect(find.text('Your name'), findsOneWidget);
     expect(find.textContaining('Sample data'), findsOneWidget);
     // The bag checklist is further down the page; scroll to it.
     await tester.scrollUntilVisible(find.textContaining('Bag check'), 300, scrollable: find.byType(Scrollable).first);
@@ -148,18 +148,20 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.text('Which school got which AI'), findsOneWidget);
-    expect(find.text('Who got which AI'), findsOneWidget);
-    // St Mary's Academy -> Khanmigo shows on the board (and in the playlist chips)
-    expect(find.text("St Mary's Academy"), findsWidgets);
-    expect(find.text('Khanmigo'), findsWidgets);
-    expect(find.text("St Mary's Academy rolls out Khanmigo AI tutor to Year 9"), findsWidgets);
     expect(find.text('Read the story'), findsOneWidget);
     await tester.tap(find.byKey(const Key('radio-play')));
     await tester.pump();
     await tester.pump();
     expect(lastSpeaker.spoken.first, contains("You're tuned in to CRGS Kampus Radio"));
     expect(lastSpeaker.spoken.length, 5);
+    // The board sits below the player on the page; scroll down to it.
+    await tester.scrollUntilVisible(find.text('Who got which AI'), 300, scrollable: find.byType(Scrollable).first);
+    expect(find.text('Who got which AI'), findsOneWidget);
+    // St Mary's Academy -> Khanmigo shows on the board (and in the playlist chips)
+    expect(find.text("St Mary's Academy"), findsWidgets);
+    expect(find.text('Khanmigo'), findsWidgets);
     await tester.scrollUntilVisible(find.textContaining('Unofficial: not made or endorsed'), 400, scrollable: find.byType(Scrollable).first);
+    expect(find.text("St Mary's Academy rolls out Khanmigo AI tutor to Year 9"), findsWidgets);
     await tester.pumpWidget(const SizedBox());
   });
 

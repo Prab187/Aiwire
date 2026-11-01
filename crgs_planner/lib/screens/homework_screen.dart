@@ -20,9 +20,23 @@ class HomeworkScreen extends StatelessWidget {
         int byDue(Homework a, Homework b) => a.due.compareTo(b.due);
         final open = all.where((h) => !h.done).toList();
         final groups = <(String, List<Homework>)>[
-          ('Overdue', open.where((h) => dayDiff(h.due, now) < 0).toList()..sort(byDue)),
-          ('This week', open.where((h) => dayDiff(h.due, now) >= 0 && dayDiff(h.due, now) <= 7).toList()..sort(byDue)),
-          ('Later', open.where((h) => dayDiff(h.due, now) > 7).toList()..sort(byDue)),
+          (
+            'Overdue',
+            open.where((h) => dayDiff(h.due, now) < 0).toList()..sort(byDue),
+          ),
+          (
+            'This week',
+            open
+                .where(
+                  (h) => dayDiff(h.due, now) >= 0 && dayDiff(h.due, now) <= 7,
+                )
+                .toList()
+              ..sort(byDue),
+          ),
+          (
+            'Later',
+            open.where((h) => dayDiff(h.due, now) > 7).toList()..sort(byDue),
+          ),
           ('Done', all.where((h) => h.done).toList()..sort(byDue)),
         ].where((g) => g.$2.isNotEmpty).toList();
 
@@ -33,11 +47,22 @@ class HomeworkScreen extends StatelessWidget {
               onPressed: () => _openAddSheet(context),
               icon: const Icon(Icons.add),
               label: const Text('Add homework or a test'),
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             if (groups.isEmpty)
-              const Panel(child: Center(child: Padding(padding: EdgeInsets.all(12), child: Note("You're all caught up. New homework goes here."))))
+              const Panel(
+                child: Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Note(
+                      "You're all caught up. New homework goes here.",
+                    ),
+                  ),
+                ),
+              )
             else
               Panel(
                 child: Column(
@@ -55,13 +80,19 @@ class HomeworkScreen extends StatelessWidget {
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 1,
-                                  color: name == 'Overdue' ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.onSurfaceVariant,
+                                  color: name == 'Overdue'
+                                      ? Theme.of(context).colorScheme.error
+                                      : Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
                                 ),
                               ),
                             ),
                             if (name == 'Done')
                               TextButton(
-                                onPressed: () => store.update((d) => d.homework.removeWhere((h) => h.done)),
+                                onPressed: () => store.update(
+                                  (d) => d.homework.removeWhere((h) => h.done),
+                                ),
                                 child: const Text('Clear done'),
                               ),
                           ],
@@ -95,15 +126,24 @@ class HomeworkScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Wrap(spacing: 6, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                    subj.SubjectChip(h.subject),
-                    if (h.isTest) const TestTag(),
-                    if (!h.done) DuePill(due: h.due, now: now),
-                  ]),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      subj.SubjectChip(h.subject),
+                      if (h.isTest) const TestTag(),
+                      if (!h.done) DuePill(due: h.due, now: now),
+                    ],
+                  ),
                   const SizedBox(height: 4),
                   Text(
                     h.text,
-                    style: TextStyle(fontSize: 15, color: h.done ? muted : null, decoration: h.done ? TextDecoration.lineThrough : null),
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: h.done ? muted : null,
+                      decoration: h.done ? TextDecoration.lineThrough : null,
+                    ),
                   ),
                 ],
               ),
@@ -112,7 +152,9 @@ class HomeworkScreen extends StatelessWidget {
           IconButton(
             tooltip: 'Delete',
             icon: Icon(Icons.close, size: 20, color: muted),
-            onPressed: () => store.update((d) => d.homework.removeWhere((x) => x.id == h.id)),
+            onPressed: () => store.update(
+              (d) => d.homework.removeWhere((x) => x.id == h.id),
+            ),
           ),
         ],
       ),
@@ -168,24 +210,46 @@ class _AddHomeworkSheetState extends State<_AddHomeworkSheet> {
       setState(() => _error = 'Add a subject and some details.');
       return;
     }
-    widget.store.update((d) => d.homework.add(Homework(id: DateTime.now().microsecondsSinceEpoch, subject: s, text: t, due: _due, isTest: _isTest)));
+    widget.store.update(
+      (d) => d.homework.add(
+        Homework(
+          id: DateTime.now().microsecondsSinceEpoch,
+          subject: s,
+          text: t,
+          due: _due,
+          isTest: _isTest,
+        ),
+      ),
+    );
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        0,
+        20,
+        20 + MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Add homework or a test', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            Text(
+              'Add homework or a test',
+              style: Theme.of(context).textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
             const SizedBox(height: 14),
             SegmentedButton<bool>(
               showSelectedIcon: false,
-              segments: const [ButtonSegment(value: false, label: Text('Homework')), ButtonSegment(value: true, label: Text('Test or exam'))],
+              segments: const [
+                ButtonSegment(value: false, label: Text('Homework')),
+                ButtonSegment(value: true, label: Text('Test or exam')),
+              ],
               selected: {_isTest},
               onSelectionChanged: (s) => setState(() => _isTest = s.first),
             ),
@@ -193,24 +257,51 @@ class _AddHomeworkSheetState extends State<_AddHomeworkSheet> {
             TextField(
               controller: _subject,
               textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(labelText: 'Subject', hintText: 'e.g. Maths', border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))),
+              decoration: const InputDecoration(
+                labelText: 'Subject',
+                hintText: 'e.g. Maths',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _text,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Details', hintText: 'e.g. Page 42, Q1–10', border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)))),
+              decoration: const InputDecoration(
+                labelText: 'Details',
+                hintText: 'e.g. Page 42, Q1–10',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: _pickDate,
               icon: const Icon(Icons.event),
               label: Text('Due ${shortDate(_due)}'),
-              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
             ),
-            if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: _save, style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)), child: const Text('Add')),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: _save,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+              ),
+              child: const Text('Add'),
+            ),
           ],
         ),
       ),

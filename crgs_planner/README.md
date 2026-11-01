@@ -16,6 +16,7 @@ stripe, gold, white, serif headings). The school's crest is **not** used. See
 |---|---|
 | `lib/` | The app code (screens, radio, games, saving) |
 | `test/` | 53 automated tests (Sudoku has exactly one answer, maths answers are right, saving, every screen, and the radio: story detection, feed reading, playback) |
+| `assets/fonts/` | DM Serif Display, the heading font (free SIL Open Font License, notice included) |
 | `ios/` | The iPhone project. Bundle ID `com.prabha.crgsstudentplanner`, iPhone only, portrait |
 | `ios/ExportOptions.plist` | Used by the TestFlight upload |
 | `../.github/workflows/crgs-planner-testflight.yml` | Builds on a Mac in GitHub and uploads to TestFlight |
