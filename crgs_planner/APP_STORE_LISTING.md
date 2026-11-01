@@ -6,7 +6,7 @@ Work top to bottom. Items marked **you** need your own details.
 | Field | Value |
 |---|---|
 | Platforms | iOS only |
-| Name | `CRGS Kampus` |
+| Name (App Store, must be unique) | `CRGS Kampus Planner`. If Apple says it is taken, try `Kampus Student Planner`, then `CRGS Kampus School Planner`. The name under the icon on the phone stays `CRGS Kampus`. |
 | Primary Language | English (U.K.) |
 | Bundle ID | `com.prabha.crgsstudentplanner` (register it first under Certificates, Identifiers & Profiles > Identifiers > App IDs > App > Explicit) |
 | SKU | `crgsplanner` |
